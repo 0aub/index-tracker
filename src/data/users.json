@@ -1,0 +1,117 @@
+{
+  "users": [
+    {
+      "id": "usr-001",
+      "name": "أحمد الرشيد",
+      "name_en": "Ahmed Al-Rashid",
+      "email": "ahmed.alrashid@organization.sa",
+      "role": "index_manager",
+      "department": "الإدارة العليا",
+      "department_en": "Executive Management",
+      "permissions": ["all"],
+      "last_login": "2025-01-15T08:00:00Z"
+    },
+    {
+      "id": "usr-002",
+      "name": "سارة عبدالله",
+      "name_en": "Sara Abdullah",
+      "email": "sara.abdullah@organization.sa",
+      "role": "section_coordinator",
+      "section": "strategy",
+      "department": "التخطيط الاستراتيجي",
+      "department_en": "Strategic Planning",
+      "permissions": ["view_section", "edit_section", "assign_tasks", "review_evidence"],
+      "last_login": "2025-01-15T09:30:00Z"
+    },
+    {
+      "id": "usr-003",
+      "name": "خالد المانع",
+      "name_en": "Khalid Al-Mani",
+      "email": "khalid.almani@organization.sa",
+      "role": "section_coordinator",
+      "section": "governance",
+      "department": "الحوكمة والامتثال",
+      "department_en": "Governance and Compliance",
+      "permissions": ["view_section", "edit_section", "assign_tasks", "review_evidence"],
+      "last_login": "2025-01-14T14:00:00Z"
+    },
+    {
+      "id": "usr-004",
+      "name": "فاطمة حسن",
+      "name_en": "Fatima Hassan",
+      "email": "fatima.hassan@organization.sa",
+      "role": "section_coordinator",
+      "section": "data",
+      "department": "إدارة البيانات",
+      "department_en": "Data Management",
+      "permissions": ["view_section", "edit_section", "assign_tasks", "review_evidence"],
+      "last_login": "2025-01-15T11:00:00Z"
+    },
+    {
+      "id": "usr-005",
+      "name": "محمد سالم",
+      "name_en": "Mohammed Salem",
+      "email": "mohammed.salem@organization.sa",
+      "role": "contributor",
+      "department": "التخطيط الاستراتيجي",
+      "department_en": "Strategic Planning",
+      "permissions": ["view_assigned", "upload_evidence", "add_comments"],
+      "last_login": "2025-01-14T10:30:00Z"
+    },
+    {
+      "id": "usr-006",
+      "name": "نورة فهد",
+      "name_en": "Noura Fahad",
+      "email": "noura.fahad@organization.sa",
+      "role": "contributor",
+      "department": "التخطيط الاستراتيجي",
+      "department_en": "Strategic Planning",
+      "permissions": ["view_assigned", "upload_evidence", "add_comments"],
+      "last_login": "2025-01-14T09:00:00Z"
+    },
+    {
+      "id": "usr-007",
+      "name": "عبدالله ناصر",
+      "name_en": "Abdullah Nasser",
+      "email": "abdullah.nasser@organization.sa",
+      "role": "contributor",
+      "department": "الحوكمة والامتثال",
+      "department_en": "Governance and Compliance",
+      "permissions": ["view_assigned", "upload_evidence", "add_comments"],
+      "last_login": "2025-01-13T14:00:00Z"
+    },
+    {
+      "id": "usr-008",
+      "name": "ريم خليل",
+      "name_en": "Reem Khalil",
+      "email": "reem.khalil@organization.sa",
+      "role": "contributor",
+      "department": "إدارة البيانات",
+      "department_en": "Data Management",
+      "permissions": ["view_assigned", "upload_evidence", "add_comments"],
+      "last_login": "2025-01-11T13:00:00Z"
+    },
+    {
+      "id": "usr-009",
+      "name": "طارق أحمد",
+      "name_en": "Tariq Ahmad",
+      "email": "tariq.ahmad@organization.sa",
+      "role": "contributor",
+      "department": "القدرات البشرية",
+      "department_en": "Human Resources",
+      "permissions": ["view_assigned", "upload_evidence", "add_comments"],
+      "last_login": "2025-01-09T15:00:00Z"
+    },
+    {
+      "id": "usr-010",
+      "name": "ليلى عمر",
+      "name_en": "Layla Omar",
+      "email": "layla.omar@organization.sa",
+      "role": "contributor",
+      "department": "التطبيقات",
+      "department_en": "Applications",
+      "permissions": ["view_assigned", "upload_evidence", "add_comments"],
+      "last_login": "2025-01-07T11:30:00Z"
+    }
+  ]
+}

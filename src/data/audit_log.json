@@ -1,0 +1,60 @@
+{
+  "audit_log": [
+    {
+      "id": "log-001",
+      "timestamp": "2025-01-01T08:00:00Z",
+      "user_id": "usr-001",
+      "action": "index_created",
+      "entity_type": "index",
+      "entity_id": "naii-2025",
+      "details": {
+        "index_name": "المؤشر الوطني للذكاء الاصطناعي 2025"
+      }
+    },
+    {
+      "id": "log-002",
+      "timestamp": "2025-01-05T09:00:00Z",
+      "user_id": "usr-001",
+      "action": "coordinator_assigned",
+      "entity_type": "user",
+      "entity_id": "usr-002",
+      "details": {
+        "section": "strategy"
+      }
+    },
+    {
+      "id": "log-003",
+      "timestamp": "2025-01-10T14:30:00Z",
+      "user_id": "usr-005",
+      "action": "document_uploaded",
+      "entity_type": "document",
+      "entity_id": "doc-001",
+      "details": {
+        "filename": "AI_Strategy_Draft.pdf",
+        "requirement": "AI.AQ.ST.1"
+      }
+    },
+    {
+      "id": "log-004",
+      "timestamp": "2025-01-11T10:00:00Z",
+      "user_id": "usr-002",
+      "action": "document_approved",
+      "entity_type": "document",
+      "entity_id": "doc-001",
+      "details": {
+        "status_change": "submitted -> confirmed"
+      }
+    },
+    {
+      "id": "log-005",
+      "timestamp": "2025-01-15T14:00:00Z",
+      "user_id": "usr-002",
+      "action": "changes_requested",
+      "entity_type": "document",
+      "entity_id": "doc-003",
+      "details": {
+        "reason": "Missing quantitative KPIs"
+      }
+    }
+  ]
+}

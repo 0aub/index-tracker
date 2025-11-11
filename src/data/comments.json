@@ -1,0 +1,48 @@
+{
+  "comments": [
+    {
+      "id": "comment-001",
+      "document_id": "doc-001",
+      "requirement_id": "AI.AQ.ST.1",
+      "author": "usr-002",
+      "content": "الوثيقة جيدة ولكن تحتاج إلى مزيد من التفاصيل حول الأهداف طويلة المدى",
+      "created_at": "2025-01-11T10:30:00Z",
+      "type": "feedback"
+    },
+    {
+      "id": "comment-002",
+      "document_id": "doc-003",
+      "requirement_id": "AI.AQ.ST.1",
+      "author": "usr-002",
+      "content": "يرجى إضافة مؤشرات كمية قابلة للقياس",
+      "created_at": "2025-01-15T14:30:00Z",
+      "type": "changes_requested"
+    },
+    {
+      "id": "comment-003",
+      "document_id": "doc-004",
+      "requirement_id": "AI.AQ.GO.1",
+      "author": "usr-003",
+      "content": "ممتاز، الإطار واضح ومفصل",
+      "created_at": "2025-01-09T11:30:00Z",
+      "type": "approval"
+    },
+    {
+      "id": "comment-004",
+      "requirement_id": "AI.AQ.DA.1",
+      "author": "usr-008",
+      "content": "هل يمكن توضيح المطلوب في هذا المستوى؟",
+      "created_at": "2025-01-10T09:00:00Z",
+      "type": "question"
+    },
+    {
+      "id": "comment-005",
+      "requirement_id": "AI.AQ.DA.1",
+      "author": "usr-004",
+      "content": "نحتاج حصر شامل لجميع مصادر البيانات الداخلية والخارجية",
+      "created_at": "2025-01-10T10:00:00Z",
+      "type": "response",
+      "reply_to": "comment-004"
+    }
+  ]
+}

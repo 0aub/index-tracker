@@ -1,0 +1,238 @@
+{
+  "requirements": [
+    {
+      "id": "AI.AQ.ST.1",
+      "section": "strategy",
+      "question": "هل تمتلك الجهة استراتيجية للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have an AI strategy?",
+      "current_level": 2,
+      "assigned_to": "usr-002",
+      "due_date": "2025-01-20T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.ST.2",
+      "section": "strategy",
+      "question": "هل تمتلك الجهة خارطة طريق للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have an AI roadmap?",
+      "current_level": 1,
+      "assigned_to": "usr-002",
+      "due_date": "2025-01-25T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.GO.1",
+      "section": "governance",
+      "question": "هل تمتلك الجهة إطار حوكمة للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have an AI governance framework?",
+      "current_level": 1,
+      "assigned_to": "usr-003",
+      "due_date": "2025-01-22T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.GO.2",
+      "section": "governance",
+      "question": "هل تمتلك الجهة سياسات وإجراءات للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have AI policies and procedures?",
+      "current_level": 2,
+      "assigned_to": "usr-003",
+      "due_date": "2025-02-01T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.DA.1",
+      "section": "data",
+      "question": "هل تمتلك الجهة مصادر بيانات محددة ومنظمة؟",
+      "question_en": "Does the entity have identified and organized data sources?",
+      "current_level": 1,
+      "assigned_to": "usr-004",
+      "due_date": "2025-01-28T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.DA.2",
+      "section": "data",
+      "question": "هل تمتلك الجهة إطار لجودة البيانات؟",
+      "question_en": "Does the entity have a data quality framework?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-02-05T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.IN.1",
+      "section": "infrastructure",
+      "question": "هل تمتلك الجهة البنية التحتية اللازمة للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have the necessary AI infrastructure?",
+      "current_level": 1,
+      "assigned_to": "usr-004",
+      "due_date": "2025-01-30T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.IN.2",
+      "section": "infrastructure",
+      "question": "هل تمتلك الجهة أدوات ومنصات الذكاء الاصطناعي؟",
+      "question_en": "Does the entity have AI tools and platforms?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-02-10T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.HC.1",
+      "section": "human_capabilities",
+      "question": "هل تمتلك الجهة كوادر بشرية متخصصة في الذكاء الاصطناعي؟",
+      "question_en": "Does the entity have specialized AI personnel?",
+      "current_level": 1,
+      "assigned_to": "usr-002",
+      "due_date": "2025-02-01T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.HC.2",
+      "section": "human_capabilities",
+      "question": "هل تمتلك الجهة برامج تدريبية للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have AI training programs?",
+      "current_level": 0,
+      "assigned_to": "usr-002",
+      "due_date": "2025-02-15T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.AP.1.1",
+      "section": "applications",
+      "question": "هل تمتلك الجهة تطبيقات الذكاء الاصطناعي؟",
+      "question_en": "Does the entity have AI applications?",
+      "current_level": 1,
+      "assigned_to": "usr-004",
+      "due_date": "2025-02-05T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.AP.1.2",
+      "section": "applications",
+      "question": "هل تمتلك الجهة منهجية لتطوير تطبيقات الذكاء الاصطناعي؟",
+      "question_en": "Does the entity have a methodology for developing AI applications?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-02-20T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.IM.1",
+      "section": "impact",
+      "question": "هل تقيس الجهة تأثير الذكاء الاصطناعي على الأداء؟",
+      "question_en": "Does the entity measure AI impact on performance?",
+      "current_level": 0,
+      "assigned_to": "usr-003",
+      "due_date": "2025-02-25T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.ST.3",
+      "section": "strategy",
+      "question": "هل تمتلك الجهة ميزانية مخصصة للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have a dedicated AI budget?",
+      "current_level": 1,
+      "assigned_to": "usr-002",
+      "due_date": "2025-01-30T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.GO.3",
+      "section": "governance",
+      "question": "هل تمتلك الجهة لجنة أو فريق حوكمة للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have an AI governance committee or team?",
+      "current_level": 1,
+      "assigned_to": "usr-003",
+      "due_date": "2025-02-05T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.DA.3",
+      "section": "data",
+      "question": "هل تمتلك الجهة استراتيجية لإدارة البيانات؟",
+      "question_en": "Does the entity have a data management strategy?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-02-10T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.IN.3",
+      "section": "infrastructure",
+      "question": "هل تمتلك الجهة بيئات تطوير واختبار للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have AI development and testing environments?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-02-28T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.HC.3",
+      "section": "human_capabilities",
+      "question": "هل تمتلك الجهة استراتيجية لتطوير القدرات البشرية في الذكاء الاصطناعي؟",
+      "question_en": "Does the entity have a strategy for developing AI human capabilities?",
+      "current_level": 0,
+      "assigned_to": "usr-002",
+      "due_date": "2025-02-20T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.AP.2.1",
+      "section": "applications",
+      "question": "هل تمتلك الجهة تطبيقات ذكاء اصطناعي في الإنتاج؟",
+      "question_en": "Does the entity have AI applications in production?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-03-01T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.IM.2",
+      "section": "impact",
+      "question": "هل تقيس الجهة عائد الاستثمار من الذكاء الاصطناعي؟",
+      "question_en": "Does the entity measure ROI from AI?",
+      "current_level": 0,
+      "assigned_to": "usr-003",
+      "due_date": "2025-03-05T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.ST.4",
+      "section": "strategy",
+      "question": "هل تمتلك الجهة رؤية واضحة لمستقبل الذكاء الاصطناعي؟",
+      "question_en": "Does the entity have a clear vision for AI future?",
+      "current_level": 2,
+      "assigned_to": "usr-002",
+      "due_date": "2025-02-01T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.GO.4",
+      "section": "governance",
+      "question": "هل تمتلك الجهة آليات لإدارة مخاطر الذكاء الاصطناعي؟",
+      "question_en": "Does the entity have AI risk management mechanisms?",
+      "current_level": 1,
+      "assigned_to": "usr-003",
+      "due_date": "2025-02-10T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.DA.4",
+      "section": "data",
+      "question": "هل تمتلك الجهة آليات لحماية وأمن البيانات؟",
+      "question_en": "Does the entity have data protection and security mechanisms?",
+      "current_level": 1,
+      "assigned_to": "usr-004",
+      "due_date": "2025-02-15T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.IN.4",
+      "section": "infrastructure",
+      "question": "هل تمتلك الجهة خطة لتطوير البنية التحتية للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have a plan for AI infrastructure development?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-03-01T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.HC.4",
+      "section": "human_capabilities",
+      "question": "هل تمتلك الجهة شراكات لتطوير القدرات البشرية؟",
+      "question_en": "Does the entity have partnerships for human capability development?",
+      "current_level": 0,
+      "assigned_to": "usr-002",
+      "due_date": "2025-03-10T00:00:00Z"
+    },
+    {
+      "id": "AI.AQ.AP.3.1",
+      "section": "applications",
+      "question": "هل تمتلك الجهة مركز تميز للذكاء الاصطناعي؟",
+      "question_en": "Does the entity have an AI center of excellence?",
+      "current_level": 0,
+      "assigned_to": "usr-004",
+      "due_date": "2025-03-15T00:00:00Z"
+    }
+  ]
+}
