@@ -2,6 +2,7 @@
 .claude/
 .bolt/
 
+
 # Python
 __pycache__/
 *.py[cod]
