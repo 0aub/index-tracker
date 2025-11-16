@@ -328,7 +328,8 @@ const Reports = () => {
 
     return {
       section: section, // Section name from Excel (main_area_ar)
-      current: Number(maturity.toFixed(2)),
+      current: Number(maturity.toFixed(2)), // Original maturity (0-5)
+      maturityScaled: Number((maturity * 20).toFixed(1)), // Scaled to 0-100 for radar
       fullMark: 5,
       requirements: sectionReqs.length,
       completion: Number(completion.toFixed(1))
@@ -509,12 +510,11 @@ const Reports = () => {
                 />
                 <Radar
                   name={lang === 'ar' ? ' مستوى النضج' : ' Maturity Level'}
-                  dataKey="current"
+                  dataKey="maturityScaled"
                   stroke="rgb(var(--color-primary))"
                   strokeWidth={2}
                   fill="rgb(var(--color-primary))"
                   fillOpacity={0.3}
-                  scale={20}
                 />
                 <Radar
                   name={lang === 'ar' ? ' نسبة الإنجاز' : ' Completion %'}
@@ -537,7 +537,7 @@ const Reports = () => {
                       return (
                         <div className={`${colors.bgSecondary} p-3 rounded shadow-lg border ${colors.border}`}>
                           <p className={`font-semibold ${colors.textPrimary} mb-2`}>{data.section}</p>
-                          <p className={colors.textSecondary}>{lang === 'ar' ? 'مستوى النضج' : 'Maturity'}: {data.current.toFixed(2)}</p>
+                          <p className={colors.textSecondary}>{lang === 'ar' ? 'مستوى النضج' : 'Maturity'}: {data.current.toFixed(2)} / 5 ({data.maturityScaled.toFixed(0)}%)</p>
                           <p className={colors.textSecondary}>{lang === 'ar' ? 'المتطلبات' : 'Requirements'}: {data.requirements}</p>
                           <p className={colors.textSecondary}>{lang === 'ar' ? 'الإنجاز' : 'Completion'}: {data.completion}%</p>
                         </div>
