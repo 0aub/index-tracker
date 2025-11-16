@@ -15,6 +15,8 @@ class IndexBase(BaseModel):
     description_ar: Optional[str] = None
     description_en: Optional[str] = None
     version: str = Field(default="1.0", max_length=20)
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
 
 
 # Schema for creating index via Excel upload
@@ -35,6 +37,8 @@ class IndexUpdate(BaseModel):
     description_ar: Optional[str] = None
     description_en: Optional[str] = None
     status: Optional[IndexStatus] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
 
 
 # Schema for index response
@@ -66,6 +70,8 @@ class IndexMinimal(BaseModel):
     total_areas: int
     total_evidence: int = 0
     created_at: datetime
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
 
     class Config:
         from_attributes = True

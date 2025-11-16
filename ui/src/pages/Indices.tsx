@@ -8,6 +8,7 @@ import { colors, patterns } from '../utils/darkMode';
 import toast from 'react-hot-toast';
 import { api, Index } from '../services/api';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
+import IndexEditModal from '../components/IndexEditModal';
 
 const Indices = () => {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ const Indices = () => {
   const [error, setError] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [indexToDelete, setIndexToDelete] = useState<Index | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [indexToEdit, setIndexToEdit] = useState<Index | null>(null);
 
   // Load indices on mount
   useEffect(() => {
@@ -54,8 +57,26 @@ const Indices = () => {
     navigate('/index/new');
   };
 
-  const handleEditIndex = (indexId: string) => {
-    toast.info(lang === 'ar' ? 'ستتوفر هذه الميزة قريباً' : 'Feature coming soon');
+  const handleEditIndex = (index: Index) => {
+    setIndexToEdit(index);
+    setEditModalOpen(true);
+  };
+
+  const handleSaveIndex = async (updates: any) => {
+    if (!indexToEdit) return;
+
+    try {
+      await api.indices.update(indexToEdit.id, updates);
+      toast.success(lang === 'ar' ? 'تم تحديث المؤشر بنجاح' : 'Index updated successfully');
+      loadIndices(); // Reload list
+    } catch (err: any) {
+      console.error('Failed to update index:', err);
+      toast.error(
+        lang === 'ar'
+          ? `فشل تحديث المؤشر: ${err.message}`
+          : `Failed to update index: ${err.message}`
+      );
+    }
   };
 
   const handleDeleteIndex = (index: Index) => {
@@ -76,21 +97,6 @@ const Indices = () => {
         lang === 'ar'
           ? `فشل حذف المؤشر: ${err.message}`
           : `Failed to delete index: ${err.message}`
-      );
-    }
-  };
-
-  const handleStatusChange = async (indexId: string, newStatus: string) => {
-    try {
-      await api.indices.update(indexId, { status: newStatus });
-      toast.success(lang === 'ar' ? 'تم تحديث حالة المؤشر' : 'Index status updated');
-      loadIndices(); // Reload list
-    } catch (err: any) {
-      console.error('Failed to update index status:', err);
-      toast.error(
-        lang === 'ar'
-          ? `فشل تحديث حالة المؤشر: ${err.message}`
-          : `Failed to update index status: ${err.message}`
       );
     }
   };
@@ -241,21 +247,9 @@ const Indices = () => {
                       <span className={`px-3 py-1 ${colors.primaryLight} ${colors.primaryText} text-xs font-medium rounded-full`}>
                         {index.code}
                       </span>
-                      {(user?.role === 'admin' || user?.role === 'index_manager') && index.status !== 'archived' ? (
-                        <select
-                          value={index.status}
-                          onChange={(e) => handleStatusChange(index.id, e.target.value)}
-                          className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadge(index.status)} border-none focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer`}
-                        >
-                          <option value="not_started">{lang === 'ar' ? 'لم يبدأ' : 'Not Started'}</option>
-                          <option value="in_progress">{lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'}</option>
-                          <option value="completed">{lang === 'ar' ? 'مكتمل' : 'Completed'}</option>
-                        </select>
-                      ) : (
-                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadge(index.status)}`}>
-                          {getStatusLabel(index.status)}
-                        </span>
-                      )}
+                      <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadge(index.status)}`}>
+                        {getStatusLabel(index.status)}
+                      </span>
                     </div>
                     {(index.description_ar || index.description_en) && (
                       <p className={`${colors.textSecondary} mb-4`}>
@@ -309,7 +303,7 @@ const Indices = () => {
                   {(user?.role === 'admin' || user?.role === 'index_manager') && index.status !== 'completed' && (
                     <>
                       <button
-                        onClick={() => handleEditIndex(index.id)}
+                        onClick={() => handleEditIndex(index)}
                         className={`p-2 ${colors.textSecondary} hover:${colors.bgHover} rounded-lg transition`}
                         title={lang === 'ar' ? 'تعديل' : 'Edit'}
                       >
@@ -375,6 +369,20 @@ const Indices = () => {
           onConfirm={confirmDeleteIndex}
           indexName={lang === 'ar' ? indexToDelete.name_ar : indexToDelete.name_en || indexToDelete.name_ar}
           indexCode={indexToDelete.code}
+          language={lang}
+        />
+      )}
+
+      {/* Edit Index Modal */}
+      {indexToEdit && (
+        <IndexEditModal
+          isOpen={editModalOpen}
+          onClose={() => {
+            setEditModalOpen(false);
+            setIndexToEdit(null);
+          }}
+          onSave={handleSaveIndex}
+          index={indexToEdit}
           language={lang}
         />
       )}

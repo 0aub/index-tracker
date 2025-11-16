@@ -326,7 +326,7 @@ const Reports = () => {
     const maturity = calculateSectionMaturity(requirements, section);
     const completion = calculateSectionCompletion(requirements, evidence, section);
 
-    return {
+    const data = {
       section: section, // Section name from Excel (main_area_ar)
       current: Number(maturity.toFixed(2)), // Original maturity (0-5)
       maturityScaled: Number((maturity * 20).toFixed(1)), // Scaled to 0-100 for radar
@@ -334,6 +334,9 @@ const Reports = () => {
       requirements: sectionReqs.length,
       completion: Number(completion.toFixed(1))
     };
+
+    console.log('Section:', section, 'Maturity:', maturity, 'MaturityScaled:', data.maturityScaled, 'Completion:', completion);
+    return data;
   });
 
   return (

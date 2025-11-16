@@ -52,6 +52,10 @@ class Index(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     published_at = Column(DateTime, nullable=True)
 
+    # Index Timeline
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+
     # Relationships
     organization = relationship("Organization", back_populates="indices")
     requirements = relationship("Requirement", back_populates="index", cascade="all, delete-orphan")

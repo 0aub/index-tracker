@@ -209,7 +209,9 @@ async def list_indices(
             'total_requirements': index.total_requirements,
             'total_areas': index.total_areas,
             'total_evidence': evidence_count,
-            'created_at': index.created_at
+            'created_at': index.created_at,
+            'start_date': index.start_date,
+            'end_date': index.end_date
         }
         result.append(index_dict)
 
