@@ -16,10 +16,11 @@ export interface Index {
   description_ar: string | null;
   description_en: string | null;
   version: string;
-  status: 'draft' | 'active' | 'archived' | 'published';
+  status: 'not_started' | 'in_progress' | 'completed' | 'archived';
   organization_id: string;
   total_requirements: number;
   total_areas: number;
+  total_evidence: number;
   excel_filename: string | null;
   excel_upload_date: string | null;
   created_at: string;

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Plus, Edit, Trash2, CheckSquare, TrendingUp, Loader2, AlertCircle } from 'lucide-react';
+import { Layers, Plus, Edit, Trash2, CheckSquare, TrendingUp, Loader2, AlertCircle, FileText } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
 import { colors, patterns } from '../utils/darkMode';
 import toast from 'react-hot-toast';
 import { api, Index } from '../services/api';
+import DeleteConfirmModal from '../components/DeleteConfirmModal';
 
 const Indices = () => {
   const navigate = useNavigate();
@@ -18,6 +19,8 @@ const Indices = () => {
   const [indices, setIndices] = useState<Index[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [indexToDelete, setIndexToDelete] = useState<Index | null>(null);
 
   // Load indices on mount
   useEffect(() => {
@@ -55,17 +58,16 @@ const Indices = () => {
     toast.info(lang === 'ar' ? 'ستتوفر هذه الميزة قريباً' : 'Feature coming soon');
   };
 
-  const handleDeleteIndex = async (index: Index) => {
-    if (!window.confirm(
-      lang === 'ar'
-        ? `هل أنت متأكد من حذف المؤشر "${index.name_ar}"؟`
-        : `Are you sure you want to delete index "${index.name_en || index.name_ar}"?`
-    )) {
-      return;
-    }
+  const handleDeleteIndex = (index: Index) => {
+    setIndexToDelete(index);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDeleteIndex = async () => {
+    if (!indexToDelete) return;
 
     try {
-      await api.indices.delete(index.id);
+      await api.indices.delete(indexToDelete.id);
       toast.success(lang === 'ar' ? 'تم حذف المؤشر' : 'Index deleted');
       loadIndices(); // Reload list
     } catch (err: any) {
@@ -78,21 +80,36 @@ const Indices = () => {
     }
   };
 
+  const handleStatusChange = async (indexId: string, newStatus: string) => {
+    try {
+      await api.indices.update(indexId, { status: newStatus });
+      toast.success(lang === 'ar' ? 'تم تحديث حالة المؤشر' : 'Index status updated');
+      loadIndices(); // Reload list
+    } catch (err: any) {
+      console.error('Failed to update index status:', err);
+      toast.error(
+        lang === 'ar'
+          ? `فشل تحديث حالة المؤشر: ${err.message}`
+          : `Failed to update index status: ${err.message}`
+      );
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const statusColors = {
-      draft: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
-      active: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
-      published: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
+      not_started: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+      in_progress: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
+      completed: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
       archived: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300',
     };
-    return statusColors[status as keyof typeof statusColors] || statusColors.draft;
+    return statusColors[status as keyof typeof statusColors] || statusColors.not_started;
   };
 
   const getStatusLabel = (status: string) => {
     const labels = {
-      draft: { ar: 'مسودة', en: 'Draft' },
-      active: { ar: 'نشط', en: 'Active' },
-      published: { ar: 'منشور', en: 'Published' },
+      not_started: { ar: 'لم يبدأ', en: 'Not Started' },
+      in_progress: { ar: 'قيد التنفيذ', en: 'In Progress' },
+      completed: { ar: 'مكتمل', en: 'Completed' },
       archived: { ar: 'مؤرشف', en: 'Archived' },
     };
     return labels[status as keyof typeof labels]?.[lang] || status;
@@ -181,7 +198,7 @@ const Indices = () => {
               <div>
                 <p className={`text-sm ${colors.textSecondary}`}>{lang === 'ar' ? 'المؤشرات النشطة' : 'Active Indices'}</p>
                 <p className={`text-2xl font-bold ${colors.textPrimary}`}>
-                  {indices.filter(idx => idx.status === 'active' || idx.status === 'published').length}
+                  {indices.filter(idx => idx.status === 'in_progress' || idx.status === 'completed').length}
                 </p>
               </div>
             </div>
@@ -224,9 +241,21 @@ const Indices = () => {
                       <span className={`px-3 py-1 ${colors.primaryLight} ${colors.primaryText} text-xs font-medium rounded-full`}>
                         {index.code}
                       </span>
-                      <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadge(index.status)}`}>
-                        {getStatusLabel(index.status)}
-                      </span>
+                      {(user?.role === 'admin' || user?.role === 'index_manager') && index.status !== 'archived' ? (
+                        <select
+                          value={index.status}
+                          onChange={(e) => handleStatusChange(index.id, e.target.value)}
+                          className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadge(index.status)} border-none focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer`}
+                        >
+                          <option value="not_started">{lang === 'ar' ? 'لم يبدأ' : 'Not Started'}</option>
+                          <option value="in_progress">{lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'}</option>
+                          <option value="completed">{lang === 'ar' ? 'مكتمل' : 'Completed'}</option>
+                        </select>
+                      ) : (
+                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadge(index.status)}`}>
+                          {getStatusLabel(index.status)}
+                        </span>
+                      )}
                     </div>
                     {(index.description_ar || index.description_en) && (
                       <p className={`${colors.textSecondary} mb-4`}>
@@ -257,12 +286,12 @@ const Indices = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Layers className={colors.textSecondary} size={18} />
+                        <FileText className={colors.textSecondary} size={18} />
                         <div>
                           <p className={`text-xs ${colors.textSecondary}`}>
-                            {lang === 'ar' ? 'الإصدار' : 'Version'}
+                            {lang === 'ar' ? 'الأدلة' : 'Evidence'}
                           </p>
-                          <p className={`text-sm font-bold ${colors.textPrimary}`}>{index.version}</p>
+                          <p className={`text-sm font-bold ${colors.textPrimary}`}>{index.total_evidence}</p>
                         </div>
                       </div>
                     </div>
@@ -277,7 +306,7 @@ const Indices = () => {
                   >
                     {lang === 'ar' ? 'عرض المؤشر' : 'View Index'}
                   </button>
-                  {(user?.role === 'admin' || user?.role === 'index_manager') && (
+                  {(user?.role === 'admin' || user?.role === 'index_manager') && index.status !== 'completed' && (
                     <>
                       <button
                         onClick={() => handleEditIndex(index.id)}
@@ -333,6 +362,21 @@ const Indices = () => {
             </button>
           )}
         </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {indexToDelete && (
+        <DeleteConfirmModal
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setIndexToDelete(null);
+          }}
+          onConfirm={confirmDeleteIndex}
+          indexName={lang === 'ar' ? indexToDelete.name_ar : indexToDelete.name_en || indexToDelete.name_ar}
+          indexCode={indexToDelete.code}
+          language={lang}
+        />
       )}
     </div>
   );

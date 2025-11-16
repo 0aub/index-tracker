@@ -189,7 +189,31 @@ async def list_indices(
 
     indices = query.order_by(Index.created_at.desc()).offset(skip).limit(limit).all()
 
-    return indices
+    # Calculate evidence count for each index
+    from app.models.requirement import Requirement
+
+    result = []
+    for index in indices:
+        # Count evidence for this index
+        evidence_count = db.query(func.count(Evidence.id)).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(Requirement.index_id == index.id).scalar() or 0
+
+        # Create response with evidence count
+        index_dict = {
+            'id': index.id,
+            'code': index.code,
+            'name_ar': index.name_ar,
+            'name_en': index.name_en,
+            'status': index.status,
+            'total_requirements': index.total_requirements,
+            'total_areas': index.total_areas,
+            'total_evidence': evidence_count,
+            'created_at': index.created_at
+        }
+        result.append(index_dict)
+
+    return result
 
 
 @router.get("/{index_id}", response_model=IndexResponse)
@@ -207,6 +231,8 @@ async def get_index(
     Returns:
         Index details
     """
+    from app.models.requirement import Requirement
+
     index = db.query(Index).filter(Index.id == index_id).first()
 
     if not index:
@@ -215,7 +241,33 @@ async def get_index(
             detail="Index not found"
         )
 
-    return index
+    # Calculate evidence count for this index
+    evidence_count = db.query(func.count(Evidence.id)).join(
+        Requirement, Evidence.requirement_id == Requirement.id
+    ).filter(Requirement.index_id == index.id).scalar() or 0
+
+    # Create response with evidence count
+    index_dict = {
+        'id': index.id,
+        'code': index.code,
+        'name_ar': index.name_ar,
+        'name_en': index.name_en,
+        'description_ar': index.description_ar,
+        'description_en': index.description_en,
+        'version': index.version,
+        'status': index.status,
+        'organization_id': index.organization_id,
+        'total_requirements': index.total_requirements,
+        'total_areas': index.total_areas,
+        'total_evidence': evidence_count,
+        'excel_filename': index.excel_filename,
+        'excel_upload_date': index.excel_upload_date,
+        'created_at': index.created_at,
+        'updated_at': index.updated_at,
+        'published_at': index.published_at
+    }
+
+    return index_dict
 
 
 @router.get("/{index_id}/statistics", response_model=IndexStatistics)

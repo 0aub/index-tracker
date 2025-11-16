@@ -11,10 +11,10 @@ from app.database import Base
 
 class IndexStatus(str, enum.Enum):
     """Index status"""
-    DRAFT = "draft"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
-    PUBLISHED = "published"
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"  # Soft delete status
 
 
 class Index(Base):
@@ -34,7 +34,7 @@ class Index(Base):
     description_ar = Column(Text, nullable=True)
     description_en = Column(Text, nullable=True)
     version = Column(String, nullable=False, default="1.0")
-    status = Column(SQLEnum(IndexStatus), nullable=False, default=IndexStatus.DRAFT)
+    status = Column(SQLEnum(IndexStatus), nullable=False, default=IndexStatus.NOT_STARTED)
 
     # Organization
     organization_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)

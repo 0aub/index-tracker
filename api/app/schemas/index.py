@@ -44,6 +44,7 @@ class IndexResponse(IndexBase):
     organization_id: str
     total_requirements: int
     total_areas: int
+    total_evidence: int = 0
     excel_filename: Optional[str] = None
     excel_upload_date: Optional[datetime] = None
     created_at: datetime
@@ -62,6 +63,8 @@ class IndexMinimal(BaseModel):
     name_en: Optional[str] = None
     status: IndexStatus
     total_requirements: int
+    total_areas: int
+    total_evidence: int = 0
     created_at: datetime
 
     class Config:
