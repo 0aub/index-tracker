@@ -2,6 +2,8 @@
 .claude/
 .bolt/
 
+# Database backups
+backups/
 
 # Python
 __pycache__/
