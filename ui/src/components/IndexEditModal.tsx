@@ -9,8 +9,6 @@ interface IndexEditModalProps {
   onSave: (data: {
     name_ar?: string;
     name_en?: string;
-    description_ar?: string;
-    description_en?: string;
     status?: string;
     start_date?: string;
     end_date?: string;
@@ -31,8 +29,6 @@ const IndexEditModal = ({
   const [formData, setFormData] = useState({
     name_ar: index.name_ar,
     name_en: index.name_en || '',
-    description_ar: index.description_ar || '',
-    description_en: index.description_en || '',
     status: index.status,
     start_date: index.start_date ? new Date(index.start_date).toISOString().split('T')[0] : '',
     end_date: index.end_date ? new Date(index.end_date).toISOString().split('T')[0] : ''
@@ -43,8 +39,6 @@ const IndexEditModal = ({
       setFormData({
         name_ar: index.name_ar,
         name_en: index.name_en || '',
-        description_ar: index.description_ar || '',
-        description_en: index.description_en || '',
         status: index.status,
         start_date: index.start_date ? new Date(index.start_date).toISOString().split('T')[0] : '',
         end_date: index.end_date ? new Date(index.end_date).toISOString().split('T')[0] : ''
@@ -57,11 +51,33 @@ const IndexEditModal = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Check if status is changing to "completed"
+    if (formData.status === 'completed' && index.status !== 'completed') {
+      const confirmed = window.confirm(
+        lang === 'ar'
+          ? 'هل أنت متأكد من تغيير حالة المؤشر إلى "مكتمل"؟ لن تتمكن من حذف المؤشر بعد ذلك.'
+          : 'Are you sure you want to mark this index as "Completed"? You will not be able to delete the index after this.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Check if status is changing from "completed" to something else
+    if (formData.status !== 'completed' && index.status === 'completed') {
+      const confirmed = window.confirm(
+        lang === 'ar'
+          ? 'هل أنت متأكد من إعادة فتح المؤشر المكتمل؟'
+          : 'Are you sure you want to reopen this completed index?'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const updates: any = {};
     if (formData.name_ar !== index.name_ar) updates.name_ar = formData.name_ar;
     if (formData.name_en !== (index.name_en || '')) updates.name_en = formData.name_en || null;
-    if (formData.description_ar !== (index.description_ar || '')) updates.description_ar = formData.description_ar || null;
-    if (formData.description_en !== (index.description_en || '')) updates.description_en = formData.description_en || null;
     if (formData.status !== index.status) updates.status = formData.status;
 
     // Handle dates
@@ -149,32 +165,6 @@ const IndexEditModal = ({
               type="text"
               value={formData.name_en}
               onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
-              className={`w-full px-4 py-2 ${colors.bgSecondary} border ${colors.border} rounded-lg ${colors.textPrimary} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            />
-          </div>
-
-          {/* Arabic Description */}
-          <div>
-            <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
-              {lang === 'ar' ? 'الوصف بالعربي' : 'Description (Arabic)'}
-            </label>
-            <textarea
-              value={formData.description_ar}
-              onChange={(e) => setFormData({ ...formData, description_ar: e.target.value })}
-              rows={3}
-              className={`w-full px-4 py-2 ${colors.bgSecondary} border ${colors.border} rounded-lg ${colors.textPrimary} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            />
-          </div>
-
-          {/* English Description */}
-          <div>
-            <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
-              {lang === 'ar' ? 'الوصف بالإنجليزي' : 'Description (English)'}
-            </label>
-            <textarea
-              value={formData.description_en}
-              onChange={(e) => setFormData({ ...formData, description_en: e.target.value })}
-              rows={3}
               className={`w-full px-4 py-2 ${colors.bgSecondary} border ${colors.border} rounded-lg ${colors.textPrimary} focus:outline-none focus:ring-2 focus:ring-blue-500`}
             />
           </div>

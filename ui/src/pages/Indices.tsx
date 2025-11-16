@@ -300,7 +300,7 @@ const Indices = () => {
                   >
                     {lang === 'ar' ? 'عرض المؤشر' : 'View Index'}
                   </button>
-                  {(user?.role === 'admin' || user?.role === 'index_manager') && index.status !== 'completed' && (
+                  {(user?.role === 'admin' || user?.role === 'index_manager') && (
                     <>
                       <button
                         onClick={() => handleEditIndex(index)}
@@ -309,13 +309,15 @@ const Indices = () => {
                       >
                         <Edit size={18} />
                       </button>
-                      <button
-                        onClick={() => handleDeleteIndex(index)}
-                        className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-[#313236] rounded-lg transition"
-                        title={lang === 'ar' ? 'حذف' : 'Delete'}
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {index.status !== 'completed' && (
+                        <button
+                          onClick={() => handleDeleteIndex(index)}
+                          className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-[#313236] rounded-lg transition"
+                          title={lang === 'ar' ? 'حذف' : 'Delete'}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
