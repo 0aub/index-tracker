@@ -5,7 +5,7 @@ import { User, AuthState } from '../types';
 // Mock admin user for testing
 const MOCK_ADMIN: User = {
   id: 'usr-001',
-  email: 'admin@sdaia.gov.sa',
+  email: 'admin@mewa.gov.sa',
   name: 'مدير النظام',
   name_en: 'System Administrator',
   role: 'admin' as any,

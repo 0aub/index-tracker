@@ -373,6 +373,32 @@ async def get_index_user_engagement(
             Requirement.index_id == index_id
         ).scalar() or 0
 
+        # Count documents reviewed (approved/rejected by this user, excluding self-reviews)
+        from app.models.evidence import EvidenceActivity
+        from sqlalchemy import distinct
+        reviewed_count = db.query(func.count(distinct(EvidenceActivity.evidence_id))).join(
+            Evidence, EvidenceActivity.evidence_id == Evidence.id
+        ).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(
+            EvidenceActivity.actor_id == user.id,
+            EvidenceActivity.action.in_(['approved', 'rejected']),
+            Evidence.uploaded_by != user.id,  # Exclude self-reviews
+            Requirement.index_id == index_id
+        ).scalar() or 0
+
+        # Count review comments (comments on evidence uploaded by others)
+        # Join Comment -> Requirement -> Evidence to filter by index and exclude own uploads
+        review_comment_count = db.query(func.count(Comment.id)).join(
+            Requirement, Comment.requirement_id == Requirement.id
+        ).join(
+            Evidence, Evidence.requirement_id == Requirement.id
+        ).filter(
+            Comment.user_id == user.id,
+            Evidence.uploaded_by != user.id,  # Comments on others' evidence
+            Requirement.index_id == index_id
+        ).scalar() or 0
+
         user_stats.append(UserEngagementStats(
             user_id=user.id,
             username=user.username,
@@ -382,7 +408,9 @@ async def get_index_user_engagement(
             assigned_requirements=assigned_count,
             rejected_documents=rejected_count,
             total_uploads=upload_count,
-            total_comments=comment_count
+            total_comments=comment_count,
+            documents_reviewed=reviewed_count,
+            review_comments=review_comment_count
         ))
 
     return IndexUserEngagementResponse(

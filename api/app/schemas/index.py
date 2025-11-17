@@ -98,6 +98,8 @@ class UserEngagementStats(BaseModel):
     rejected_documents: int
     total_uploads: int
     total_comments: int
+    documents_reviewed: int = 0  # Documents this user reviewed (approved/rejected)
+    review_comments: int = 0  # Comments made while reviewing others' documents
 
     class Config:
         from_attributes = True

@@ -75,6 +75,18 @@ const IndexEditModal = ({
       }
     }
 
+    // Check if status is changing to "archived"
+    if (formData.status === 'archived' && index.status !== 'archived') {
+      const confirmed = window.confirm(
+        lang === 'ar'
+          ? 'هل أنت متأكد من أرشفة المؤشر؟ لن تتمكن من حذفه بعد ذلك.'
+          : 'Are you sure you want to archive this index? You will not be able to delete it after this.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const updates: any = {};
     if (formData.name_ar !== index.name_ar) updates.name_ar = formData.name_ar;
     if (formData.name_en !== (index.name_en || '')) updates.name_en = formData.name_en || null;
@@ -182,6 +194,7 @@ const IndexEditModal = ({
               <option value="not_started">{getStatusLabel('not_started')}</option>
               <option value="in_progress">{getStatusLabel('in_progress')}</option>
               <option value="completed">{getStatusLabel('completed')}</option>
+              <option value="archived">{getStatusLabel('archived')}</option>
             </select>
           </div>
 

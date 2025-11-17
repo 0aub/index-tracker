@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   RadarChart,
   PolarGrid,
@@ -35,6 +35,7 @@ import { useUIStore } from '../stores/uiStore';
 import { useIndexStore } from '../stores/indexStore';
 import { api, Assignment } from '../services/api';
 import toast from 'react-hot-toast';
+import html2canvas from 'html2canvas';
 import { exportToPDF, exportToExcel, exportToPowerPoint, PDFExportData } from '../utils/exportReports';
 
 const Reports = () => {
@@ -55,6 +56,12 @@ const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
+
+  // Refs for chart capture
+  const radarChartRef = useRef<HTMLDivElement>(null);
+  const pieChartRef = useRef<HTMLDivElement>(null);
+  const progressChartRef = useRef<HTMLDivElement>(null);
+  const userEngagementTableRef = useRef<HTMLDivElement>(null);
 
   // Load data when index changes
   useEffect(() => {
@@ -180,6 +187,30 @@ const Reports = () => {
 
       // Call appropriate export function
       if (type === 'pdf') {
+        // Capture charts as images for PDF
+        const chartImages: PDFExportData['chartImages'] = {};
+
+        if (radarChartRef.current) {
+          const canvas = await html2canvas(radarChartRef.current, { backgroundColor: '#ffffff', scale: 2 });
+          chartImages.radarChart = canvas.toDataURL('image/png');
+        }
+
+        if (pieChartRef.current) {
+          const canvas = await html2canvas(pieChartRef.current, { backgroundColor: '#ffffff', scale: 2 });
+          chartImages.pieChart = canvas.toDataURL('image/png');
+        }
+
+        if (progressChartRef.current) {
+          const canvas = await html2canvas(progressChartRef.current, { backgroundColor: '#ffffff', scale: 2 });
+          chartImages.progressChart = canvas.toDataURL('image/png');
+        }
+
+        if (userEngagementTableRef.current) {
+          const canvas = await html2canvas(userEngagementTableRef.current, { backgroundColor: '#ffffff', scale: 2 });
+          chartImages.userEngagementTable = canvas.toDataURL('image/png');
+        }
+
+        exportData.chartImages = chartImages;
         await exportToPDF(exportData);
         toast.dismiss();
         toast.success(lang === 'ar' ? 'تم تصدير تقرير PDF بنجاح' : 'PDF report exported successfully');
@@ -352,14 +383,46 @@ const Reports = () => {
                 ? `${currentIndex.name_ar} - ${currentIndex.code}`
                 : `${currentIndex.name_en || currentIndex.name_ar} - ${currentIndex.code}`}
             </p>
+            {currentIndex.end_date && (() => {
+              const endDate = new Date(currentIndex.end_date);
+              const today = new Date();
+              const daysRemaining = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+              if (daysRemaining > 0) {
+                return (
+                  <p className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg font-medium">
+                    <span>{lang === 'ar' ? '⏱ الوقت المتبقي:' : '⏱ Time Remaining:'}</span>
+                    <span className="font-bold">{daysRemaining} {lang === 'ar' ? 'يوم' : daysRemaining === 1 ? 'day' : 'days'}</span>
+                  </p>
+                );
+              } else if (daysRemaining === 0) {
+                return (
+                  <p className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-lg font-medium">
+                    <span>{lang === 'ar' ? '⏱ ينتهي اليوم!' : '⏱ Ends Today!'}</span>
+                  </p>
+                );
+              } else {
+                return (
+                  <p className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg font-medium">
+                    <span>{lang === 'ar' ? '⏱ انتهى منذ:' : '⏱ Expired:'}</span>
+                    <span className="font-bold">{Math.abs(daysRemaining)} {lang === 'ar' ? 'يوم' : Math.abs(daysRemaining) === 1 ? 'day' : 'days'}</span>
+                  </p>
+                );
+              }
+            })()}
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className={`${patterns.section} p-6 flex flex-col items-center`}>
-            <MaturityGauge
-              value={overallScore}
-            />
+          <div className={`${patterns.section} p-6`}>
+            <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
+              {lang === 'ar' ? 'مستوى النضج الإجمالي' : 'Overall Maturity Level'}
+            </h3>
+            <div className="flex justify-center">
+              <MaturityGauge
+                value={overallScore}
+              />
+            </div>
           </div>
 
           <div className={`${patterns.section} p-6`}>
@@ -394,7 +457,7 @@ const Reports = () => {
             </div>
           </div>
 
-          <div className={`${patterns.section} p-6`}>
+          <div ref={progressChartRef} className={`${patterns.section} p-6`}>
             <h3 className={`text-lg font-semibold mb-6 ${colors.textPrimary}`}>
               {lang === 'ar' ? 'تقدم المشروع' : 'Project Progress'}
             </h3>
@@ -468,7 +531,7 @@ const Reports = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <div className={`${patterns.section} p-6`}>
+          <div ref={radarChartRef} className={`${patterns.section} p-6`}>
             <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
               {lang === 'ar' ? 'تحليل الأقسام' : 'Section Analysis'}
             </h2>
@@ -566,7 +629,7 @@ const Reports = () => {
             </ResponsiveContainer>
           </div>
 
-          <div className={`${patterns.section} p-6`}>
+          <div ref={pieChartRef} className={`${patterns.section} p-6`}>
             <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
               {lang === 'ar' ? 'توزيع حالة الأدلة' : 'Evidence Status Distribution'}
             </h2>
@@ -760,80 +823,128 @@ const Reports = () => {
         </div>
 
         {/* User Engagement Section */}
-        <div className={`${patterns.section} p-6 mb-8`}>
-          <h2 className={`text-xl font-bold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+        <div ref={userEngagementTableRef} className={`${patterns.section} p-6 mb-8`}>
+          <h2 className={`text-xl font-bold mb-6 flex items-center gap-2 ${colors.textPrimary}`}>
             <Layers className={colors.primary} size={24} />
             {lang === 'ar' ? 'مساهمة المستخدمين' : 'User Engagement'}
           </h2>
-          <div className="overflow-x-auto">
-            <table className={`w-full ${colors.textPrimary}`}>
-              <thead>
-                <tr className={`border-b-2 ${colors.border}`}>
-                  <th className={`px-4 py-3 text-${lang === 'ar' ? 'right' : 'left'} font-semibold`}>
-                    {lang === 'ar' ? 'المستخدم' : 'User'}
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold">
-                    {lang === 'ar' ? 'المتطلبات المسندة' : 'Assigned Requirements'}
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold">
-                    {lang === 'ar' ? 'المستندات المعتمدة' : 'Approved Documents'}
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold">
-                    {lang === 'ar' ? 'إجمالي الرفوعات' : 'Total Uploads'}
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold">
-                    {lang === 'ar' ? 'المستندات المرفوضة' : 'Rejected Documents'}
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold">
-                    {lang === 'ar' ? 'التعليقات' : 'Comments'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {userEngagement.map((user, index) => (
-                  <tr
-                    key={user.user_id}
-                    className={`border-b ${colors.border} ${index % 2 === 0 ? colors.bgSecondary : colors.bgPrimary} hover:${colors.bgHover} transition`}
-                  >
-                    <td className={`px-4 py-3 font-medium text-${lang === 'ar' ? 'right' : 'left'}`}>
-                      <div>{lang === 'ar' ? user.full_name_ar || user.username : user.full_name_en || user.username}</div>
-                      <div className={`text-xs ${colors.textSecondary}`}>@{user.username}</div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold">
-                        {user.assigned_requirements}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-semibold">
-                        {user.approved_documents}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-semibold">
-                        {user.total_uploads}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-semibold">
-                        {user.rejected_documents}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-semibold">
-                        {user.total_comments}
-                      </span>
-                    </td>
+          {userEngagement.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className={`border-b-2 ${colors.border}`}>
+                    <th className={`text-${lang === 'ar' ? 'right' : 'left'} py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'المستخدم' : 'User'}
+                    </th>
+                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'المتطلبات المسندة' : 'Assigned Reqs'}
+                    </th>
+                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'الرفوعات' : 'Uploads'}
+                    </th>
+                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'التعليقات' : 'Comments'}
+                    </th>
+                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'وثائق راجعها' : 'Docs Reviewed'}
+                    </th>
+                    <th className={`text-${lang === 'ar' ? 'left' : 'right'} py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'معدل التأكيد' : 'Confirm Rate'}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {userEngagement.length === 0 && (
-              <div className={`text-center py-8 ${colors.textSecondary}`}>
-                {lang === 'ar' ? 'لا توجد بيانات مساهمة المستخدمين' : 'No user engagement data available'}
+                </thead>
+                <tbody>
+                  {userEngagement.map((user, index) => {
+                    const successRate = user.total_uploads > 0
+                      ? ((user.approved_documents / user.total_uploads) * 100)
+                      : 0;
+                    const completionRate = user.assigned_requirements > 0
+                      ? ((user.approved_documents / user.assigned_requirements) * 100)
+                      : 0;
+
+                    return (
+                      <tr
+                        key={user.username}
+                        className={`border-b ${colors.border} ${colors.hover} transition-colors`}
+                      >
+                        <td className={`py-4 px-4`}>
+                          <div>
+                            <div className={`font-medium ${colors.textPrimary}`}>
+                              {lang === 'ar' ? user.full_name_ar || user.username : user.full_name_en || user.username}
+                            </div>
+                            <div className={`text-sm ${colors.textSecondary}`}>
+                              @{user.username}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className={`inline-flex items-center justify-center w-10 h-10 rounded-lg ${colors.bgSecondary} ${colors.textPrimary} font-semibold`}>
+                            {user.assigned_requirements}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-semibold">
+                            {user.total_uploads}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-semibold">
+                            {user.total_comments}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold">
+                            {user.documents_reviewed || 0}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <div className={`flex-1 h-2 ${colors.bgSecondary} rounded-full overflow-hidden`}>
+                                <div
+                                  className={`h-full transition-all ${
+                                    successRate >= 75
+                                      ? 'bg-green-500'
+                                      : successRate >= 50
+                                      ? 'bg-yellow-500'
+                                      : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${Math.min(successRate, 100)}%` }}
+                                />
+                              </div>
+                              <span className={`text-sm font-semibold ${colors.textPrimary} w-12 text-right`}>
+                                {successRate.toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Explanatory Caption */}
+              <div className={`mt-4 p-4 rounded-lg ${colors.bgPrimary} border ${colors.border}`}>
+                <p className={`text-sm ${colors.textSecondary} leading-relaxed`}>
+                  {lang === 'ar' ? (
+                    <>
+                      <strong className={colors.textPrimary}>معدل التأكيد:</strong> يُحسب بقسمة عدد الوثائق المعتمدة على إجمالي عدد الرفوعات ثم الضرب في 100%.
+                    </>
+                  ) : (
+                    <>
+                      <strong className={colors.textPrimary}>Confirm Rate:</strong> Calculated as (Approved Documents ÷ Total Uploads) × 100%.
+                    </>
+                  )}
+                </p>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className={`text-center py-12 ${colors.textSecondary}`}>
+              <Layers className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="font-medium">{lang === 'ar' ? 'لا توجد بيانات مساهمة المستخدمين' : 'No user engagement data available'}</p>
+            </div>
+          )}
         </div>
 
         <div className={`${patterns.section} p-6 mb-8`}>

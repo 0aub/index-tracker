@@ -309,7 +309,7 @@ const Indices = () => {
                       >
                         <Edit size={18} />
                       </button>
-                      {index.status !== 'completed' && (
+                      {index.status !== 'completed' && index.status !== 'archived' && (
                         <button
                           onClick={() => handleDeleteIndex(index)}
                           className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-[#313236] rounded-lg transition"

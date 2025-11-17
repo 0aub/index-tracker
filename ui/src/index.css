@@ -71,19 +71,19 @@
     /* ===== PRIMARY/BRAND COLORS (Dark Green) - Dark Mode ===== */
     --color-primary: 15 81 50;            /* #0f5132 - dark green for buttons */
     --color-primary-hover: 20 69 47;      /* #14452f - darker green hover */
-    --color-primary-text: 74 222 128;     /* green-400 - links, interactive text */
-    --color-primary-text-hover: 134 239 172; /* green-300 - link hover */
+    --color-primary-text: 34 197 94;      /* green-500 - links, interactive text (reduced intensity) */
+    --color-primary-text-hover: 74 222 128; /* green-400 - link hover (reduced intensity) */
     --color-primary-light: 20 83 45;      /* green-900 - badges, light backgrounds */
     --color-primary-border: 22 101 52;    /* green-800 - borders */
-    --color-primary-icon: 74 222 128;     /* green-400 - icons */
+    --color-primary-icon: 34 197 94;      /* green-500 - icons (reduced intensity) */
 
     /* ===== FOCUS & INTERACTION ===== */
-    --color-focus-ring: 74 222 128;       /* green-400 - focus rings */
+    --color-focus-ring: 34 197 94;        /* green-500 - focus rings (reduced intensity) */
 
     /* ===== STATUS COLORS - Dark Mode ===== */
-    --color-success: 74 222 128;          /* green-400 */
+    --color-success: 34 197 94;           /* green-500 (reduced intensity) */
     --color-success-light: 20 83 45;      /* green-900 */
-    --color-success-dark: 134 239 172;    /* green-300 */
+    --color-success-dark: 74 222 128;     /* green-400 (reduced intensity) */
 
     --color-warning: 250 204 21;          /* yellow-400 */
     --color-warning-light: 113 63 18;     /* yellow-900 */
@@ -132,5 +132,47 @@
 
   .dark ::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--color-border-hover));
+  }
+}
+
+@layer utilities {
+  /* Wave rotation animation for squares */
+  @keyframes wave-rotate {
+    0% {
+      transform: rotate(0deg) scale(1);
+      opacity: 0.5;
+    }
+    50% {
+      transform: rotate(180deg) scale(1.1);
+      opacity: 0.8;
+    }
+    100% {
+      transform: rotate(360deg) scale(1);
+      opacity: 0.5;
+    }
+  }
+
+  .animate-wave-rotate {
+    animation: wave-rotate linear infinite;
+  }
+
+  /* Floating animation for gradient orbs */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0) translateX(0);
+    }
+    25% {
+      transform: translateY(-20px) translateX(10px);
+    }
+    50% {
+      transform: translateY(-10px) translateX(-10px);
+    }
+    75% {
+      transform: translateY(-30px) translateX(5px);
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
   }
 }

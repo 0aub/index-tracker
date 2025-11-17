@@ -331,6 +331,8 @@ export const indicesAPI = {
       rejected_documents: number;
       total_uploads: number;
       total_comments: number;
+      documents_reviewed: number;
+      review_comments: number;
     }>;
   }> {
     const response = await fetch(`${API_BASE_URL}/indices/${id}/user-engagement`);
