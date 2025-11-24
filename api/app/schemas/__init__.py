@@ -7,3 +7,4 @@ from app.schemas.index_user import *
 from app.schemas.requirement import *
 from app.schemas.assignment import *
 from app.schemas.evidence import *
+from app.schemas.recommendation import *

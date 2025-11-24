@@ -17,8 +17,8 @@ const TEMPLATES = [
     code: 'NAII',
     name_ar: 'المؤشر الوطني للذكاء الاصطناعي',
     name_en: 'National AI Index',
-    description_ar: 'مؤشر النضج الوطني للذكاء الاصطناعي',
-    description_en: 'National AI Maturity Index',
+    description_ar: 'المؤشر الوطني للذكاء الاصطناعي',
+    description_en: 'National AI Index',
     filename: 'NAII_Template.xlsx',
     active: true
   },
@@ -37,8 +37,8 @@ const TEMPLATES = [
     code: 'NDI',
     name_ar: 'المؤشر الرقمي الوطني',
     name_en: 'National Digital Index',
-    description_ar: 'المؤشر الوطني للتحول الرقمي',
-    description_en: 'National Digital Transformation Index',
+    description_ar: 'المؤشر الوطني للبيانات',
+    description_en: 'National Data Index',
     filename: 'NDI_Template.xlsx',
     active: false
   },
@@ -50,7 +50,7 @@ const TEMPLATES = [
     description_ar: 'مؤشر جاهزية تبني التقنيات الناشئة',
     description_en: 'Emerging Technology Adoption Readiness',
     filename: 'ETARI_Template.xlsx',
-    active: false
+    active: true
   },
 ];
 
@@ -85,12 +85,14 @@ const IndexCreate: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     const template = TEMPLATES.find(t => t.id === selectedTemplate);
-    const templateUrl = api.indices.downloadTemplate();
+    if (!template) return;
+
+    const templateUrl = api.indices.downloadTemplate(template.code);
     window.open(templateUrl, '_blank');
     toast.success(
       lang === 'ar'
-        ? `جاري تحميل قالب: ${template?.name_ar}`
-        : `Downloading template: ${template?.name_en}`
+        ? `جاري تحميل قالب: ${template.name_ar}`
+        : `Downloading template: ${template.name_en}`
     );
   };
 
@@ -120,6 +122,7 @@ const IndexCreate: React.FC = () => {
       const index = await api.indices.createFromExcel({
         file,
         code: indexCode,
+        index_type: selectedTemplateData.code,  // Pass index type (NAII, ETARI, etc.)
         name_ar: selectedTemplateData.name_ar,
         name_en: selectedTemplateData.name_en,
         version: '1.0',

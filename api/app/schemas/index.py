@@ -44,6 +44,7 @@ class IndexUpdate(BaseModel):
 # Schema for index response
 class IndexResponse(IndexBase):
     id: str
+    index_type: str  # NAII, ETARI, etc.
     status: IndexStatus
     organization_id: str
     total_requirements: int
@@ -54,6 +55,10 @@ class IndexResponse(IndexBase):
     created_at: datetime
     updated_at: datetime
     published_at: Optional[datetime] = None
+    # Versioning and completion fields
+    is_completed: bool = False
+    completed_at: Optional[datetime] = None
+    previous_index_id: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -63,6 +68,7 @@ class IndexResponse(IndexBase):
 class IndexMinimal(BaseModel):
     id: str
     code: str
+    index_type: str  # NAII, ETARI, etc.
     name_ar: str
     name_en: Optional[str] = None
     status: IndexStatus
@@ -72,6 +78,10 @@ class IndexMinimal(BaseModel):
     created_at: datetime
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    # Versioning and completion fields
+    is_completed: bool = False
+    completed_at: Optional[datetime] = None
+    previous_index_id: Optional[str] = None
 
     class Config:
         from_attributes = True

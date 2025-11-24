@@ -18,6 +18,8 @@ import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 import Forbidden from './pages/Forbidden';
 import ServerError from './pages/ServerError';
+import FirstTimeSetup from './pages/FirstTimeSetup';
+import OrganizationHierarchy from './pages/OrganizationHierarchy';
 import { useUIStore } from './stores/uiStore';
 
 function App() {
@@ -65,6 +67,16 @@ function App() {
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
 
+          {/* First-Time Setup (Protected but outside MainLayout) */}
+          <Route
+            path="/first-time-setup"
+            element={
+              <ProtectedRoute>
+                <FirstTimeSetup />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Error Pages */}
           <Route path="/403" element={<Forbidden />} />
           <Route path="/500" element={<ServerError />} />
@@ -95,6 +107,8 @@ function App() {
               }
             />
             <Route path="users" element={<Users />} />
+            {/* Organization Hierarchy - Admin only */}
+            <Route path="organization-hierarchy" element={<OrganizationHierarchy />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

@@ -42,7 +42,7 @@ def create_organization(db: Session) -> Organization:
             sector_en="Government Sector",
             description_ar="منظمة افتراضية لأغراض الاختبار",
             description_en="Default organization for testing purposes",
-            contact_email="contact@mewa.gov.sa"
+            contact_email="contact@example.com"
         )
         db.add(org)
         db.commit()
@@ -64,7 +64,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": "usr-001",  # Fixed ID to match frontend mock user
             "username": "admin",
-            "email": "admin@mewa.gov.sa",  # Matches frontend mock
+            "email": "admin@example.com",  # Test admin user
             "full_name_ar": "مدير النظام",
             "full_name_en": "System Administrator",
             "role": UserRole.ADMIN,
@@ -75,7 +75,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": str(uuid.uuid4()),
             "username": "index.manager",
-            "email": "index.manager@mewa.gov.sa",
+            "email": "index.manager@example.com",
             "full_name_ar": "أحمد محمد",
             "full_name_en": "Ahmed Mohammed",
             "role": UserRole.INDEX_MANAGER,
@@ -86,7 +86,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": str(uuid.uuid4()),
             "username": "coordinator1",
-            "email": "coordinator1@mewa.gov.sa",
+            "email": "coordinator1@example.com",
             "full_name_ar": "فاطمة علي",
             "full_name_en": "Fatima Ali",
             "role": UserRole.SECTION_COORDINATOR,
@@ -97,7 +97,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": str(uuid.uuid4()),
             "username": "coordinator2",
-            "email": "coordinator2@mewa.gov.sa",
+            "email": "coordinator2@example.com",
             "full_name_ar": "خالد حسن",
             "full_name_en": "Khalid Hassan",
             "role": UserRole.SECTION_COORDINATOR,
@@ -108,7 +108,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": str(uuid.uuid4()),
             "username": "contributor1",
-            "email": "contributor1@mewa.gov.sa",
+            "email": "contributor1@example.com",
             "full_name_ar": "سارة أحمد",
             "full_name_en": "Sara Ahmed",
             "role": UserRole.CONTRIBUTOR,
@@ -119,7 +119,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": str(uuid.uuid4()),
             "username": "contributor2",
-            "email": "contributor2@mewa.gov.sa",
+            "email": "contributor2@example.com",
             "full_name_ar": "محمد عبدالله",
             "full_name_en": "Mohammed Abdullah",
             "role": UserRole.CONTRIBUTOR,
@@ -130,7 +130,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": str(uuid.uuid4()),
             "username": "contributor3",
-            "email": "contributor3@mewa.gov.sa",
+            "email": "contributor3@example.com",
             "full_name_ar": "نورة سعيد",
             "full_name_en": "Noura Saeed",
             "role": UserRole.CONTRIBUTOR,
@@ -141,7 +141,7 @@ def create_users(db: Session, org_id: str):
         {
             "id": str(uuid.uuid4()),
             "username": "contributor4",
-            "email": "contributor4@mewa.gov.sa",
+            "email": "contributor4@example.com",
             "full_name_ar": "عبدالرحمن خالد",
             "full_name_en": "Abdulrahman Khalid",
             "role": UserRole.CONTRIBUTOR,

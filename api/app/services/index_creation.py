@@ -16,6 +16,7 @@ from app.models.requirement import (
 )
 from app.models.audit import AuditLog
 from app.services.excel_parser import ExcelParser, ExcelParsingError
+from app.index_config.index_configs import get_index_config
 
 
 class IndexCreationError(Exception):
@@ -32,6 +33,7 @@ class IndexCreationService:
         file_content: bytes,
         filename: str,
         index_code: str,
+        index_type: str,  # NEW: Index type parameter
         index_name_ar: str,
         index_name_en: str,
         organization_id: str,
@@ -48,6 +50,7 @@ class IndexCreationService:
             file_content: Excel file content as bytes
             filename: Original filename
             index_code: Unique code for the index
+            index_type: Type of index ('NAII', 'ETARI', etc.)
             index_name_ar: Index name in Arabic
             index_name_en: Index name in English
             organization_id: ID of the organization
@@ -62,27 +65,36 @@ class IndexCreationService:
         Raises:
             IndexCreationError: If creation fails
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             # Generate index ID
             index_id = str(uuid.uuid4())
 
-            # Parse Excel file
-            parsed_data = ExcelParser.parse_excel(file_content, index_id)
+            logger.info(f"Creating {index_type} index with code: {index_code}")
+
+            # Parse Excel file with index type
+            parsed_data = ExcelParser.parse_excel(file_content, index_id, index_type)
+            logger.info(f"Excel parsed successfully: {parsed_data['total_requirements']} requirements found")
 
             # Start transaction
             db.begin_nested()
 
             try:
+                logger.info(f"Creating index object with ID: {index_id}")
+
                 # Create Index
                 index = Index(
                     id=index_id,
                     code=index_code,
+                    index_type=index_type,  # Store index type
                     name_ar=index_name_ar,
                     name_en=index_name_en,
                     description_ar=description_ar,
                     description_en=description_en,
                     version=version,
-                    status=IndexStatus.DRAFT,
+                    status=IndexStatus.NOT_STARTED,
                     organization_id=organization_id,
                     excel_filename=filename,
                     excel_upload_date=datetime.utcnow(),
@@ -90,7 +102,9 @@ class IndexCreationService:
                     total_areas=IndexCreationService._count_unique_areas(parsed_data['requirements'])
                 )
                 db.add(index)
+                logger.info("Index object added to session, flushing...")
                 db.flush()
+                logger.info("Index flushed successfully, creating requirements...")
 
                 # Create Requirements with all nested data
                 for idx, req_data in enumerate(parsed_data['requirements']):
@@ -123,14 +137,29 @@ class IndexCreationService:
 
             except IntegrityError as e:
                 db.rollback()
-                if "code" in str(e):
+                logger.error(f"IntegrityError occurred: {str(e)}")
+                logger.error(f"Full exception: {repr(e)}")
+
+                error_msg = str(e)
+                # Check for specific constraint violations
+                if "indices_code_key" in error_msg or "duplicate key value violates unique constraint" in error_msg and "code" in error_msg:
                     raise IndexCreationError(f"Index with code '{index_code}' already exists")
-                raise IndexCreationError(f"Database integrity error: {str(e)}")
+                elif "organization_id" in error_msg and "is not present in table" in error_msg:
+                    raise IndexCreationError(f"Organization with ID '{organization_id}' does not exist")
+                elif "foreign key constraint" in error_msg:
+                    raise IndexCreationError(f"Database constraint violation: {error_msg}")
+                else:
+                    raise IndexCreationError(f"Database integrity error: {error_msg}")
 
         except ExcelParsingError as e:
+            logger.error(f"ExcelParsingError: {str(e)}")
             raise IndexCreationError(f"Excel parsing failed: {str(e)}")
         except Exception as e:
             db.rollback()
+            logger.error(f"Unexpected exception: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise IndexCreationError(f"Failed to create index: {str(e)}")
 
     @staticmethod
@@ -141,18 +170,36 @@ class IndexCreationService:
     ) -> Requirement:
         """Create a requirement with all its maturity levels"""
 
-        # Create Requirement
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"Creating requirement with code: {req_data.get('code')}")
+        logger.info(f"Requirement data keys: {list(req_data.keys())}")
+        logger.info(f"Number of maturity levels: {len(req_data.get('maturity_levels', []))}")
+
+        # Create Requirement - include all fields from req_data
         requirement = Requirement(
             id=req_data['id'],
             code=req_data['code'],
             question_ar=req_data['question_ar'],
+            question_en=req_data.get('question_en'),
             main_area_ar=req_data['main_area_ar'],
+            main_area_en=req_data.get('main_area_en'),
             sub_domain_ar=req_data['sub_domain_ar'],
+            sub_domain_en=req_data.get('sub_domain_en'),
             index_id=req_data['index_id'],
-            display_order=display_order
+            display_order=display_order,
+            # ETARI-specific fields
+            element_ar=req_data.get('element_ar'),
+            element_en=req_data.get('element_en'),
+            objective_ar=req_data.get('objective_ar'),
+            objective_en=req_data.get('objective_en'),
+            evidence_description_ar=req_data.get('evidence_description_ar'),  # ← THIS WAS MISSING!
+            evidence_description_en=req_data.get('evidence_description_en')
         )
         db.add(requirement)
         db.flush()
+        logger.info(f"Requirement {req_data['code']} created successfully")
 
         # Create Maturity Levels
         for level_data in req_data['maturity_levels']:
@@ -167,6 +214,14 @@ class IndexCreationService:
     ) -> MaturityLevel:
         """Create a maturity level with evidence and criteria"""
 
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"Creating maturity level {level_data.get('level')} for requirement {level_data.get('requirement_id')}")
+        logger.info(f"Level data keys: {list(level_data.keys())}")
+        logger.info(f"Level name AR: {level_data.get('level_name_ar', 'N/A')[:50]}")
+        logger.info(f"Readiness AR: '{level_data.get('readiness_ar', 'N/A')}'")
+
         # Create Maturity Level
         maturity_level = MaturityLevel(
             id=level_data['id'],
@@ -177,6 +232,7 @@ class IndexCreationService:
         )
         db.add(maturity_level)
         db.flush()
+        logger.info(f"Maturity level {level_data['level']} created successfully")
 
         # Create Evidence Requirements
         for evidence_data in level_data['evidence_requirements']:
@@ -219,6 +275,14 @@ class IndexCreationService:
         """
         from sqlalchemy import func
 
+        # Get index to determine type
+        index = db.query(Index).filter(Index.id == index_id).first()
+        if not index:
+            raise IndexCreationError(f"Index with ID {index_id} not found")
+
+        # Get configuration for this index type
+        config = get_index_config(index.index_type)
+
         # Count requirements
         req_count = db.query(func.count(Requirement.id)).filter(
             Requirement.index_id == index_id
@@ -254,5 +318,7 @@ class IndexCreationService:
             'total_evidence_requirements': evidence_count,
             'total_acceptance_criteria': criteria_count,
             'total_unique_areas': unique_areas,
-            'expected_levels_per_requirement': 6
+            'expected_levels_per_requirement': config['num_levels'],  # From config
+            'max_maturity_level': config['max_level'],  # Add max level info
+            'index_type': index.index_type  # Include index type in response
         }

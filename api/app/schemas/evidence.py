@@ -27,6 +27,7 @@ class EvidenceUpdate(BaseModel):
 class EvidenceResponse(EvidenceBase):
     id: str
     assignment_id: Optional[str] = None
+    maturity_level: Optional[int] = None  # Override to allow None (ETARI doesn't use maturity levels)
     current_version: int
     status: str
     uploaded_by: str

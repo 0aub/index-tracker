@@ -125,7 +125,11 @@ const Reports = () => {
           question: req.question_ar,
           question_en: req.question_en,
           section: req.main_area_ar, // Use main_area_ar as section
+          sub_domain: req.sub_domain_ar, // Include sub_domain (المعيار) for domain grouping
           current_level: assignment?.current_level || 0,
+          evidence_description_ar: req.evidence_description_ar,
+          evidence_description_en: req.evidence_description_en,
+          answer_status: req.answer_status, // Add answer_status for completion tracking
         };
       });
 
@@ -355,7 +359,20 @@ const Reports = () => {
   const sectionData = sections.map(section => {
     const sectionReqs = requirements.filter(r => r.section === section);
     const maturity = calculateSectionMaturity(requirements, section);
-    const completion = calculateSectionCompletion(requirements, evidence, section);
+
+    // For ETARI: Calculate completion based on answer_status (requirements with approved answers)
+    // For NAII: Use maturity-based completion
+    let completion;
+    if (currentIndex?.index_type === 'ETARI') {
+      // Count requirements with approved answers
+      const approvedReqs = sectionReqs.filter(r => r.answer_status === 'approved');
+      completion = sectionReqs.length > 0
+        ? Math.round((approvedReqs.length / sectionReqs.length) * 100)
+        : 0;
+    } else {
+      // NAII: Use maturity-based completion
+      completion = calculateSectionCompletion(requirements, evidence, section);
+    }
 
     const data = {
       section: section, // Section name from Excel (main_area_ar)
@@ -369,6 +386,89 @@ const Reports = () => {
     console.log('Section:', section, 'Maturity:', maturity, 'MaturityScaled:', data.maturityScaled, 'Completion:', completion);
     return data;
   });
+
+  // Create domain-level data for enhanced bar chart
+  // Group requirements by section and domain (sub_domain_ar)
+  const domainData: any[] = [];
+  sections.forEach(section => {
+    const sectionReqs = requirements.filter(r => r.section === section);
+    // Get unique domains within this section - FIX: filter before Set
+    const domains = Array.from(new Set(
+      sectionReqs
+        .map(r => r.sub_domain)
+        .filter(d => d && d.trim() !== '')
+    )).sort();
+
+    console.log(`Section: ${section}, Domains found:`, domains.length, domains);
+
+    domains.forEach(domain => {
+      const domainReqs = sectionReqs.filter(r => r.sub_domain === domain);
+
+      // Calculate completion for this domain
+      let domainCompletion;
+      if (currentIndex?.index_type === 'ETARI') {
+        const approvedReqs = domainReqs.filter(r => r.answer_status === 'approved');
+        domainCompletion = domainReqs.length > 0
+          ? Math.round((approvedReqs.length / domainReqs.length) * 100)
+          : 0;
+      } else {
+        // NAII: Use maturity-based completion
+        const domainEvidence = evidence.filter(e =>
+          domainReqs.some(r => r.requirement_db_id === e.requirement_id)
+        );
+        domainCompletion = calculateSectionCompletion(domainReqs, domainEvidence, section);
+      }
+
+      const approvedCount = domainReqs.filter(r => r.answer_status === 'approved').length;
+
+      // Count evidence for this domain
+      const domainEvidence = evidence.filter(e =>
+        domainReqs.some(r => r.requirement_db_id === e.requirement_id)
+      );
+
+      domainData.push({
+        section: section,
+        domain: domain,
+        completion: Number(domainCompletion.toFixed(1)),
+        totalRequirements: domainReqs.length,
+        approvedRequirements: approvedCount,
+        evidenceCount: domainEvidence.length,
+        // Use section+domain as unique key for grouping
+        sectionDomainKey: `${section} - ${domain}`
+      });
+    });
+  });
+
+  console.log('Total domainData entries:', domainData.length);
+  console.log('Domain data sample:', domainData.slice(0, 3));
+
+  // Generate dynamic colors for sections
+  const generateSectionColors = (sections: string[]) => {
+    const colorPalette = [
+      '#3B82F6', // Blue
+      '#10B981', // Green
+      '#F59E0B', // Orange
+      '#8B5CF6', // Purple
+      '#EC4899', // Pink
+      '#14B8A6', // Teal
+      '#F97316', // Orange-Red
+      '#6366F1', // Indigo
+    ];
+
+    const sectionColors: { [key: string]: string } = {};
+    sections.forEach((section, index) => {
+      sectionColors[section] = colorPalette[index % colorPalette.length];
+    });
+    return sectionColors;
+  };
+
+  const sectionColors = generateSectionColors(sections);
+
+  // Assign colors to domain data
+  const coloredDomainData = domainData.map(item => ({
+    ...item,
+    barColor: sectionColors[item.section] || '#10B981'
+  }));
 
   return (
     <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -414,16 +514,53 @@ const Reports = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className={`${patterns.section} p-6`}>
-            <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
-              {lang === 'ar' ? 'مستوى النضج الإجمالي' : 'Overall Maturity Level'}
-            </h3>
-            <div className="flex justify-center">
-              <MaturityGauge
-                value={overallScore}
-              />
+          {/* Show Overall Maturity Level for NAII, Requirements Overview for ETARI */}
+          {currentIndex?.index_type === 'ETARI' ? (
+            <div className={`${patterns.section} p-6`}>
+              <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'نظرة عامة على المتطلبات' : 'Requirements Overview'}
+              </h3>
+              <div className="space-y-4">
+                <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
+                  <span className={colors.textSecondary}>{lang === 'ar' ? 'إجمالي المتطلبات' : 'Total Requirements'}</span>
+                  <span className={`text-2xl font-bold ${colors.textPrimary}`}>
+                    {requirements.length}
+                  </span>
+                </div>
+                <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
+                  <span className={colors.textSecondary}>{lang === 'ar' ? 'متطلبات بأدلة' : 'With Evidence Desc'}</span>
+                  <span className={`text-2xl font-bold text-blue-600 dark:text-blue-400`}>
+                    {requirements.filter(r => {
+                      // Check if requirement has evidence description
+                      return (r.evidence_description_ar && r.evidence_description_ar.trim() !== '') ||
+                             (r.evidence_description_en && r.evidence_description_en.trim() !== '');
+                    }).length}
+                  </span>
+                </div>
+                <div className={`flex justify-between items-center py-2`}>
+                  <span className={colors.textSecondary}>{lang === 'ar' ? 'نسبة الإنجاز' : 'Completion Rate'}</span>
+                  <span className={`text-2xl font-bold text-green-600 dark:text-green-400`}>
+                    {sectionData.length > 0
+                      ? Math.round(sectionData.reduce((sum, s) => sum + s.completion, 0) / sectionData.length)
+                      : 0}%
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className={`${patterns.section} p-6`}>
+              <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'مستوى النضج الإجمالي' : 'Overall Maturity Level'}
+              </h3>
+              <div className="flex justify-center">
+                <MaturityGauge
+                  value={overallScore}
+                  indexType={currentIndex?.index_type || 'NAII'}
+                  lang={lang}
+                />
+              </div>
+            </div>
+          )}
 
           <div className={`${patterns.section} p-6`}>
             <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
@@ -463,23 +600,25 @@ const Reports = () => {
             </h3>
 
             <div className="space-y-5">
-              {/* Maturity Progress */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-sm font-medium ${colors.textSecondary}`}>
-                    {lang === 'ar' ? 'النضج الإجمالي' : 'Overall Maturity'}
-                  </span>
-                  <span className={`text-lg font-bold ${colors.textPrimary}`}>
-                    {overallScore.toFixed(1)} / 5.0
-                  </span>
+              {/* Maturity Progress - Only show for NAII (not ETARI) */}
+              {currentIndex?.index_type !== 'ETARI' && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className={`text-sm font-medium ${colors.textSecondary}`}>
+                      {lang === 'ar' ? 'النضج الإجمالي' : 'Overall Maturity'}
+                    </span>
+                    <span className={`text-lg font-bold ${colors.textPrimary}`}>
+                      {overallScore.toFixed(1)} / 5.0
+                    </span>
+                  </div>
+                  <div className={`w-full h-3 ${colors.bgTertiary} rounded-full overflow-hidden`}>
+                    <div
+                      className={`h-full ${colors.primary} transition-all duration-1000 ease-out`}
+                      style={{ width: `${(overallScore / 5) * 100}%` }}
+                    />
+                  </div>
                 </div>
-                <div className={`w-full h-3 ${colors.bgTertiary} rounded-full overflow-hidden`}>
-                  <div
-                    className={`h-full ${colors.primary} transition-all duration-1000 ease-out`}
-                    style={{ width: `${(overallScore / 5) * 100}%` }}
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Overall Completion Progress */}
               <div>
@@ -574,14 +713,17 @@ const Reports = () => {
                   stroke="#9CA3AF"
                   strokeOpacity={0.3}
                 />
-                <Radar
-                  name={lang === 'ar' ? ' مستوى النضج' : ' Maturity Level'}
-                  dataKey="maturityScaled"
-                  stroke="rgb(var(--color-primary))"
-                  strokeWidth={2}
-                  fill="rgb(var(--color-primary))"
-                  fillOpacity={0.3}
-                />
+                {/* Only show maturity radar for NAII (not ETARI) */}
+                {currentIndex?.index_type !== 'ETARI' && (
+                  <Radar
+                    name={lang === 'ar' ? ' مستوى النضج' : ' Maturity Level'}
+                    dataKey="maturityScaled"
+                    stroke="rgb(var(--color-primary))"
+                    strokeWidth={2}
+                    fill="rgb(var(--color-primary))"
+                    fillOpacity={0.3}
+                  />
+                )}
                 <Radar
                   name={lang === 'ar' ? ' نسبة الإنجاز' : ' Completion %'}
                   dataKey="completion"
@@ -603,7 +745,10 @@ const Reports = () => {
                       return (
                         <div className={`${colors.bgSecondary} p-3 rounded shadow-lg border ${colors.border}`}>
                           <p className={`font-semibold ${colors.textPrimary} mb-2`}>{data.section}</p>
-                          <p className={colors.textSecondary}>{lang === 'ar' ? 'مستوى النضج' : 'Maturity'}: {data.current.toFixed(2)} / 5 ({data.maturityScaled.toFixed(0)}%)</p>
+                          {/* Only show maturity for NAII (not ETARI) */}
+                          {currentIndex?.index_type !== 'ETARI' && (
+                            <p className={colors.textSecondary}>{lang === 'ar' ? 'مستوى النضج' : 'Maturity'}: {data.current.toFixed(2)} / 5 ({data.maturityScaled.toFixed(0)}%)</p>
+                          )}
                           <p className={colors.textSecondary}>{lang === 'ar' ? 'المتطلبات' : 'Requirements'}: {data.requirements}</p>
                           <p className={colors.textSecondary}>{lang === 'ar' ? 'الإنجاز' : 'Completion'}: {data.completion}%</p>
                         </div>
@@ -701,125 +846,179 @@ const Reports = () => {
         </div>
 
         <div className={`${patterns.section} p-6 mb-8`}>
-          <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
-            {lang === 'ar' ? 'مقارنة الأقسام التفصيلية' : 'Detailed Section Comparison'}
+          <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary} flex items-center gap-2`}>
+            {lang === 'ar' ? 'مقارنة الأقسام التفصيلية (حسب المعيار)' : 'Detailed Section Comparison (By Domain)'}
+            <span className={`text-sm font-normal ${colors.textSecondary}`}>
+              {lang === 'ar' ? '(مرر على الأعمدة لرؤية التفاصيل)' : '(Hover to see details)'}
+            </span>
           </h2>
-          <ResponsiveContainer width="100%" height={600}>
-            <BarChart
-              data={sectionData}
-              margin={{ top: 30, right: 40, left: 40, bottom: 20 }}
-              barGap={8}
-              barCategoryGap="20%"
-            >
-              <CartesianGrid strokeDasharray="5 5" stroke="#9CA3AF" strokeOpacity={0.3} />
-              <XAxis
-                dataKey="section"
-                angle={-45}
-                textAnchor="end"
-                height={180}
-                tick={{ fill: 'currentColor', fontSize: 11, dy: 40, dx: -8 }}
-                className={colors.textPrimary}
-                interval={0}
-              />
-              <YAxis
-                yAxisId="left"
-                orientation="left"
-                domain={[0, 5]}
-                tick={{ fill: 'currentColor', fontSize: 10 }}
-                className={colors.textSecondary}
-                label={{
-                  value: lang === 'ar' ? 'مستوى النضج' : 'Maturity Level',
-                  angle: -90,
-                  position: 'insideLeft',
-                  style: { fill: 'currentColor', textAnchor: 'middle' }
-                }}
-              />
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                domain={[0, 100]}
-                tick={{ fill: 'currentColor', fontSize: 10 }}
-                className={colors.textSecondary}
-                label={{
-                  value: lang === 'ar' ? 'نسبة الإنجاز (%)' : 'Completion (%)',
-                  angle: 90,
-                  position: 'insideRight',
-                  style: { fill: 'currentColor', textAnchor: 'middle' }
-                }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--color-bg-secondary)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                  color: 'var(--color-text-primary)'
-                }}
-                content={({ payload }) => {
-                  if (payload && payload.length > 0) {
-                    const data = payload[0].payload;
+          {coloredDomainData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(800, coloredDomainData.length * 60 + sections.length * 30)}>
+              <BarChart
+                data={coloredDomainData}
+                margin={{ top: 30, right: 20, left: 5, bottom: 20 }}
+                layout="vertical"
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis
+                  type="number"
+                  domain={[0, 100]}
+                  tick={{ fill: 'currentColor', fontSize: 12 }}
+                  className={colors.textSecondary}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="domain"
+                  width={320}
+                  tick={(props: any) => {
+                    const { x, y, payload, index } = props;
+                    const text = payload.value || '';
+                    const maxLength = 40;
+                    const displayText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+
+                    // Get section for grouping visual
+                    const item = coloredDomainData[index];
+                    const prevItem = index > 0 ? coloredDomainData[index - 1] : null;
+                    const isFirstInSection = !prevItem || prevItem.section !== item?.section;
+
                     return (
-                      <div className={`${colors.bgSecondary} p-4 rounded-lg shadow-xl border-2 ${colors.border}`}>
-                        <p className={`font-bold ${colors.textPrimary} mb-3 text-base`}>{data.section}</p>
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${colors.primary}`}></div>
-                            <p className={colors.textSecondary}>
-                              {lang === 'ar' ? 'مستوى النضج' : 'Maturity'}: <span className="font-semibold">{data.current.toFixed(2)}</span>
+                      <g>
+                        {isFirstInSection && item && (
+                          <>
+                            <line
+                              x1={x}
+                              y1={y - 35}
+                              x2={x + 320}
+                              y2={y - 35}
+                              stroke={item.barColor}
+                              strokeWidth={2}
+                              opacity={0.6}
+                            />
+                            <text
+                              x={x + 2}
+                              y={y - 18}
+                              textAnchor="start"
+                              fill={item.barColor}
+                              fontSize={14}
+                              fontWeight="bold"
+                            >
+                              {item.section}
+                            </text>
+                          </>
+                        )}
+                        <text
+                          x={x + 2}
+                          y={y}
+                          dy={4}
+                          textAnchor="start"
+                          fill="currentColor"
+                          fontSize={11}
+                          className={colors.textSecondary}
+                        >
+                          {displayText}
+                        </text>
+                      </g>
+                    );
+                  }}
+                  interval={0}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--color-bg-secondary)',
+                    border: '2px solid var(--color-border)',
+                    borderRadius: '8px',
+                    color: 'var(--color-text-primary)'
+                  }}
+                  content={({ payload }) => {
+                    if (payload && payload.length > 0) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className={`${colors.bgSecondary} p-4 rounded-lg shadow-xl border-2 ${colors.border}`}>
+                          <div className="mb-3">
+                            <p className={`font-bold ${colors.textPrimary} text-base mb-1`}>
+                              {data.section}
+                            </p>
+                            <p className={`text-sm ${colors.textSecondary}`}>
+                              {lang === 'ar' ? 'المعيار: ' : 'Domain: '}
+                              <span className="font-semibold">{data.domain}</span>
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-green-600 dark:bg-green-400"></div>
-                            <p className={colors.textSecondary}>
-                              {lang === 'ar' ? 'نسبة الإنجاز' : 'Completion'}: <span className="font-semibold">{data.completion}%</span>
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-gray-400"></div>
-                            <p className={colors.textSecondary}>
-                              {lang === 'ar' ? 'عدد المتطلبات' : 'Requirements'}: <span className="font-semibold">{data.requirements}</span>
-                            </p>
+                          <div className="space-y-2 pt-2 border-t border-gray-300 dark:border-gray-600">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className={colors.textSecondary}>
+                                {lang === 'ar' ? 'نسبة الإنجاز:' : 'Completion:'}
+                              </p>
+                              <span className={`font-bold text-lg ${
+                                data.completion >= 75 ? 'text-green-600 dark:text-green-400' :
+                                data.completion >= 50 ? 'text-yellow-600 dark:text-yellow-400' :
+                                'text-red-600 dark:text-red-400'
+                              }`}>
+                                {data.completion}%
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <p className={colors.textSecondary}>
+                                {lang === 'ar' ? 'الإجابات المعتمدة:' : 'Approved:'}
+                              </p>
+                              <span className="font-semibold text-green-600 dark:text-green-400">
+                                {data.approvedRequirements} / {data.totalRequirements}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <p className={colors.textSecondary}>
+                                {lang === 'ar' ? 'إجمالي المتطلبات:' : 'Total Requirements:'}
+                              </p>
+                              <span className="font-semibold">
+                                {data.totalRequirements}
+                              </span>
+                            </div>
+                            {data.evidenceCount > 0 && (
+                              <div className="flex items-center justify-between gap-3">
+                                <p className={colors.textSecondary}>
+                                  {lang === 'ar' ? 'عدد الأدلة:' : 'Evidence Count:'}
+                                </p>
+                                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                  {data.evidenceCount}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Legend
-                wrapperStyle={{ paddingTop: '5px', color: 'var(--color-text-primary)' }}
-                iconType="circle"
-                iconSize={10}
-                formatter={(value) => (
-                  <span style={{ color: 'var(--color-text-primary)', marginLeft: '16px' }}>
-                    {` ${value}`}
-                  </span>
-                )}
-              />
-              <Bar
-                yAxisId="left"
-                dataKey="current"
-                fill="rgb(var(--color-primary))"
-                fillOpacity={0.3}
-                stroke="rgb(var(--color-primary))"
-                strokeWidth={2}
-                name={lang === 'ar' ? ' مستوى النضج' : ' Maturity Level'}
-                radius={[8, 8, 0, 0]}
-                activeBar={{ fillOpacity: 0.5 }}
-              />
-              <Bar
-                yAxisId="right"
-                dataKey="completion"
-                fill="#10B981"
-                fillOpacity={0.3}
-                stroke="#10B981"
-                strokeWidth={2}
-                name={lang === 'ar' ? ' نسبة الإنجاز' : ' Completion %'}
-                radius={[8, 8, 0, 0]}
-                activeBar={{ fillOpacity: 0.5 }}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar
+                  dataKey="completion"
+                  fillOpacity={0.5}
+                  strokeWidth={2}
+                  radius={[0, 8, 8, 0]}
+                  minPointSize={3}
+                  barSize={35}
+                  label={{
+                    position: 'right',
+                    fill: 'currentColor',
+                    fontSize: 12,
+                    formatter: (value: number) => value > 0 ? `${value}%` : ''
+                  }}
+                >
+                  {coloredDomainData.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={entry.barColor} stroke={entry.barColor} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <Layers className={`w-12 h-12 ${colors.textSecondary} mx-auto mb-3`} />
+                <p className={`${colors.textSecondary} font-medium`}>
+                  {lang === 'ar' ? 'لا توجد بيانات متاحة' : 'No data available'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* User Engagement Section */}
@@ -949,12 +1148,15 @@ const Reports = () => {
 
         <div className={`${patterns.section} p-6 mb-8`}>
           <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
-            {lang === 'ar' ? 'تفاصيل الأقسام' : 'Section Details'}
+            {lang === 'ar' ? 'تفاصيل الأقسام والمعايير' : 'Section and Domain Details'}
           </h2>
           <div className="space-y-4">
             {sections.map(section => {
               const sectionReqs = requirements.filter(r => r.section === section);
               const isExpanded = expandedSections.includes(section);
+
+              // Group requirements by domain (sub_domain) within this section
+              const domains = Array.from(new Set(sectionReqs.map(r => r.sub_domain || ''))).filter(d => d).sort();
 
               return (
                 <div key={section} className={`border ${colors.border} rounded-lg overflow-hidden`}>
@@ -967,45 +1169,108 @@ const Reports = () => {
                         {section}
                       </h3>
                       <span className={`text-sm ${colors.textSecondary}`}>
-                        ({sectionReqs.length} {lang === 'ar' ? 'متطلبات' : 'requirements'})
+                        ({sectionReqs.length} {lang === 'ar' ? 'متطلبات' : 'requirements'} • {domains.length} {lang === 'ar' ? 'معايير' : 'domains'})
                       </span>
                     </div>
                     {isExpanded ? <ChevronUp size={20} className={colors.textSecondary} /> : <ChevronDown size={20} className={colors.textSecondary} />}
                   </button>
                   {isExpanded && (
                     <div className={`p-6 ${colors.bgSecondary}`}>
-                      <div className="space-y-3">
-                        {sectionReqs.map(req => {
-                          const reqEvidence = evidence.filter(e => e.requirement_id === req.requirement_db_id);
-                          const approvedCount = reqEvidence.filter(e => e.status === 'approved').length;
-                          const rejectedCount = reqEvidence.filter(e => e.status === 'rejected').length;
-                          const underRevisionCount = reqEvidence.filter(e => e.status === 'submitted' || e.status === 'confirmed').length;
-                          const totalCount = reqEvidence.length;
+                      <div className="space-y-6">
+                        {domains.map(domain => {
+                          const domainReqs = sectionReqs.filter(r => r.sub_domain === domain);
+                          const approvedDomainReqs = domainReqs.filter(r => r.answer_status === 'approved');
+                          const completionRate = domainReqs.length > 0
+                            ? Math.round((approvedDomainReqs.length / domainReqs.length) * 100)
+                            : 0;
 
                           return (
-                            <div key={req.id} className={`flex items-center justify-between p-3 border ${colors.border} rounded ${colors.bgHover}`}>
-                              <div className="flex-1">
-                                <div className={`font-medium ${colors.textPrimary}`}>{req.id}</div>
-                                <div className={`text-sm ${colors.textSecondary} mt-1`}>
-                                  {lang === 'ar' ? req.question : req.question_en || req.question}
-                                </div>
-                                <div className="flex gap-3 mt-2 text-xs">
-                                  <span className="text-green-600 dark:text-green-400">
-                                    {lang === 'ar' ? 'معتمد' : 'Approved'}: {approvedCount}
+                            <div key={domain} className={`border ${colors.border} rounded-lg p-4 ${colors.bgPrimary}`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className={`text-md font-semibold ${colors.textPrimary}`}>
+                                  {lang === 'ar' ? 'المعيار: ' : 'Domain: '}{domain}
+                                </h4>
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-sm ${colors.textSecondary}`}>
+                                    {approvedDomainReqs.length} / {domainReqs.length} {lang === 'ar' ? 'مكتملة' : 'completed'}
                                   </span>
-                                  <span className="text-yellow-600 dark:text-yellow-400">
-                                    {lang === 'ar' ? 'قيد المراجعة' : 'Under Revision'}: {underRevisionCount}
-                                  </span>
-                                  <span className="text-red-600 dark:text-red-400">
-                                    {lang === 'ar' ? 'مرفوض' : 'Rejected'}: {rejectedCount}
-                                  </span>
-                                  <span className={colors.textTertiary}>
-                                    {lang === 'ar' ? 'الإجمالي' : 'Total'}: {totalCount}
+                                  <span className={`text-sm font-bold ${
+                                    completionRate >= 75 ? 'text-green-600 dark:text-green-400' :
+                                    completionRate >= 50 ? 'text-yellow-600 dark:text-yellow-400' :
+                                    'text-red-600 dark:text-red-400'
+                                  }`}>
+                                    {completionRate}%
                                   </span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-4">
-                                <LevelIndicator currentLevel={req.current_level} />
+                              <div className="space-y-2">
+                                {domainReqs.map(req => {
+                                  const reqEvidence = evidence.filter(e => e.requirement_id === req.requirement_db_id);
+                                  const approvedCount = reqEvidence.filter(e => e.status === 'approved').length;
+                                  const rejectedCount = reqEvidence.filter(e => e.status === 'rejected').length;
+                                  const underRevisionCount = reqEvidence.filter(e => e.status === 'submitted' || e.status === 'confirmed').length;
+                                  const totalCount = reqEvidence.length;
+
+                                  return (
+                                    <div key={req.id} className={`flex items-center justify-between p-3 border ${colors.border} rounded ${colors.bgHover}`}>
+                                      <div className="flex-1">
+                                        <div className={`font-medium ${colors.textPrimary}`}>{req.id}</div>
+                                        <div className={`text-sm ${colors.textSecondary} mt-1`}>
+                                          {lang === 'ar' ? req.question : req.question_en || req.question}
+                                        </div>
+                                        <div className="flex gap-3 mt-2 text-xs">
+                                          <span className="text-green-600 dark:text-green-400">
+                                            {lang === 'ar' ? 'معتمد' : 'Approved'}: {approvedCount}
+                                          </span>
+                                          <span className="text-yellow-600 dark:text-yellow-400">
+                                            {lang === 'ar' ? 'قيد المراجعة' : 'Under Revision'}: {underRevisionCount}
+                                          </span>
+                                          <span className="text-red-600 dark:text-red-400">
+                                            {lang === 'ar' ? 'مرفوض' : 'Rejected'}: {rejectedCount}
+                                          </span>
+                                          <span className={colors.textTertiary}>
+                                            {lang === 'ar' ? 'الإجمالي' : 'Total'}: {totalCount}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {/* Show answer status badge for ETARI, LevelIndicator for NAII */}
+                                      {currentIndex?.index_type === 'ETARI' ? (
+                                        <div className="flex items-center gap-2">
+                                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                            req.answer_status === 'approved'
+                                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                              : req.answer_status === 'pending_review'
+                                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                              : req.answer_status === 'rejected'
+                                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                              : req.answer_status === 'draft'
+                                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                              : 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
+                                          }`}>
+                                            {req.answer_status === 'approved'
+                                              ? (lang === 'ar' ? 'معتمد' : 'Approved')
+                                              : req.answer_status === 'pending_review'
+                                              ? (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review')
+                                              : req.answer_status === 'rejected'
+                                              ? (lang === 'ar' ? 'مرفوض' : 'Rejected')
+                                              : req.answer_status === 'draft'
+                                              ? (lang === 'ar' ? 'مسودة' : 'Draft')
+                                              : (lang === 'ar' ? 'غير محدد' : 'Not Set')
+                                            }
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-4">
+                                          <LevelIndicator
+                                            currentLevel={req.current_level}
+                                            indexType={currentIndex?.index_type || 'NAII'}
+                                            lang={lang}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           );

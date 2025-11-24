@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ChevronRight, ChevronLeft, Users, UserCog, Loader2, AlertCircle, Layers } from 'lucide-react';
+import { Search, ChevronRight, ChevronLeft, Users, UserCog, Loader2, AlertCircle, Layers, FileText, Paperclip, Lightbulb } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -90,6 +90,9 @@ const Requirements = () => {
     const matchesSection = selectedSection === 'all' || req.main_area_ar === selectedSection;
 
     return matchesSearch && matchesSection;
+  }).sort((a, b) => {
+    // Sort by code (handles both numeric and alphanumeric codes)
+    return a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' });
   });
 
   // Get unique main areas (sections) from requirements
@@ -227,7 +230,7 @@ const Requirements = () => {
                     {lang === 'ar' ? 'المستوى' : 'Level'}
                   </th>
                   <th className={`w-52 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
-                    {lang === 'ar' ? 'المسؤولون' : 'Assignees'}
+                    {lang === 'ar' ? 'المسؤولين' : 'Assignees'}
                   </th>
                 </tr>
               </thead>
@@ -236,6 +239,9 @@ const Requirements = () => {
                   const sectionReqs = filteredRequirements.filter(r => r.main_area_ar === section);
                   if (sectionReqs.length === 0 && selectedSection !== 'all' && selectedSection !== section) return null;
                   if (sectionReqs.length === 0 && selectedSection === 'all') return null;
+
+                  // Get unique sub-domains within this section
+                  const subDomains = Array.from(new Set(sectionReqs.map(r => r.sub_domain_ar))).sort();
 
                   return (
                     <>
@@ -250,8 +256,25 @@ const Requirements = () => {
                         </td>
                       </tr>
 
-                      {/* Requirement Rows */}
-                      {sectionReqs.map(req => {
+                      {/* Sub-domain groups */}
+                      {subDomains.map(subDomain => {
+                        const subDomainReqs = sectionReqs.filter(r => r.sub_domain_ar === subDomain);
+
+                        return (
+                          <>
+                            {/* Sub-domain Header Row */}
+                            <tr key={`subdomain-${section}-${subDomain}`}>
+                              <td colSpan={4} className="p-0">
+                                <div className={`${colors.bgTertiary} px-5 py-2`}>
+                                  <h4 className={`text-sm font-semibold ${colors.textPrimary}`}>
+                                    {subDomain}
+                                  </h4>
+                                </div>
+                              </td>
+                            </tr>
+
+                            {/* Requirement Rows */}
+                            {subDomainReqs.map(req => {
                         const assignees = req.assignments || [];
 
                         return (
@@ -276,21 +299,68 @@ const Requirements = () => {
                                 >
                                   {lang === 'ar' ? req.question_ar : req.question_en || req.question_ar}
                                 </span>
-                                {lang === 'ar' ? (
-                                  <ChevronLeft className={`${colors.textTertiary} ${colors.primaryIcon} transition flex-shrink-0 mt-0.5`} size={18} />
-                                ) : (
-                                  <ChevronRight className={`${colors.textTertiary} ${colors.primaryIcon} transition flex-shrink-0 mt-0.5`} size={18} />
-                                )}
+                                <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                                  {/* Show orange file icon if evidence is required */}
+                                  {(req.evidence_description_ar || req.evidence_description_en) && (
+                                    <FileText
+                                      className="text-orange-400 dark:text-orange-500 opacity-60"
+                                      size={13}
+                                      title={lang === 'ar' ? 'يتطلب إرفاق دليل' : 'Requires evidence attachment'}
+                                    />
+                                  )}
+                                  {/* Show green paperclip with count if evidence is attached */}
+                                  {req.evidence_count > 0 && (
+                                    <span className="flex items-center gap-0.5 text-green-600 dark:text-green-500" title={lang === 'ar' ? `${req.evidence_count} مرفقات` : `${req.evidence_count} attachments`}>
+                                      <Paperclip size={13} />
+                                      <span className="text-xs font-medium">{req.evidence_count}</span>
+                                    </span>
+                                  )}
+                                  {/* Show amber lightbulb with count if recommendations exist */}
+                                  {req.recommendations_count > 0 && (
+                                    <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-500" title={lang === 'ar' ? `${req.recommendations_count} توصيات` : `${req.recommendations_count} recommendations`}>
+                                      <Lightbulb size={13} />
+                                      <span className="text-xs font-medium">{req.recommendations_count}</span>
+                                    </span>
+                                  )}
+                                  {lang === 'ar' ? (
+                                    <ChevronLeft className={`${colors.textTertiary} ${colors.primaryIcon} transition`} size={18} />
+                                  ) : (
+                                    <ChevronRight className={`${colors.textTertiary} ${colors.primaryIcon} transition`} size={18} />
+                                  )}
+                                </div>
                               </div>
                             </td>
 
-                            {/* Current Level */}
+                            {/* Current Level / Answer Status */}
                             <td className="px-4 py-4">
                               <div className="flex justify-center">
-                                <LevelIndicator
-                                  currentLevel={assignees.length > 0 ? Math.max(...assignees.map(a => a.current_level ? parseInt(a.current_level) : 0)) : 0}
-                                  size="md"
-                                />
+                                {currentIndex?.index_type === 'ETARI' ? (
+                                  // Show single dot status indicator for ETARI - 5 colors for 5 statuses
+                                  <div
+                                    className={`w-4 h-4 rounded-full transition-all shadow-sm ${
+                                      req.answer_status === 'approved' ? 'bg-green-500' :
+                                      req.answer_status === 'rejected' ? 'bg-orange-500' :
+                                      req.answer_status === 'pending_review' ? 'bg-blue-500' :
+                                      req.answer_status === 'draft' ? 'bg-yellow-500' :
+                                      'bg-red-500'
+                                    }`}
+                                    title={
+                                      req.answer_status === 'approved' ? (lang === 'ar' ? 'مُوافق عليها' : 'Approved') :
+                                      req.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
+                                      req.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Under Review') :
+                                      req.answer_status === 'draft' ? (lang === 'ar' ? 'مسودة' : 'Draft') :
+                                      (lang === 'ar' ? 'لم يبدأ' : 'Not Started')
+                                    }
+                                  />
+                                ) : (
+                                  // Show level indicator for NAII
+                                  <LevelIndicator
+                                    currentLevel={assignees.length > 0 ? Math.max(...assignees.map(a => a.current_level ? parseInt(a.current_level) : 0)) : 0}
+                                    indexType={currentIndex?.index_type || 'NAII'}
+                                    size="md"
+                                    lang={lang}
+                                  />
+                                )}
                               </div>
                             </td>
 
@@ -330,6 +400,9 @@ const Requirements = () => {
                               </div>
                             </td>
                           </tr>
+                        );
+                      })}
+                          </>
                         );
                       })}
                     </>

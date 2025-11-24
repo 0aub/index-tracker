@@ -79,6 +79,7 @@ tmp/
 temp/
 *.bak
 *.swp
+temp_evidence/
 
 # Coverage
 coverage/
@@ -88,3 +89,54 @@ htmlcov/
 
 # Pytest
 .pytest_cache/
+
+# Data files and imports
+*.xlsx
+*.xls
+*.pptx
+*.ppt
+*.docx
+*.doc
+*.pdf
+
+# Temporary scripts (data migration/cleanup)
+api/*_evidence*.py
+api/cleanup_*.py
+api/debug_*.py
+api/execute_*.py
+api/generate_*.py
+api/map_*.py
+api/parse_*.py
+api/scan_*.py
+api/update_*.py
+api/upload_*.py
+api/test_*.py
+
+# Import/migration scripts (project-specific, not for public repo)
+api/scripts/import_*.py
+api/scripts/examine_*.py
+api/scripts/extract_*.py
+api/scripts/migrate_*.py
+api/scripts/cleanup_*.py
+api/scripts/create_*_template.py
+api/scripts/seed_organizational_hierarchy.py
+api/scripts/update_admin_password.py
+api/scripts/update_emails.py
+
+# Test scripts
+test_*.sh
+*.sh
+
+# Implementation docs (keep these in project management tools)
+IMPLEMENTATION_PLAN.md
+PROGRESS_SUMMARY.md
+
+# Temporary GitHub prep files
+.github-*.md
+.github-*.txt
+
+# Arabic-named folders and files
+MEWA*/
+*مؤشر*/
+*بطاقات*/
+*الاجابات*/

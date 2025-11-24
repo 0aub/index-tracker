@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Plus, Edit, Trash2, CheckSquare, TrendingUp, Loader2, AlertCircle, FileText } from 'lucide-react';
+import { Layers, Plus, Edit, Trash2, CheckSquare, TrendingUp, Loader2, AlertCircle, FileText, CheckCircle2, Upload, Download } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
 import { colors, patterns } from '../utils/darkMode';
 import toast from 'react-hot-toast';
-import { api, Index } from '../services/api';
+import { api, Index, RecommendationUploadResult } from '../services/api';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import IndexEditModal from '../components/IndexEditModal';
 
@@ -24,6 +24,12 @@ const Indices = () => {
   const [indexToDelete, setIndexToDelete] = useState<Index | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [indexToEdit, setIndexToEdit] = useState<Index | null>(null);
+  const [completingIndexId, setCompletingIndexId] = useState<string | null>(null);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState<string | null>(null);
+  const [uploadingIndexId, setUploadingIndexId] = useState<string | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ indexId: string; result: RecommendationUploadResult } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedIndexForUpload, setSelectedIndexForUpload] = useState<string | null>(null);
 
   // Load indices on mount
   useEffect(() => {
@@ -98,6 +104,56 @@ const Indices = () => {
           ? `فشل حذف المؤشر: ${err.message}`
           : `Failed to delete index: ${err.message}`
       );
+    }
+  };
+
+  const handleCompleteIndex = async (indexId: string) => {
+    try {
+      setCompletingIndexId(indexId);
+      await api.indices.complete(indexId);
+      toast.success(lang === 'ar' ? 'تم اكتمال المؤشر بنجاح' : 'Index marked as completed successfully');
+      setShowCompleteConfirm(null);
+      await loadIndices(); // Wait for indices to reload before clearing loading state
+    } catch (err: any) {
+      console.error('Failed to complete index:', err);
+      toast.error(lang === 'ar' ? 'فشل في إكمال المؤشر' : 'Failed to complete index');
+    } finally {
+      setCompletingIndexId(null);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    const url = api.recommendations.getTemplateUrl();
+    window.open(url, '_blank');
+  };
+
+  const triggerFileUpload = (indexId: string) => {
+    setSelectedIndexForUpload(indexId);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedIndexForUpload) return;
+
+    try {
+      setUploadingIndexId(selectedIndexForUpload);
+      const result = await api.recommendations.upload(selectedIndexForUpload, file);
+      setUploadResult({ indexId: selectedIndexForUpload, result });
+      toast.success(
+        lang === 'ar'
+          ? `تم رفع ${result.created} توصية جديدة`
+          : `Uploaded ${result.created} new recommendations`
+      );
+    } catch (err: any) {
+      console.error('Failed to upload recommendations:', err);
+      toast.error(lang === 'ar' ? 'فشل في رفع التوصيات' : 'Failed to upload recommendations');
+    } finally {
+      setUploadingIndexId(null);
+      setSelectedIndexForUpload(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -250,6 +306,12 @@ const Indices = () => {
                       <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadge(index.status)}`}>
                         {getStatusLabel(index.status)}
                       </span>
+                      {index.is_completed && (
+                        <span className="flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs font-medium rounded-full">
+                          <CheckCircle2 size={12} />
+                          {lang === 'ar' ? 'مكتمل' : 'Finalized'}
+                        </span>
+                      )}
                     </div>
                     {(index.description_ar || index.description_en) && (
                       <p className={`${colors.textSecondary} mb-4`}>
@@ -333,7 +395,119 @@ const Indices = () => {
                     {lang === 'ar' ? 'ملف Excel:' : 'Excel File:'} {index.excel_filename}
                   </span>
                 )}
+                {index.is_completed && index.completed_at && (
+                  <span className="text-green-600 dark:text-green-400">
+                    {lang === 'ar' ? 'تم الإكمال:' : 'Completed:'} {new Date(index.completed_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
+                  </span>
+                )}
               </div>
+
+              {/* Completion & Recommendations Actions */}
+              {(user?.role === 'admin' || user?.role === 'index_manager') && (
+                <div className={`mt-4 pt-4 border-t ${colors.border}`}>
+                  {/* Show Complete Button for non-completed indices */}
+                  {!index.is_completed && (
+                    <>
+                      {showCompleteConfirm === index.id ? (
+                        <div className={`p-3 ${colors.bgTertiary} rounded-lg`}>
+                          <p className={`text-sm ${colors.textSecondary} mb-3`}>
+                            {lang === 'ar'
+                              ? 'هل أنت متأكد من إكمال هذا المؤشر؟ بعد الإكمال يمكنك رفع التوصيات.'
+                              : 'Are you sure you want to complete this index? After completion, you can upload recommendations.'}
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleCompleteIndex(index.id)}
+                              disabled={completingIndexId === index.id}
+                              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
+                            >
+                              {completingIndexId === index.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4" />
+                              )}
+                              {lang === 'ar' ? 'تأكيد الإكمال' : 'Confirm Complete'}
+                            </button>
+                            <button
+                              onClick={() => setShowCompleteConfirm(null)}
+                              className={`px-3 py-2 ${colors.bgSecondary} border ${colors.border} rounded-lg text-sm ${colors.textSecondary}`}
+                            >
+                              {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowCompleteConfirm(index.id)}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          {lang === 'ar' ? 'إكمال المؤشر' : 'Complete Index'}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Show Recommendations Section for completed indices */}
+                  {index.is_completed && (
+                    <div className="space-y-3">
+                      <h4 className={`text-sm font-medium ${colors.textPrimary}`}>
+                        {lang === 'ar' ? 'توصيات التقييم' : 'Evaluation Recommendations'}
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={handleDownloadTemplate}
+                          className={`flex items-center gap-2 px-3 py-2 ${colors.bgTertiary} border ${colors.border} rounded-lg hover:${colors.bgHover} transition-colors text-sm ${colors.textSecondary}`}
+                        >
+                          <Download className="w-4 h-4" />
+                          {lang === 'ar' ? 'تحميل قالب التوصيات' : 'Download Template'}
+                        </button>
+                        <button
+                          onClick={() => triggerFileUpload(index.id)}
+                          disabled={uploadingIndexId === index.id}
+                          className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-medium"
+                        >
+                          {uploadingIndexId === index.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Upload className="w-4 h-4" />
+                          )}
+                          {lang === 'ar' ? 'رفع التوصيات' : 'Upload Recommendations'}
+                        </button>
+                      </div>
+
+                      {/* Upload Result */}
+                      {uploadResult && uploadResult.indexId === index.id && (
+                        <div className={`p-3 ${colors.bgTertiary} rounded-lg`}>
+                          <h5 className={`text-sm font-medium ${colors.textPrimary} mb-2`}>
+                            {lang === 'ar' ? 'نتيجة الرفع' : 'Upload Result'}
+                          </h5>
+                          <div className={`text-sm ${colors.textSecondary} space-y-1`}>
+                            <div className="flex justify-between">
+                              <span>{lang === 'ar' ? 'إجمالي الصفوف:' : 'Total rows:'}</span>
+                              <span>{uploadResult.result.total_rows}</span>
+                            </div>
+                            <div className="flex justify-between text-green-600 dark:text-green-400">
+                              <span>{lang === 'ar' ? 'تم التطابق:' : 'Matched:'}</span>
+                              <span>{uploadResult.result.matched}</span>
+                            </div>
+                            <div className="flex justify-between text-blue-600 dark:text-blue-400">
+                              <span>{lang === 'ar' ? 'تم الإنشاء:' : 'Created:'}</span>
+                              <span>{uploadResult.result.created}</span>
+                            </div>
+                            {uploadResult.result.unmatched > 0 && (
+                              <div className="flex justify-between text-yellow-600 dark:text-yellow-400">
+                                <span>{lang === 'ar' ? 'غير متطابق:' : 'Unmatched:'}</span>
+                                <span>{uploadResult.result.unmatched}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -359,6 +533,15 @@ const Indices = () => {
           )}
         </div>
       )}
+
+      {/* Hidden file input for recommendations upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
 
       {/* Delete Confirmation Modal */}
       {indexToDelete && (

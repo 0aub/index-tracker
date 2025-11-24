@@ -32,7 +32,7 @@ export const IndexSelector: React.FC = () => {
       setLoading(true);
       const data = await api.indices.getAll({
         organization_id: user?.organizationId,
-        status: 'in_progress',
+        // No status filter - show all indices (in_progress, completed, etc.)
       });
       setIndices(data);
 

@@ -29,9 +29,15 @@ const Login = () => {
     setLoading(true);
 
     try {
-      await login(email, password);
+      const result = await login(email, password);
       toast.success(lang === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Login successful');
-      navigate('/');
+
+      // Check if user needs to complete first-time setup
+      if (result?.is_first_login) {
+        navigate('/first-time-setup');
+      } else {
+        navigate('/');
+      }
     } catch (err: any) {
       const errorMessage = err.message || (lang === 'ar' ? 'فشل تسجيل الدخول' : 'Login failed');
       setError(errorMessage);
@@ -74,7 +80,7 @@ const Login = () => {
               {lang === 'ar' ? 'راقب' : 'Raqib'}
             </h1>
             <p className={colors.textSecondary}>
-              {lang === 'ar' ? 'نظام إدارة المؤشرات' : 'Index Management System'}
+              {lang === 'ar' ? 'المنصة الذكية لإدارة المؤشرات' : 'Index Management System'}
             </p>
           </div>
 
@@ -83,17 +89,6 @@ const Login = () => {
             <h2 className={`text-2xl font-bold mb-6 text-center ${colors.textPrimary}`}>
               {lang === 'ar' ? 'تسجيل الدخول' : 'Login'}
             </h2>
-
-            {/* Demo Credentials Info */}
-            <div className={`mb-6 p-4 border rounded-lg ${colors.primaryLight} ${colors.primaryBorder} border`}>
-              <p className={`text-sm font-medium mb-2 ${colors.primaryText}`}>
-                {lang === 'ar' ? 'بيانات الدخول التجريبية:' : 'Demo Credentials:'}
-              </p>
-              <p className={`text-sm font-mono ${colors.textPrimary}`}>
-                admin@mewa.gov.sa<br />
-                Admin@2025
-              </p>
-            </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Email Field */}

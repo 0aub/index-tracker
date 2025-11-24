@@ -49,11 +49,22 @@ class Settings(BaseSettings):
 
     # Excel Template
     TEMPLATE_DIR: str = "templates"
-    TEMPLATE_FILENAME: str = "NAII-SDAIA-Workshop.xlsx"
+    TEMPLATE_FILENAME: str = "NAII-2025-template.xlsx"
 
     # Pagination
     DEFAULT_PAGE_SIZE: int = 20
     MAX_PAGE_SIZE: int = 100
+
+    # Email Settings (Outlook/Microsoft 365)
+    SMTP_HOST: str = "smtp.office365.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = "noreply@example.com"
+    SMTP_PASSWORD: str = ""  # Set via environment variable
+    SMTP_FROM_EMAIL: str = "noreply@example.com"
+    SMTP_FROM_NAME: str = "منصة راقب - MEWA"
+
+    # Frontend URL
+    FRONTEND_URL: str = "http://localhost:8080"
 
     model_config = SettingsConfigDict(
         env_file=".env",

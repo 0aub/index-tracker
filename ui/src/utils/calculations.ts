@@ -7,6 +7,9 @@ export interface Requirement {
   current_level: number;
   assigned_to?: string;
   due_date?: string;
+  answer_status?: string; // Answer status for ETARI completion tracking
+  evidence_description_ar?: string;
+  evidence_description_en?: string;
 }
 
 export interface Evidence {
@@ -52,6 +55,8 @@ export const STATUS_COLORS = {
   not_started: '#9CA3AF'
 };
 
+// DEPRECATED: Use getLevelColor from config/indexConfigs instead
+// Kept for backward compatibility only
 export const LEVEL_COLORS = [
   '#E74C3C',
   '#F39C12',
@@ -79,12 +84,17 @@ export function calculateSectionMaturity(requirements: Requirement[], sectionId:
   return Math.round((sum / sectionReqs.length) * 100) / 100;
 }
 
-export function calculateSectionCompletion(requirements: Requirement[], evidence: Evidence[], sectionId: string): number {
+export function calculateSectionCompletion(
+  requirements: Requirement[],
+  evidence: Evidence[],
+  sectionId: string,
+  completionThreshold: number = 5  // NEW: Configurable threshold
+): number {
   const sectionReqs = requirements.filter(r => r.section === sectionId);
   if (sectionReqs.length === 0) return 0;
 
-  // Calculate completion as percentage of requirements that reached level 5
-  const completedReqs = sectionReqs.filter(req => (req.current_level || 0) >= 5).length;
+  // Calculate completion as percentage of requirements that reached the threshold
+  const completedReqs = sectionReqs.filter(req => (req.current_level || 0) >= completionThreshold).length;
   return Math.round((completedReqs / sectionReqs.length) * 100);
 }
 
@@ -110,7 +120,11 @@ export function getStatusDistribution(evidence: Evidence[]) {
   }));
 }
 
-export function getSectionData(requirements: Requirement[], lang: 'ar' | 'en' = 'ar') {
+export function getSectionData(
+  requirements: Requirement[],
+  lang: 'ar' | 'en' = 'ar',
+  maxLevel: number = 5  // NEW: Configurable max level
+) {
   const sections = Object.keys(SECTION_WEIGHTS);
 
   return sections.map(section => {
@@ -119,7 +133,7 @@ export function getSectionData(requirements: Requirement[], lang: 'ar' | 'en' = 
     return {
       section: SECTION_NAMES[section as keyof typeof SECTION_NAMES][lang],
       current: Number(current.toFixed(2)),
-      fullMark: 5
+      fullMark: maxLevel
     };
   });
 }

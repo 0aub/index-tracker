@@ -24,7 +24,7 @@ const UserForm = ({ user, onSave, onCancel, lang }: UserFormProps) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const roleLabels = {
-    admin: { ar: 'مدير', en: 'Admin' },
+    admin: { ar: 'مدير المنصة', en: 'Admin' },
     index_manager: { ar: 'مدير المؤشر', en: 'Index Manager' },
     section_coordinator: { ar: 'منسق قسم', en: 'Section Coordinator' },
     contributor: { ar: 'مساهم', en: 'Contributor' },

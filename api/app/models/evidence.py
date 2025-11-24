@@ -21,7 +21,7 @@ class Evidence(Base):
     # References
     requirement_id = Column(String, ForeignKey("requirements.id"), nullable=False, index=True)
     assignment_id = Column(String, ForeignKey("assignments.id"), nullable=True, index=True)
-    maturity_level = Column(Integer, nullable=False)  # 0-5
+    maturity_level = Column(Integer, nullable=True)  # 0-5 for NAII, NULL for ETARI (requirement-level evidence)
 
     # Document Info
     document_name = Column(String, nullable=False)  # Base name without version

@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Users, Calendar, CheckCircle2, Circle, Upload, FileText,
-  Clock, MessageSquare, ChevronDown, ChevronUp, CheckSquare, Trash2, Download, X, History, Loader2, AlertCircle
+  ArrowLeft, Users, Calendar, CheckCircle2, CheckCircle, Circle, Upload, FileText, File,
+  Clock, MessageSquare, ChevronDown, ChevronUp, CheckSquare, Trash2, X, History, Loader2, AlertCircle, Lightbulb, Info, Download
 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore} from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
 import toast from 'react-hot-toast';
-import { api, Requirement, AssignmentWithUser } from '../services/api';
+import { api, Requirement, AssignmentWithUser, PreviousYearContextResponse } from '../services/api';
 import { colors, patterns } from '../utils/darkMode';
+import { getIndexConfig, getLevelName, getLevelDescription } from '../config/indexConfigs';
 
 // Document status type
 type DocumentStatus = 'draft' | 'submitted' | 'confirmed' | 'approved';
@@ -45,8 +46,21 @@ interface UploadedDoc {
   review_history: ReviewHistory[];  // Track all review actions
 }
 
-// Get level criteria structure (mock for now - TODO: should come from backend based on requirement's maturity_levels)
-const getMockLevelCriteria = (lang: 'ar' | 'en') => {
+// Get level criteria structure dynamically from index configuration
+const getMockLevelCriteria = (lang: 'ar' | 'en', indexType: string = 'NAII') => {
+  const config = getIndexConfig(indexType);
+
+  // Generate level criteria from config
+  return config.levels.map(levelDef => ({
+    level: levelDef.level,
+    title: lang === 'ar' ? levelDef.nameAr : levelDef.nameEn,
+    description: lang === 'ar' ? (levelDef.descriptionAr || '') : (levelDef.descriptionEn || ''),
+    acceptance_criteria: [],  // TODO: Should come from backend maturity_levels
+    required_documents: []  // TODO: Should come from backend evidence_requirements
+  }));
+
+  // Legacy hardcoded version below - kept as comment for reference
+  /*
   return [
     {
       level: 0,
@@ -216,6 +230,7 @@ const getMockLevelCriteria = (lang: 'ar' | 'en') => {
       ]
     }
   ];
+  */
 };
 
 const mockActivities = [
@@ -285,6 +300,14 @@ const RequirementDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ETARI Answer states
+  const [answerText, setAnswerText] = useState('');
+  const [savingAnswer, setSavingAnswer] = useState(false);
+  const [submittingForReview, setSubmittingForReview] = useState(false);
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | 'request_changes' | null>(null);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewing, setReviewing] = useState(false);
+
   // UI states
   const [expandedLevels, setExpandedLevels] = useState<number[]>([]);
   const [showActivities, setShowActivities] = useState(false);
@@ -299,6 +322,81 @@ const RequirementDetail = () => {
   const [showReviewHistory, setShowReviewHistory] = useState<{ level: number; docId: string } | null>(null);
   const [manuallyCompletedLevels, setManuallyCompletedLevels] = useState<number[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
+  const [previousData, setPreviousData] = useState<PreviousYearContextResponse | null>(null);
+  const [showPreviousData, setShowPreviousData] = useState(false);
+  const [copyingEvidenceId, setCopyingEvidenceId] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+
+  // Handler for copying evidence from previous year
+  const handleCopyEvidence = async (evidenceId: string, documentName: string) => {
+    if (!requirement?.real_id || !user?.id) return;
+
+    try {
+      setCopyingEvidenceId(evidenceId);
+
+      // For ETARI, use maturity level 0 (no maturity levels)
+      const targetMaturityLevel = currentIndex?.index_type === 'ETARI' ? 0 : requirement.current_level;
+
+      await api.evidence.copy(
+        evidenceId,
+        requirement.real_id,
+        targetMaturityLevel,
+        user.id
+      );
+
+      toast.success(lang === 'ar'
+        ? `تم نسخ المستند "${documentName}" بنجاح`
+        : `Evidence "${documentName}" copied successfully`
+      );
+
+      // Reload evidence data
+      const evidenceData = await api.evidence.getAll({ requirement_id: requirement.real_id });
+      const docsGroupedByLevel: Record<number, UploadedDoc[]> = {};
+      for (const evidence of evidenceData) {
+        const evidenceDetails = await api.evidence.getById(evidence.id);
+        const transformedDoc: UploadedDoc = {
+          id: evidence.id,
+          document_name: evidence.document_name,
+          current_version: evidence.current_version,
+          status: evidence.status as DocumentStatus,
+          versions: evidenceDetails.versions.map(v => ({
+            version: v.version_number,
+            filename: v.filename,
+            file_size: v.file_size || undefined,
+            uploaded_by: v.uploaded_by,
+            uploaded_at: v.uploaded_at,
+            comment: v.upload_comment || undefined
+          })),
+          review_history: evidenceDetails.activities.map(a => ({
+            id: a.id,
+            reviewer_id: a.actor_id,
+            reviewer_name: a.actor_id,
+            action: a.action as any,
+            version: a.version_number || 0,
+            comment: a.comment || undefined,
+            timestamp: a.created_at
+          }))
+        };
+        // Normalize null maturity_level to 0 for ETARI evidence
+        const level = evidence.maturity_level ?? 0;
+        if (!docsGroupedByLevel[level]) {
+          docsGroupedByLevel[level] = [];
+        }
+        docsGroupedByLevel[level].push(transformedDoc);
+      }
+      setDocuments(docsGroupedByLevel);
+
+    } catch (err: any) {
+      console.error('Failed to copy evidence:', err);
+      toast.error(lang === 'ar'
+        ? 'فشل في نسخ المستند'
+        : 'Failed to copy evidence'
+      );
+    } finally {
+      setCopyingEvidenceId(null);
+    }
+  };
 
   // Fetch requirement data
   useEffect(() => {
@@ -327,15 +425,51 @@ const RequirementDetail = () => {
           ? Math.max(...assignmentsData.map(a => a.current_level ? parseInt(a.current_level) : 0))
           : 0;
 
-        // Transform to include level criteria (mock for now - TODO: get from backend)
+        // Transform to include level criteria from actual backend data
+        // For ETARI (no maturity levels), use config levels for display purposes only
+        const isETARI = currentIndex?.index_type === 'ETARI';
+        const levelCriteria = isETARI && reqData.maturity_levels.length === 0
+          ? getIndexConfig('ETARI').levels.map(levelDef => ({
+              level: levelDef.level,
+              title: lang === 'ar' ? levelDef.nameAr : levelDef.nameEn,
+              description: lang === 'ar' ? (levelDef.descriptionAr || '') : (levelDef.descriptionEn || ''),
+              acceptance_criteria: [],
+              required_documents: []
+            }))
+          : reqData.maturity_levels.map((ml: any) => ({
+              level: ml.level,
+              title: lang === 'ar' ? ml.level_name_ar : (ml.level_name_en || ml.level_name_ar),
+              description: lang === 'ar' ? (ml.readiness_ar || getLevelDescription(currentIndex?.index_type || 'NAII', ml.level, lang)) : (ml.readiness_en || getLevelDescription(currentIndex?.index_type || 'NAII', ml.level, lang)),
+              acceptance_criteria: (ml.acceptance_criteria || []).map((ac: any) => lang === 'ar' ? ac.criteria_ar : (ac.criteria_en || ac.criteria_ar)),
+              required_documents: (ml.evidence_requirements || []).map((er: any) => ({
+                name: lang === 'ar' ? er.evidence_ar : (er.evidence_en || er.evidence_ar),
+                description: '',
+                mandatory: er.is_mandatory !== false
+              }))
+            }));
+
         const transformedReq = {
           id: reqData.code,
+          real_id: reqData.id,  // Store the actual DB ID for API calls
           question: lang === 'ar' ? reqData.question_ar : reqData.question_en || reqData.question_ar,
           section: lang === 'ar' ? reqData.main_area_ar : reqData.main_area_en || reqData.main_area_ar,
+          // ETARI-specific fields
+          sub_domain: lang === 'ar' ? reqData.sub_domain_ar : reqData.sub_domain_en || reqData.sub_domain_ar,
+          element: lang === 'ar' ? reqData.element_ar : reqData.element_en || reqData.element_ar,
+          objective: lang === 'ar' ? reqData.objective_ar : reqData.objective_en || reqData.objective_ar,
+          evidence_description: lang === 'ar' ? reqData.evidence_description_ar : reqData.evidence_description_en || reqData.evidence_description_ar,
+          // ETARI Answer fields
+          answer: lang === 'ar' ? reqData.answer_ar : reqData.answer_en || reqData.answer_ar,
+          answer_status: reqData.answer_status,
+          answered_by: reqData.answered_by,
+          answered_at: reqData.answered_at,
+          reviewed_by: reqData.reviewed_by,
+          reviewer_comment: lang === 'ar' ? reqData.reviewer_comment_ar : reqData.reviewer_comment_en || reqData.reviewer_comment_ar,
+          reviewed_at: reqData.reviewed_at,
           current_level: currentLevel,
           due_date: new Date().toISOString(), // TODO: Get from backend
           assignees: assignmentsData.map(a => a.user_id),
-          level_criteria: getMockLevelCriteria(lang) // Using mock criteria for now
+          level_criteria: levelCriteria
         };
 
         // Transform evidence data to match UI structure
@@ -366,16 +500,22 @@ const RequirementDetail = () => {
             }))
           };
 
-          if (!docsGroupedByLevel[evidence.maturity_level]) {
-            docsGroupedByLevel[evidence.maturity_level] = [];
+          // Normalize null maturity_level to 0 for ETARI evidence
+          const level = evidence.maturity_level ?? 0;
+          if (!docsGroupedByLevel[level]) {
+            docsGroupedByLevel[level] = [];
           }
-          docsGroupedByLevel[evidence.maturity_level].push(transformedDoc);
+          docsGroupedByLevel[level].push(transformedDoc);
         }
 
         setRequirement(transformedReq);
         setAssignees(assignmentsData);
         setDocuments(docsGroupedByLevel);
         setExpandedLevels([currentLevel]);
+        // Initialize answer text from requirement data
+        if (transformedReq.answer) {
+          setAnswerText(transformedReq.answer);
+        }
 
         // Initialize manually completed levels from database
         // Mark all levels up to and including current level as completed
@@ -385,10 +525,37 @@ const RequirementDetail = () => {
           setManuallyCompletedLevels(completedLevels);
         }
 
-        // Load all activities
-        const allActivities = evidenceData.flatMap(e => e.id).slice(0, 10); // Get recent activities
-        // TODO: Load activities properly from backend
-        setActivities([]);
+        // Load requirement activities
+        try {
+          const activitiesData = await api.requirements.getActivities(id);
+          setActivities(activitiesData);
+        } catch (err) {
+          console.error('Failed to load activities:', err);
+          // Don't fail the whole page if activities fail to load
+          setActivities([]);
+        }
+
+        // Load previous year's context (intelligent matching within المعيار)
+        try {
+          const prevData = await api.requirements.getPreviousYearContext(id);
+          setPreviousData(prevData);
+        } catch (err) {
+          console.error('Failed to load previous year context:', err);
+          // Don't fail the whole page if previous year context fails to load
+          setPreviousData(null);
+        }
+
+        // Load recommendations
+        try {
+          setLoadingRecommendations(true);
+          const recommendationsData = await api.requirements.getRecommendations(id);
+          setRecommendations(recommendationsData);
+        } catch (err) {
+          console.error('Failed to load recommendations:', err);
+          setRecommendations([]);
+        } finally {
+          setLoadingRecommendations(false);
+        }
       } catch (err: any) {
         console.error('Failed to load requirement:', err);
         setError(err.message || 'Failed to load requirement');
@@ -488,6 +655,7 @@ const RequirementDetail = () => {
 
   const getActivityIcon = (type: string) => {
     switch (type) {
+      // NAII activities
       case 'level_achieved':
         return <CheckCircle2 className="text-green-600" size={20} />;
       case 'document_uploaded':
@@ -496,6 +664,29 @@ const RequirementDetail = () => {
         return <Trash2 className="text-red-600" size={20} />;
       case 'comment_added':
         return <MessageSquare className="text-purple-600" size={20} />;
+      // ETARI Answer activities
+      case 'answer_saved':
+        return <FileText className="text-blue-600 dark:text-blue-400" size={20} />;
+      case 'answer_submitted':
+        return <Upload className="text-blue-600 dark:text-blue-400" size={20} />;
+      case 'answer_approved':
+        return <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />;
+      case 'answer_rejected':
+        return <X className="text-red-600 dark:text-red-400" size={20} />;
+      case 'answer_changes_requested':
+        return <AlertCircle className="text-yellow-600 dark:text-yellow-400" size={20} />;
+      // Evidence activities
+      case 'evidence_uploaded':
+        return <Upload className="text-green-600 dark:text-green-400" size={20} />;
+      case 'evidence_approved':
+        return <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />;
+      case 'evidence_rejected':
+        return <X className="text-red-600 dark:text-red-400" size={20} />;
+      // Assignment activities
+      case 'assignment_created':
+        return <Users className="text-purple-600 dark:text-purple-400" size={20} />;
+      case 'assignment_removed':
+        return <Trash2 className="text-red-600" size={20} />;
       default:
         return <Clock className="text-gray-600" size={20} />;
     }
@@ -503,11 +694,25 @@ const RequirementDetail = () => {
 
   const getActivityBgColor = (type: string) => {
     switch (type) {
-      case 'level_achieved': return 'bg-green-100';
+      // NAII activities
+      case 'level_achieved': return 'bg-green-100 dark:bg-green-900';
       case 'document_uploaded': return 'bg-green-100 dark:bg-green-900';
-      case 'document_removed': return 'bg-red-100';
-      case 'comment_added': return 'bg-purple-100';
-      default: return 'bg-gray-100';
+      case 'document_removed': return 'bg-red-100 dark:bg-red-900';
+      case 'comment_added': return 'bg-purple-100 dark:bg-purple-900';
+      // ETARI Answer activities
+      case 'answer_saved': return 'bg-blue-100 dark:bg-blue-900';
+      case 'answer_submitted': return 'bg-blue-100 dark:bg-blue-900';
+      case 'answer_approved': return 'bg-green-100 dark:bg-green-900';
+      case 'answer_rejected': return 'bg-red-100 dark:bg-red-900';
+      case 'answer_changes_requested': return 'bg-yellow-100 dark:bg-yellow-900';
+      // Evidence activities
+      case 'evidence_uploaded': return 'bg-green-100 dark:bg-green-900';
+      case 'evidence_approved': return 'bg-green-100 dark:bg-green-900';
+      case 'evidence_rejected': return 'bg-red-100 dark:bg-red-900';
+      // Assignment activities
+      case 'assignment_created': return 'bg-purple-100 dark:bg-purple-900';
+      case 'assignment_removed': return 'bg-red-100 dark:bg-red-900';
+      default: return 'bg-gray-100 dark:bg-gray-700';
     }
   };
 
@@ -602,10 +807,12 @@ const RequirementDetail = () => {
               timestamp: a.created_at
             }))
           };
-          if (!docsGroupedByLevel[evidence.maturity_level]) {
-            docsGroupedByLevel[evidence.maturity_level] = [];
+          // Normalize null maturity_level to 0 for ETARI evidence
+          const level = evidence.maturity_level ?? 0;
+          if (!docsGroupedByLevel[level]) {
+            docsGroupedByLevel[level] = [];
           }
-          docsGroupedByLevel[evidence.maturity_level].push(transformedDoc);
+          docsGroupedByLevel[level].push(transformedDoc);
         }
         setDocuments(docsGroupedByLevel);
       } else {
@@ -658,10 +865,12 @@ const RequirementDetail = () => {
               timestamp: a.created_at
             }))
           };
-          if (!docsGroupedByLevel[evidence.maturity_level]) {
-            docsGroupedByLevel[evidence.maturity_level] = [];
+          // Normalize null maturity_level to 0 for ETARI evidence
+          const level = evidence.maturity_level ?? 0;
+          if (!docsGroupedByLevel[level]) {
+            docsGroupedByLevel[level] = [];
           }
-          docsGroupedByLevel[evidence.maturity_level].push(transformedDoc);
+          docsGroupedByLevel[level].push(transformedDoc);
         }
         setDocuments(docsGroupedByLevel);
       }
@@ -835,10 +1044,12 @@ const RequirementDetail = () => {
             timestamp: a.created_at
           }))
         };
-        if (!docsGroupedByLevel[evidence.maturity_level]) {
-          docsGroupedByLevel[evidence.maturity_level] = [];
+        // Normalize null maturity_level to 0 for ETARI evidence
+        const level = evidence.maturity_level ?? 0;
+        if (!docsGroupedByLevel[level]) {
+          docsGroupedByLevel[level] = [];
         }
-        docsGroupedByLevel[evidence.maturity_level].push(transformedDoc);
+        docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
     } catch (err: any) {
@@ -887,10 +1098,12 @@ const RequirementDetail = () => {
             timestamp: a.created_at
           }))
         };
-        if (!docsGroupedByLevel[evidence.maturity_level]) {
-          docsGroupedByLevel[evidence.maturity_level] = [];
+        // Normalize null maturity_level to 0 for ETARI evidence
+        const level = evidence.maturity_level ?? 0;
+        if (!docsGroupedByLevel[level]) {
+          docsGroupedByLevel[level] = [];
         }
-        docsGroupedByLevel[evidence.maturity_level].push(transformedDoc);
+        docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
     } catch (err: any) {
@@ -934,10 +1147,12 @@ const RequirementDetail = () => {
             timestamp: a.created_at
           }))
         };
-        if (!docsGroupedByLevel[evidence.maturity_level]) {
-          docsGroupedByLevel[evidence.maturity_level] = [];
+        // Normalize null maturity_level to 0 for ETARI evidence
+        const level = evidence.maturity_level ?? 0;
+        if (!docsGroupedByLevel[level]) {
+          docsGroupedByLevel[level] = [];
         }
-        docsGroupedByLevel[evidence.maturity_level].push(transformedDoc);
+        docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
     } catch (err: any) {
@@ -988,15 +1203,106 @@ const RequirementDetail = () => {
             timestamp: a.created_at
           }))
         };
-        if (!docsGroupedByLevel[evidence.maturity_level]) {
-          docsGroupedByLevel[evidence.maturity_level] = [];
+        // Normalize null maturity_level to 0 for ETARI evidence
+        const level = evidence.maturity_level ?? 0;
+        if (!docsGroupedByLevel[level]) {
+          docsGroupedByLevel[level] = [];
         }
-        docsGroupedByLevel[evidence.maturity_level].push(transformedDoc);
+        docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
     } catch (err: any) {
       console.error('Failed to reject document:', err);
       toast.error(lang === 'ar' ? 'فشل رفض المستند' : 'Failed to reject document');
+    }
+  };
+
+  // ETARI Answer handlers
+  const handleSaveAnswer = async () => {
+    if (!requirement?.real_id || !user?.id) return;
+    if (!answerText.trim()) {
+      toast.error(lang === 'ar' ? 'الرجاء كتابة إجابة' : 'Please write an answer');
+      return;
+    }
+
+    try {
+      setSavingAnswer(true);
+      const updatedReq = await api.requirements.saveAnswer(requirement.real_id, user.id, {
+        answer_ar: answerText,
+        answer_en: answerText
+      });
+      setRequirement({ ...requirement, answer: answerText, answer_status: updatedReq.answer_status });
+
+      // Refetch activities to show the new activity
+      try {
+        const activitiesData = await api.requirements.getActivities(requirement.real_id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to refresh activities:', err);
+      }
+
+      toast.success(lang === 'ar' ? 'تم حفظ الإجابة' : 'Answer saved');
+    } catch (err: any) {
+      console.error('Failed to save answer:', err);
+      toast.error(lang === 'ar' ? 'فشل حفظ الإجابة' : 'Failed to save answer');
+    } finally {
+      setSavingAnswer(false);
+    }
+  };
+
+  const handleSubmitForReview = async () => {
+    if (!requirement?.real_id || !user?.id) return;
+
+    try {
+      setSubmittingForReview(true);
+      const updatedReq = await api.requirements.submitForReview(requirement.real_id, user.id);
+      setRequirement({ ...requirement, answer_status: updatedReq.answer_status });
+
+      // Refetch activities to show the new activity
+      try {
+        const activitiesData = await api.requirements.getActivities(requirement.real_id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to refresh activities:', err);
+      }
+
+      toast.success(lang === 'ar' ? 'تم إرسال الإجابة للمراجعة' : 'Answer submitted for review');
+    } catch (err: any) {
+      console.error('Failed to submit for review:', err);
+      toast.error(lang === 'ar' ? 'فشل إرسال الإجابة للمراجعة' : 'Failed to submit for review');
+    } finally {
+      setSubmittingForReview(false);
+    }
+  };
+
+  const handleReviewAnswer = async (action: 'approve' | 'reject' | 'request_changes') => {
+    if (!requirement?.real_id || !user?.id) return;
+
+    try {
+      setReviewing(true);
+      const updatedReq = await api.requirements.reviewAnswer(requirement.real_id, user.id, {
+        action,
+        reviewer_comment_ar: reviewComment,
+        reviewer_comment_en: reviewComment
+      });
+      setRequirement({ ...requirement, answer_status: updatedReq.answer_status, reviewer_comment: reviewComment });
+      setReviewAction(null);
+      setReviewComment('');
+
+      // Refetch activities to show the new activity
+      try {
+        const activitiesData = await api.requirements.getActivities(requirement.real_id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to refresh activities:', err);
+      }
+
+      toast.success(lang === 'ar' ? 'تمت مراجعة الإجابة' : 'Answer reviewed');
+    } catch (err: any) {
+      console.error('Failed to review answer:', err);
+      toast.error(lang === 'ar' ? 'فشلت مراجعة الإجابة' : 'Failed to review answer');
+    } finally {
+      setReviewing(false);
     }
   };
 
@@ -1078,15 +1384,56 @@ const RequirementDetail = () => {
                 {requirement.question}
               </h1>
 
+              {/* ETARI-specific details */}
+              {currentIndex?.index_type === 'ETARI' && (
+                <div className={`space-y-3 mb-4 p-4 ${colors.bgHover} rounded-lg`}>
+                  {requirement.element && (
+                    <div>
+                      <span className={`text-sm font-medium ${colors.textSecondary}`}>
+                        {lang === 'ar' ? 'العنصر: ' : 'Element: '}
+                      </span>
+                      <span className={`text-sm ${colors.textPrimary}`}>{requirement.element}</span>
+                    </div>
+                  )}
+                  {requirement.sub_domain && (
+                    <div>
+                      <span className={`text-sm font-medium ${colors.textSecondary}`}>
+                        {lang === 'ar' ? 'المعيار: ' : 'Standard: '}
+                      </span>
+                      <span className={`text-sm ${colors.textPrimary}`}>{requirement.sub_domain}</span>
+                    </div>
+                  )}
+                  {requirement.objective && (
+                    <div>
+                      <span className={`text-sm font-medium ${colors.textSecondary}`}>
+                        {lang === 'ar' ? 'الهدف: ' : 'Objective: '}
+                      </span>
+                      <span className={`text-sm ${colors.textPrimary}`}>{requirement.objective}</span>
+                    </div>
+                  )}
+                  {requirement.evidence_description && (
+                    <div>
+                      <span className={`text-sm font-medium ${colors.textSecondary}`}>
+                        {lang === 'ar' ? 'مستندات الإثبات المطلوبة: ' : 'Required Evidence Documents: '}
+                      </span>
+                      <span className={`text-sm ${colors.textPrimary}`}>{requirement.evidence_description}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Simplified Info */}
               <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={colors.primaryIcon} size={20} />
-                  <span className={`text-sm ${colors.textSecondary}`}>
-                    {lang === 'ar' ? 'المستوى الحالي:' : 'Current Level:'}
-                    <span className="font-bold text-lg ml-2">{requirement.current_level}</span>
-                  </span>
-                </div>
+                {/* Only show current level for NAII (not ETARI) */}
+                {currentIndex?.index_type !== 'ETARI' && (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className={colors.primaryIcon} size={20} />
+                    <span className={`text-sm ${colors.textSecondary}`}>
+                      {lang === 'ar' ? 'المستوى الحالي:' : 'Current Level:'}
+                      <span className="font-bold text-lg ml-2">{requirement.current_level}</span>
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <Calendar className="text-orange-600 dark:text-orange-400" size={20} />
                   <span className={`text-sm ${colors.textSecondary}`}>
@@ -1103,7 +1450,7 @@ const RequirementDetail = () => {
               <div className={`flex items-center gap-2 ${colors.textSecondary}`}>
                 <Users size={18} />
                 <span className="text-sm font-medium">
-                  {lang === 'ar' ? 'المسؤولون:' : 'Assigned To:'}
+                  {lang === 'ar' ? 'المسؤولين:' : 'Assigned To:'}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -1121,6 +1468,426 @@ const RequirementDetail = () => {
             </div>
           </div>
         </div>
+
+        {/* Previous Year's Data Section - Only show if previous data exists */}
+        {previousData && (
+          <>
+            <button
+              onClick={() => setShowPreviousData(!showPreviousData)}
+              className={`w-full flex items-center justify-between px-6 py-4 ${colors.bgSecondary} rounded-xl shadow-md mb-6 hover:shadow-lg transition border-2 border-amber-200 dark:border-amber-800`}
+            >
+              <div className="flex items-center gap-3">
+                <History className="text-amber-600 dark:text-amber-400" size={24} />
+                <div className="text-left">
+                  <h2 className={`text-lg font-bold ${colors.textPrimary}`}>
+                    {lang === 'ar' ? 'بيانات العام السابق' : 'Previous Year Data'}
+                    {!previousData.matched && (
+                      <span className={`text-xs font-normal ${colors.textSecondary} mr-2`}>
+                        ({lang === 'ar' ? 'المعيار كامل' : 'Full Standard'})
+                      </span>
+                    )}
+                  </h2>
+                  <p className={`text-sm ${colors.textSecondary}`}>
+                    {lang === 'ar' ? previousData.previous_index_name_ar : previousData.previous_index_name_en || previousData.previous_index_name_ar}
+                  </p>
+                </div>
+              </div>
+              {showPreviousData ? <ChevronUp size={24} className={colors.textSecondary} /> : <ChevronDown size={24} className={colors.textSecondary} />}
+            </button>
+
+            {showPreviousData && (
+              <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6 mb-6 border-2 border-amber-200 dark:border-amber-800`}>
+                {/* Case 1: Matched Requirement */}
+                {previousData.matched && previousData.matched_requirement && (
+                  <div className="space-y-6">
+                    {/* Matched indicator */}
+                    <div className={`flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg`}>
+                      <CheckCircle className="text-green-600 dark:text-green-400" size={20} />
+                      <span className={`text-sm font-medium ${colors.textPrimary}`}>
+                        {lang === 'ar' ? 'تم العثور على سؤال مطابق من العام السابق' : 'Matching question found from previous year'}
+                      </span>
+                    </div>
+
+                    {/* Previous Recommendation - MOVED TO TOP */}
+                    {previousData.matched_recommendation && (
+                      <div>
+                        <h3 className={`text-lg font-semibold ${colors.textPrimary} flex items-center gap-2 mb-3`}>
+                          <AlertCircle className="text-amber-600 dark:text-amber-400" size={20} />
+                          {lang === 'ar' ? 'التوصيات السابقة' : 'Previous Recommendation'}
+                        </h3>
+                        <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}>
+                          <p className={`${colors.textPrimary} whitespace-pre-wrap mb-3`}>
+                            {lang === 'ar' ? previousData.matched_recommendation.recommendation_ar : previousData.matched_recommendation.recommendation_en || previousData.matched_recommendation.recommendation_ar}
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              previousData.matched_recommendation.status === 'addressed' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                              previousData.matched_recommendation.status === 'in_progress' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' :
+                              'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                            }`}>
+                              {previousData.matched_recommendation.status === 'addressed' ? (lang === 'ar' ? 'تمت معالجتها' : 'Addressed') :
+                               previousData.matched_recommendation.status === 'in_progress' ? (lang === 'ar' ? 'قيد التنفيذ' : 'In Progress') :
+                               (lang === 'ar' ? 'جديدة' : 'New')}
+                            </span>
+                          </div>
+                          {previousData.matched_recommendation.addressed_comment && (
+                            <div className={`mt-3 pt-3 border-t ${colors.border}`}>
+                              <p className={`text-sm ${colors.textSecondary}`}>
+                                <span className="font-medium">{lang === 'ar' ? 'تعليق المعالجة: ' : 'Resolution Comment: '}</span>
+                                {previousData.matched_recommendation.addressed_comment}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Previous Question */}
+                    <div>
+                      <h3 className={`text-lg font-semibold ${colors.textPrimary} flex items-center gap-2 mb-3`}>
+                        <MessageSquare className="text-amber-600 dark:text-amber-400" size={20} />
+                        {lang === 'ar' ? 'السؤال السابق' : 'Previous Question'}
+                      </h3>
+                      <div className={`p-4 ${colors.bgHover} rounded-lg`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`text-xs font-mono px-2 py-1 ${colors.bgSecondary} rounded`}>
+                            {previousData.matched_requirement.code}
+                          </span>
+                        </div>
+                        <p className={`${colors.textPrimary}`}>
+                          {lang === 'ar' ? previousData.matched_requirement.question_ar : previousData.matched_requirement.question_en || previousData.matched_requirement.question_ar}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Previous Answer */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className={`text-lg font-semibold ${colors.textPrimary} flex items-center gap-2`}>
+                          <FileText className="text-amber-600 dark:text-amber-400" size={20} />
+                          {lang === 'ar' ? 'الإجابة السابقة' : 'Previous Answer'}
+                        </h3>
+                        {previousData.matched_requirement.answer_ar && (
+                          <button
+                            onClick={() => {
+                              setAnswerText(lang === 'ar' ? previousData.matched_requirement.answer_ar || '' : previousData.matched_requirement.answer_en || previousData.matched_requirement.answer_ar || '');
+                              toast.success(lang === 'ar' ? 'تم نسخ الإجابة السابقة' : 'Previous answer copied');
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-800 transition text-sm"
+                          >
+                            {lang === 'ar' ? 'استخدام هذه الإجابة' : 'Use This Answer'}
+                          </button>
+                        )}
+                      </div>
+                      {previousData.matched_requirement.answer_ar ? (
+                        <div className={`p-4 ${colors.bgHover} rounded-lg`}>
+                          <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
+                            {lang === 'ar' ? previousData.matched_requirement.answer_ar : previousData.matched_requirement.answer_en || previousData.matched_requirement.answer_ar}
+                          </p>
+                          {previousData.matched_requirement.answer_status && (
+                            <div className="mt-3 flex items-center gap-2">
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                previousData.matched_requirement.answer_status === 'approved' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                                previousData.matched_requirement.answer_status === 'pending_review' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
+                                previousData.matched_requirement.answer_status === 'rejected' ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' :
+                                'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                              }`}>
+                                {previousData.matched_requirement.answer_status === 'approved' ? (lang === 'ar' ? 'معتمدة' : 'Approved') :
+                                 previousData.matched_requirement.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review') :
+                                 previousData.matched_requirement.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
+                                 (lang === 'ar' ? 'مسودة' : 'Draft')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className={`${colors.textSecondary} italic`}>
+                          {lang === 'ar' ? 'لا توجد إجابة سابقة' : 'No previous answer'}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Previous Evidence */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className={`text-lg font-semibold ${colors.textPrimary} flex items-center gap-2`}>
+                          <Upload className="text-amber-600 dark:text-amber-400" size={20} />
+                          {lang === 'ar' ? 'المستندات السابقة' : 'Previous Evidence'}
+                        </h3>
+                        <span className={`text-xs ${colors.textSecondary} italic`}>
+                          {lang === 'ar' ? 'يشمل جميع المستندات (المعتمدة والمسودات)' : 'Includes all documents (approved & drafts)'}
+                        </span>
+                      </div>
+                      {previousData.matched_requirement.evidence && previousData.matched_requirement.evidence.length > 0 ? (
+                        <div className="space-y-2">
+                          {previousData.matched_requirement.evidence.map((ev) => {
+                            // Extract file extension
+                            const getFileExtension = (filename: string) => {
+                              const parts = filename.split('.');
+                              return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : '';
+                            };
+                            const extension = getFileExtension(ev.document_name);
+
+                            return (
+                              <div key={ev.id} className={`flex items-center justify-between p-3 ${colors.bgHover} rounded-lg`}>
+                                <div className="flex items-center gap-3">
+                                  <FileText className={colors.textSecondary} size={18} />
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <p className={`font-medium ${colors.textPrimary}`}>{ev.document_name}</p>
+                                      {extension && (
+                                        <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded font-mono">
+                                          {extension}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className={`text-xs ${colors.textSecondary}`}>
+                                      {lang === 'ar' ? `النسخة ${ev.current_version}` : `Version ${ev.current_version}`}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleCopyEvidence(ev.id, ev.document_name)}
+                                  disabled={copyingEvidenceId === ev.id}
+                                  className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-800 transition text-xs disabled:opacity-50"
+                                >
+                                  {copyingEvidenceId === ev.id ? (
+                                    <>
+                                      <Loader2 size={14} className="animate-spin" />
+                                      {lang === 'ar' ? 'جاري النسخ...' : 'Copying...'}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Download size={14} />
+                                      {lang === 'ar' ? 'نسخ' : 'Copy'}
+                                    </>
+                                  )}
+                                </button>
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  ev.status === 'approved' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                                  ev.status === 'confirmed' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' :
+                                  ev.status === 'submitted' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
+                                  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                }`}>
+                                  {ev.status === 'approved' ? (lang === 'ar' ? 'معتمد' : 'Approved') :
+                                   ev.status === 'confirmed' ? (lang === 'ar' ? 'مؤكد' : 'Confirmed') :
+                                   ev.status === 'submitted' ? (lang === 'ar' ? 'مُقدم' : 'Submitted') :
+                                   (lang === 'ar' ? 'مسودة' : 'Draft')}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        </div>
+                      ) : (
+                        <p className={`${colors.textSecondary} italic`}>
+                          {lang === 'ar' ? 'لا توجد مستندات سابقة' : 'No previous evidence'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Case 2: Unmatched - Show entire المعيار group */}
+                {!previousData.matched && previousData.standard_group && (
+                  <div className="space-y-6">
+                    {/* Unmatched indicator */}
+                    <div className={`flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg`}>
+                      <Info className="text-blue-600 dark:text-blue-400" size={20} />
+                      <div>
+                        <p className={`text-sm font-medium ${colors.textPrimary}`}>
+                          {lang === 'ar' ? 'لم يتم العثور على سؤال مطابق - عرض بيانات المعيار بالكامل' : 'No matching question found - Showing full standard data'}
+                        </p>
+                        <p className={`text-xs ${colors.textSecondary} mt-1`}>
+                          {lang === 'ar' ? `المعيار: ${previousData.standard_group.sub_domain_ar}` : `Standard: ${previousData.standard_group.sub_domain_en || previousData.standard_group.sub_domain_ar}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Standard Recommendation (shown once for the entire group) */}
+                    {previousData.standard_group.recommendation && (
+                      <div>
+                        <h3 className={`text-lg font-semibold ${colors.textPrimary} flex items-center gap-2 mb-3`}>
+                          <AlertCircle className="text-amber-600 dark:text-amber-400" size={20} />
+                          {lang === 'ar' ? 'توصية المعيار' : 'Standard Recommendation'}
+                        </h3>
+                        <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}>
+                          <p className={`${colors.textPrimary} whitespace-pre-wrap mb-3`}>
+                            {lang === 'ar' ? previousData.standard_group.recommendation.recommendation_ar : previousData.standard_group.recommendation.recommendation_en || previousData.standard_group.recommendation.recommendation_ar}
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              previousData.standard_group.recommendation.status === 'addressed' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                              previousData.standard_group.recommendation.status === 'in_progress' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' :
+                              'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                            }`}>
+                              {previousData.standard_group.recommendation.status === 'addressed' ? (lang === 'ar' ? 'تمت معالجتها' : 'Addressed') :
+                               previousData.standard_group.recommendation.status === 'in_progress' ? (lang === 'ar' ? 'قيد التنفيذ' : 'In Progress') :
+                               (lang === 'ar' ? 'جديدة' : 'New')}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* All Requirements in المعيار */}
+                    <div>
+                      <h3 className={`text-lg font-semibold ${colors.textPrimary} mb-3`}>
+                        {lang === 'ar' ? `أسئلة المعيار (${previousData.standard_group.requirements.length})` : `Standard Questions (${previousData.standard_group.requirements.length})`}
+                      </h3>
+                      <div className="space-y-4">
+                        {previousData.standard_group.requirements.map((req, index) => (
+                          <div key={index} className={`p-4 ${colors.bgHover} rounded-lg border ${colors.border}`}>
+                            <div className="flex items-start gap-3 mb-3">
+                              <span className={`text-xs font-mono px-2 py-1 ${colors.bgSecondary} rounded`}>
+                                {req.code}
+                              </span>
+                              {req.answer_status && (
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  req.answer_status === 'approved' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                                  req.answer_status === 'pending_review' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
+                                  req.answer_status === 'rejected' ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' :
+                                  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                }`}>
+                                  {req.answer_status === 'approved' ? (lang === 'ar' ? 'معتمدة' : 'Approved') :
+                                   req.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review') :
+                                   req.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
+                                   (lang === 'ar' ? 'مسودة' : 'Draft')}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Question */}
+                            <p className={`${colors.textPrimary} mb-3`}>
+                              {lang === 'ar' ? req.question_ar : req.question_en || req.question_ar}
+                            </p>
+
+                            {/* Answer */}
+                            {req.answer_ar ? (
+                              <div className={`p-3 bg-white/50 dark:bg-black/20 rounded mb-3`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className={`text-xs font-semibold ${colors.textSecondary}`}>
+                                    {lang === 'ar' ? 'الإجابة' : 'Answer'}
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      setAnswerText(lang === 'ar' ? req.answer_ar || '' : req.answer_en || req.answer_ar || '');
+                                      toast.success(lang === 'ar' ? 'تم نسخ الإجابة' : 'Answer copied');
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-800 transition text-xs"
+                                  >
+                                    {lang === 'ar' ? 'استخدام' : 'Use'}
+                                  </button>
+                                </div>
+                                <p className={`text-sm ${colors.textPrimary} whitespace-pre-wrap`}>
+                                  {lang === 'ar' ? req.answer_ar : req.answer_en || req.answer_ar}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className={`text-sm ${colors.textSecondary} italic mb-3`}>
+                                {lang === 'ar' ? 'لا توجد إجابة' : 'No answer'}
+                              </p>
+                            )}
+
+                            {/* Evidence */}
+                            {req.evidence && req.evidence.length > 0 && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className={`text-xs font-semibold ${colors.textSecondary} flex items-center gap-1`}>
+                                    <Upload size={12} />
+                                    {lang === 'ar' ? 'المستندات' : 'Evidence'}
+                                  </span>
+                                  <span className={`text-xs ${colors.textSecondary} italic`}>
+                                    {lang === 'ar' ? '(جميع المستندات)' : '(All documents)'}
+                                  </span>
+                                </div>
+                                {req.evidence.map((ev) => {
+                                  // Extract file extension
+                                  const getFileExtension = (filename: string) => {
+                                    const parts = filename.split('.');
+                                    return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : '';
+                                  };
+                                  const extension = getFileExtension(ev.document_name);
+
+                                  return (
+                                    <div key={ev.id} className="flex items-center justify-between p-2 bg-white/50 dark:bg-black/20 rounded text-xs">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <span className={`${colors.textPrimary} truncate`}>{ev.document_name}</span>
+                                        {extension && (
+                                          <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded font-mono flex-shrink-0">
+                                            {extension}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <button
+                                        onClick={() => handleCopyEvidence(ev.id, ev.document_name)}
+                                        disabled={copyingEvidenceId === ev.id}
+                                        className="text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50 ml-2 flex-shrink-0"
+                                      >
+                                        {copyingEvidenceId === ev.id ? (lang === 'ar' ? 'جاري...' : 'Copying...') : (lang === 'ar' ? 'نسخ' : 'Copy')}
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Recommendations Section - Only show if recommendations exist */}
+        {recommendations.length > 0 && (
+          <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6 mb-6`}>
+            <div className="flex items-center gap-3 mb-4">
+              <Lightbulb className="text-amber-600 dark:text-amber-400" size={24} />
+              <h2 className={`text-xl font-bold ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'التوصيات' : 'Recommendations'}
+              </h2>
+            </div>
+
+            {loadingRecommendations ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className={`${colors.textSecondary} animate-spin`} size={32} />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recommendations.map((recommendation, index) => (
+                  <div
+                    key={recommendation.id || index}
+                    className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}
+                  >
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                          {lang === 'ar' ? 'الوضع الراهن' : 'Current Status'}
+                        </h3>
+                        <p className={`${colors.textPrimary}`}>
+                          {lang === 'ar' ? recommendation.current_status_ar : recommendation.current_status_en || recommendation.current_status_ar}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                          {lang === 'ar' ? 'التوصية' : 'Recommendation'}
+                        </h3>
+                        <p className={`${colors.textPrimary}`}>
+                          {lang === 'ar' ? recommendation.recommendation_ar : recommendation.recommendation_en || recommendation.recommendation_ar}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Activity Timeline Toggle */}
         <button
@@ -1145,52 +1912,342 @@ const RequirementDetail = () => {
         {showActivities && (
           <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6 mb-6`}>
             <div className="space-y-4">
-              {activities.map((activity, index) => (
-                <div key={activity.id} className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getActivityBgColor(activity.action_type)}`}>
-                      {getActivityIcon(activity.action_type)}
-                    </div>
-                    {index < activities.length - 1 && (
-                      <div className={`w-0.5 h-full ${colors.border} mt-2 flex-1`} style={{ minHeight: '40px' }} />
-                    )}
-                  </div>
-                  <div className="flex-1 pb-4">
-                    <div className="flex items-start justify-between mb-1">
-                      <div>
-                        <p className={`font-medium ${colors.textPrimary} mb-1`}>
-                          {lang === 'ar' ? activity.description : activity.description_en}
-                        </p>
-                        <p className={`text-sm ${colors.textSecondary}`}>
-                          {lang === 'ar' ? activity.actor_name : activity.actor_name_en}
-                          {' • '}
-                          {lang === 'ar' ? `المستوى ${activity.level}` : `Level ${activity.level}`}
-                        </p>
+              {activities.length === 0 ? (
+                <p className={`text-center ${colors.textSecondary} py-4`}>
+                  {lang === 'ar' ? 'لا توجد نشاطات بعد' : 'No activities yet'}
+                </p>
+              ) : (
+                activities.map((activity, index) => (
+                  <div key={activity.id} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getActivityBgColor(activity.action_type)}`}>
+                        {getActivityIcon(activity.action_type)}
                       </div>
-                      <span className={`text-xs ${colors.textTertiary} whitespace-nowrap ml-4`}>
-                        {new Date(activity.timestamp).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
+                      {index < activities.length - 1 && (
+                        <div className={`w-0.5 h-full ${colors.border} mt-2 flex-1`} style={{ minHeight: '40px' }} />
+                      )}
+                    </div>
+                    <div className="flex-1 pb-4">
+                      <div className="flex items-start justify-between mb-1">
+                        <div>
+                          <p className={`font-medium ${colors.textPrimary} mb-1`}>
+                            {lang === 'ar' ? activity.description_ar : activity.description_en}
+                          </p>
+                          <p className={`text-sm ${colors.textSecondary}`}>
+                            {lang === 'ar' ? activity.actor_name : activity.actor_name_en}
+                            {activity.maturity_level !== null && (
+                              <>
+                                {' • '}
+                                {lang === 'ar' ? `المستوى ${activity.maturity_level}` : `Level ${activity.maturity_level}`}
+                              </>
+                            )}
+                          </p>
+                          {activity.comment && (
+                            <p className={`text-sm ${colors.textSecondary} mt-1 italic`}>
+                              "{activity.comment}"
+                            </p>
+                          )}
+                        </div>
+                        <span className={`text-xs ${colors.textTertiary} whitespace-nowrap ml-4`}>
+                          {new Date(activity.created_at).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
 
-        {/* Maturity Levels */}
-        <div className="space-y-4">
-          <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4`}>
-            {lang === 'ar' ? 'مستويات النضج' : 'Maturity Levels'}
-          </h2>
+        {/* Maturity Levels - Different display for ETARI vs NAII */}
+        {currentIndex?.index_type === 'ETARI' ? (
+          /* ETARI: Answer field and evidence section */
+          <div className="space-y-6">
+            {/* Answer Section */}
+            <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6`}>
+              <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4 flex items-center gap-2`}>
+                <FileText className={colors.primaryIcon} size={24} />
+                {lang === 'ar' ? 'الإجابة' : 'Answer'}
+              </h2>
 
-          {requirement.level_criteria?.map((criteria) => {
+              <div className="mb-4">
+                <label className={`block text-sm font-medium ${colors.textSecondary} mb-2`}>
+                  {lang === 'ar' ? 'إجابتك على السؤال' : 'Your Answer to the Question'}
+                </label>
+                <textarea
+                  value={answerText}
+                  onChange={(e) => setAnswerText(e.target.value)}
+                  rows={12}
+                  disabled={requirement.answer_status === 'approved' || requirement.answer_status === 'pending_review'}
+                  className={`w-full px-4 py-3 border ${colors.border} rounded-lg ${colors.bgPrimary} ${colors.textPrimary} focus:ring-2 focus:ring-[rgb(var(--color-focus-ring))] focus:border-transparent transition resize-y min-h-[200px]`}
+                  placeholder={lang === 'ar' ? 'اكتب إجابتك هنا... يمكنك استخدام النص الطويل حسب الحاجة' : 'Write your answer here... You can use long text as needed'}
+                />
+              </div>
+
+              {/* Reviewer Comment */}
+              {requirement.reviewer_comment && (
+                <div className={`mb-4 p-4 border-l-4 ${
+                  requirement.answer_status === 'approved' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
+                  requirement.answer_status === 'rejected' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
+                  'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+                } rounded`}>
+                  <p className={`text-sm font-medium ${colors.textSecondary} mb-1`}>
+                    {lang === 'ar' ? 'تعليق المراجع:' : 'Reviewer Comment:'}
+                  </p>
+                  <p className={`text-sm ${colors.textPrimary}`}>{requirement.reviewer_comment}</p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <span className={`text-sm font-medium ${colors.textSecondary}`}>
+                    {lang === 'ar' ? 'الحالة: ' : 'Status: '}
+                  </span>
+                  <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                    !requirement.answer_status || requirement.answer_status === 'draft' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
+                    requirement.answer_status === 'pending_review' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                    requirement.answer_status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                    'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                  }`}>
+                    {!requirement.answer_status && (lang === 'ar' ? 'لم يبدأ' : 'Not Started')}
+                    {requirement.answer_status === 'draft' && (lang === 'ar' ? 'مسودة' : 'Draft')}
+                    {requirement.answer_status === 'pending_review' && (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review')}
+                    {requirement.answer_status === 'approved' && (lang === 'ar' ? 'موافق عليها' : 'Approved')}
+                    {requirement.answer_status === 'rejected' && (lang === 'ar' ? 'مرفوضة' : 'Rejected')}
+                  </span>
+                </div>
+
+                <div className="flex gap-2 flex-wrap">
+                  {(!requirement.answer_status || requirement.answer_status === 'draft' || requirement.answer_status === 'rejected') && (
+                    <>
+                      <button
+                        onClick={handleSaveAnswer}
+                        disabled={savingAnswer}
+                        className={`px-6 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition font-medium flex items-center gap-2 disabled:opacity-50`}
+                      >
+                        {savingAnswer && <Loader2 size={16} className="animate-spin" />}
+                        {lang === 'ar' ? 'حفظ الإجابة' : 'Save Answer'}
+                      </button>
+                      {requirement.answer_status === 'draft' && requirement.answer && (
+                        <button
+                          onClick={handleSubmitForReview}
+                          disabled={submittingForReview}
+                          className={`px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium flex items-center gap-2 disabled:opacity-50`}
+                        >
+                          {submittingForReview && <Loader2 size={16} className="animate-spin" />}
+                          {lang === 'ar' ? 'إرسال للمراجعة' : 'Submit for Review'}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {requirement.answer_status === 'pending_review' && (user?.role === 'admin' || user?.role === 'supervisor') && !reviewAction && (
+                    <>
+                      <button
+                        onClick={() => setReviewAction('approve')}
+                        className={`px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm`}
+                      >
+                        {lang === 'ar' ? 'موافقة' : 'Approve'}
+                      </button>
+                      <button
+                        onClick={() => setReviewAction('request_changes')}
+                        className={`px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition font-medium text-sm`}
+                      >
+                        {lang === 'ar' ? 'طلب تعديل' : 'Request Changes'}
+                      </button>
+                      <button
+                        onClick={() => setReviewAction('reject')}
+                        className={`px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium text-sm`}
+                      >
+                        {lang === 'ar' ? 'رفض' : 'Reject'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Inline Review Section */}
+              {reviewAction && (
+                <div className={`mt-4 p-4 border-2 ${
+                  reviewAction === 'approve' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
+                  reviewAction === 'reject' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
+                  'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+                } rounded-lg`}>
+                  <h4 className={`text-md font-bold ${colors.textPrimary} mb-3`}>
+                    {reviewAction === 'approve' && (lang === 'ar' ? 'الموافقة على الإجابة' : 'Approve Answer')}
+                    {reviewAction === 'reject' && (lang === 'ar' ? 'رفض الإجابة' : 'Reject Answer')}
+                    {reviewAction === 'request_changes' && (lang === 'ar' ? 'طلب تعديلات' : 'Request Changes')}
+                  </h4>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    rows={4}
+                    className={`w-full px-4 py-3 border ${colors.border} rounded-lg ${colors.bgPrimary} ${colors.textPrimary} focus:ring-2 focus:ring-[rgb(var(--color-focus-ring))] mb-3`}
+                    placeholder={lang === 'ar' ? 'اكتب تعليقك (اختياري)' : 'Write your comment (optional)'}
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => {
+                        setReviewAction(null);
+                        setReviewComment('');
+                      }}
+                      className={`px-4 py-2 ${colors.bgTertiary} ${colors.textSecondary} rounded-lg hover:${colors.bgHover} transition`}
+                    >
+                      {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </button>
+                    <button
+                      onClick={() => handleReviewAnswer(reviewAction)}
+                      disabled={reviewing}
+                      className={`px-4 py-2 ${
+                        reviewAction === 'approve' ? 'bg-green-600 hover:bg-green-700' :
+                        reviewAction === 'reject' ? 'bg-red-600 hover:bg-red-700' :
+                        'bg-yellow-600 hover:bg-yellow-700'
+                      } text-white rounded-lg transition flex items-center gap-2 disabled:opacity-50`}
+                    >
+                      {reviewing && <Loader2 size={16} className="animate-spin" />}
+                      {lang === 'ar' ? 'تأكيد' : 'Confirm'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Evidence Upload Section - Show if evidence_description exists OR documents are already uploaded */}
+            {(() => {
+              const hasEvidenceDesc = requirement.evidence_description && requirement.evidence_description.trim().length > 0;
+              const hasDocs = documents[0] && documents[0].length > 0;
+              console.log('[Evidence Section Debug]', {
+                hasEvidenceDesc,
+                hasDocs,
+                documentsKeys: Object.keys(documents),
+                documents0Length: documents[0]?.length,
+                evidence_description: requirement.evidence_description
+              });
+              return hasEvidenceDesc || hasDocs;
+            })() && (
+            <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6`}>
+              <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4 flex items-center gap-2`}>
+                <Upload className="text-orange-600 dark:text-orange-400" size={24} />
+                {lang === 'ar' ? 'الأدلة والمستندات' : 'Evidence & Documents'}
+              </h2>
+
+              <p className={`text-sm ${colors.textSecondary} mb-4`}>
+                {lang === 'ar'
+                  ? 'يرجى رفع المستندات والأدلة التي تدعم الإجابة على هذا السؤال'
+                  : 'Please upload documents and evidence supporting your answer to this question'}
+              </p>
+
+              <button
+                onClick={() => setUploadingToLevel(0)}
+                className={`px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center gap-2`}
+              >
+                <Upload size={16} />
+                {lang === 'ar' ? 'رفع ملف' : 'Upload File'}
+              </button>
+
+              {/* Display uploaded files */}
+              {documents[0] && documents[0].length > 0 && (
+                <div className="mt-6 space-y-3">
+                  <h4 className={`text-sm font-medium ${colors.textSecondary}`}>
+                    {lang === 'ar' ? 'المستندات المرفوعة' : 'Uploaded Documents'}
+                  </h4>
+                  {documents[0].map((doc: any) => {
+                    // Get the current version from versions array
+                    const currentVersion = doc.versions?.find((v: any) => v.version === doc.current_version) || doc.versions?.[0];
+                    const filename = currentVersion?.filename || doc.document_name;
+                    const fileSize = currentVersion?.file_size;
+                    const formattedSize = fileSize ?
+                      (fileSize < 1024 ? `${fileSize} B` :
+                       fileSize < 1024 * 1024 ? `${(fileSize / 1024).toFixed(1)} KB` :
+                       `${(fileSize / (1024 * 1024)).toFixed(1)} MB`) : '';
+
+                    // Extract extension
+                    const ext = filename.split('.').pop()?.toUpperCase() || 'FILE';
+                    const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
+
+                    // Extension color mapping - subtle outline style
+                    const extColors: Record<string, { border: string; text: string; bg: string }> = {
+                      'PDF': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'DOCX': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'DOC': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'XLSX': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'XLS': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'PPTX': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'PPT': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'PNG': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'JPG': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                      'JPEG': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
+                    };
+                    const extColor = extColors[ext] || { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` };
+
+                    const handleDownload = async () => {
+                      try {
+                        const response = await api.evidence.download(doc.id, doc.current_version);
+                        const url = window.URL.createObjectURL(response);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = filename;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
+                      } catch (error) {
+                        console.error('Download failed:', error);
+                      }
+                    };
+
+                    return (
+                      <div
+                        key={doc.id}
+                        className={`flex items-center justify-between p-3.5 border ${colors.border} rounded-lg ${colors.bgHover} hover:shadow-sm transition-all cursor-pointer group`}
+                        onClick={handleDownload}
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <File className={`${colors.textSecondary} group-hover:${colors.primaryIcon} transition-colors flex-shrink-0`} size={20} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium ${colors.textPrimary} truncate`} title={filename}>
+                              {nameWithoutExt}
+                            </p>
+                            <div className={`flex items-center gap-2 text-xs ${colors.textSecondary} mt-0.5`}>
+                              <Clock size={11} />
+                              <span>
+                                {currentVersion?.uploaded_at ? new Date(currentVersion.uploaded_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US') : 'N/A'}
+                              </span>
+                              {formattedSize && (
+                                <>
+                                  <span>•</span>
+                                  <span>{formattedSize}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`${extColor.bg} ${extColor.border} ${extColor.text} border-2 text-xs font-semibold px-2.5 py-1 rounded min-w-[50px] text-center flex-shrink-0`}>
+                          {ext}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            )}
+          </div>
+        ) : (
+          /* NAII: Traditional maturity levels display */
+          <div className="space-y-4">
+            <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4`}>
+              {lang === 'ar' ? 'مستويات النضج' : 'Maturity Levels'}
+            </h2>
+
+            {requirement.level_criteria?.map((criteria) => {
             const status = getLevelStatus(criteria.level);
             const isExpanded = expandedLevels.includes(criteria.level);
             const statusColor = getLevelStatusColor(status);
@@ -1635,7 +2692,8 @@ const RequirementDetail = () => {
               </div>
             );
           })}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Review History Modal */}

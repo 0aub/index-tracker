@@ -140,7 +140,7 @@ const Dashboard = () => {
                         <span className="text-sm text-gray-600">
                           {maturity.toFixed(1)} / {targetAvg.toFixed(1)}
                         </span>
-                        <LevelIndicator currentLevel={Math.floor(maturity)} size="sm" />
+                        <LevelIndicator currentLevel={Math.floor(maturity)} indexType="NAII" size="sm" />
                       </div>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">

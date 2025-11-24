@@ -11,6 +11,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/
 export interface Index {
   id: string;
   code: string;
+  index_type: string;  // NEW: 'NAII', 'ETARI', etc.
   name_ar: string;
   name_en: string | null;
   description_ar: string | null;
@@ -28,6 +29,47 @@ export interface Index {
   published_at: string | null;
   start_date: string | null;
   end_date: string | null;
+  // Versioning and completion fields
+  is_completed: boolean;
+  completed_at: string | null;
+  previous_index_id: string | null;
+}
+
+export interface Recommendation {
+  id: string;
+  requirement_id: string;
+  index_id: string;
+  recommendation_ar: string;
+  recommendation_en: string | null;
+  status: 'pending' | 'addressed' | 'in_progress';
+  addressed_comment: string | null;
+  addressed_by: string | null;
+  addressed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecommendationUploadResult {
+  total_rows: number;
+  matched: number;
+  unmatched: number;
+  created: number;
+  updated: number;
+  matched_requirements: Array<{
+    row: number;
+    requirement_code: string;
+    requirement_id: string;
+    main_area: string;
+    element: string;
+    sub_element: string;
+  }>;
+  unmatched_rows: Array<{
+    row: number;
+    main_area: string;
+    element: string;
+    sub_element: string;
+    recommendation: string;
+  }>;
 }
 
 export interface EvidenceRequirement {
@@ -67,6 +109,27 @@ export interface Requirement {
   main_area_en: string | null;
   sub_domain_ar: string;
   sub_domain_en: string | null;
+  // ETARI-specific fields (optional, only populated for ETARI index type)
+  element_ar?: string | null;
+  element_en?: string | null;
+  objective_ar?: string | null;
+  objective_en?: string | null;
+  evidence_description_ar?: string | null;
+  evidence_description_en?: string | null;
+  // ETARI Answer fields
+  answer_ar?: string | null;
+  answer_en?: string | null;
+  answer_status?: 'draft' | 'pending_review' | 'approved' | 'rejected' | null;
+  answered_by?: string | null;
+  answered_at?: string | null;
+  reviewed_by?: string | null;
+  reviewer_comment_ar?: string | null;
+  reviewer_comment_en?: string | null;
+  reviewed_at?: string | null;
+  // Evidence count (populated in list view)
+  evidence_count?: number;
+  // Recommendations count (populated in list view)
+  recommendations_count?: number;
   index_id: string;
   display_order: number;
   maturity_levels: MaturityLevel[];
@@ -153,6 +216,81 @@ export interface EvidenceWithVersions extends Evidence {
   activities: EvidenceActivity[];
 }
 
+export interface RequirementActivity {
+  id: string;
+  requirement_id: string;
+  maturity_level: number | null;
+  action_type: string;
+  actor_id: string;
+  actor_name: string | null;
+  actor_name_en: string | null;
+  description_ar: string | null;
+  description_en: string | null;
+  comment: string | null;
+  created_at: string;
+}
+
+export interface PreviousEvidence {
+  id: string;
+  document_name: string;
+  status: string;
+  current_version: number;
+  created_at: string;
+}
+
+export interface PreviousRecommendation {
+  id: string;
+  recommendation_ar: string;
+  recommendation_en: string | null;
+  status: string;
+  addressed_comment: string | null;
+  created_at: string;
+}
+
+export interface PreviousRequirementData {
+  previous_requirement_id: string;
+  previous_index_id: string;
+  previous_index_name_ar: string;
+  previous_index_name_en: string | null;
+  answer_ar: string | null;
+  answer_en: string | null;
+  answer_status: string | null;
+  answered_at: string | null;
+  evidence: PreviousEvidence[];
+  recommendation: PreviousRecommendation | null;
+}
+
+// ============================================================================
+// Previous Year Context (New Feature)
+// ============================================================================
+
+export interface StandardGroupRequirement {
+  code: string;
+  question_ar: string;
+  question_en: string | null;
+  answer_ar: string | null;
+  answer_en: string | null;
+  answer_status: string | null;
+  evidence: PreviousEvidence[];
+}
+
+export interface StandardGroupData {
+  sub_domain_ar: string;
+  sub_domain_en: string | null;
+  recommendation: PreviousRecommendation | null;
+  requirements: StandardGroupRequirement[];
+}
+
+export interface PreviousYearContextResponse {
+  matched: boolean;
+  previous_index_code: string;
+  previous_index_name_ar: string;
+  previous_index_name_en: string | null;
+  matched_requirement: StandardGroupRequirement | null;
+  matched_recommendation: PreviousRecommendation | null;
+  standard_group: StandardGroupData | null;
+}
+
 export interface IndexUser {
   id: string;
   index_id: string;
@@ -217,7 +355,12 @@ export const indicesAPI = {
     if (params?.skip) queryParams.append('skip', params.skip.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
 
-    const response = await fetch(`${API_BASE_URL}/indices?${queryParams}`);
+    const response = await fetch(`${API_BASE_URL}/indices?${queryParams}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    });
     return handleResponse<Index[]>(response);
   },
 
@@ -232,8 +375,8 @@ export const indicesAPI = {
   /**
    * Download Excel template
    */
-  downloadTemplate(): string {
-    return `${API_BASE_URL}/indices/template`;
+  downloadTemplate(indexType: string = 'NAII'): string {
+    return `${API_BASE_URL}/indices/template?index_type=${indexType}`;
   },
 
   /**
@@ -242,6 +385,7 @@ export const indicesAPI = {
   async createFromExcel(data: {
     file: File;
     code: string;
+    index_type?: string;  // NEW: Index type ('NAII', 'ETARI', etc.)
     name_ar: string;
     name_en?: string;
     description_ar?: string;
@@ -253,6 +397,7 @@ export const indicesAPI = {
     const formData = new FormData();
     formData.append('file', data.file);
     formData.append('code', data.code);
+    formData.append('index_type', data.index_type || 'NAII');  // Default to NAII
     formData.append('name_ar', data.name_ar);
     if (data.name_en) formData.append('name_en', data.name_en);
     if (data.description_ar) formData.append('description_ar', data.description_ar);
@@ -290,10 +435,16 @@ export const indicesAPI = {
   },
 
   /**
-   * Delete (archive) index
+   * Delete index
+   * @param id - Index ID
+   * @param hardDelete - If true, permanently delete. If false, archive (soft delete)
    */
-  async delete(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/indices/${id}`, {
+  async delete(id: string, hardDelete: boolean = true): Promise<void> {
+    const url = hardDelete
+      ? `${API_BASE_URL}/indices/${id}?hard_delete=true`
+      : `${API_BASE_URL}/indices/${id}`;
+
+    const response = await fetch(url, {
       method: 'DELETE',
     });
     if (!response.ok) {
@@ -337,6 +488,51 @@ export const indicesAPI = {
   }> {
     const response = await fetch(`${API_BASE_URL}/indices/${id}/user-engagement`);
     return handleResponse(response);
+  },
+
+  /**
+   * Mark an index as completed
+   */
+  async complete(id: string): Promise<Index> {
+    const response = await fetch(`${API_BASE_URL}/indices/${id}/complete`, {
+      method: 'POST',
+    });
+    return handleResponse<Index>(response);
+  },
+
+  /**
+   * Get recommendations for an index
+   */
+  async getRecommendations(id: string): Promise<{
+    index_id: string;
+    total_recommendations: number;
+    recommendations: Array<{
+      id: string;
+      requirement_id: string;
+      recommendation_ar: string;
+      recommendation_en: string | null;
+      status: string;
+      addressed_at: string | null;
+      created_at: string;
+    }>;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/indices/${id}/recommendations`);
+    return handleResponse(response);
+  },
+
+  /**
+   * Get list of completed indices (for linking)
+   */
+  async getCompleted(params?: {
+    organization_id?: string;
+    index_type?: string;
+  }): Promise<Index[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.organization_id) queryParams.append('organization_id', params.organization_id);
+    if (params?.index_type) queryParams.append('index_type', params.index_type);
+
+    const response = await fetch(`${API_BASE_URL}/indices/completed/list?${queryParams}`);
+    return handleResponse<Index[]>(response);
   },
 };
 
@@ -392,6 +588,92 @@ export const requirementsAPI = {
       body: JSON.stringify(data),
     });
     return handleResponse<Requirement>(response);
+  },
+
+  /**
+   * Save answer for ETARI requirement
+   */
+  async saveAnswer(
+    id: string,
+    userId: string,
+    data: {
+      answer_ar: string;
+      answer_en?: string;
+    }
+  ): Promise<Requirement> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/answer?user_id=${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Requirement>(response);
+  },
+
+  /**
+   * Submit answer for review
+   */
+  async submitForReview(id: string, userId: string): Promise<Requirement> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/submit-for-review?user_id=${userId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse<Requirement>(response);
+  },
+
+  /**
+   * Review an answer
+   */
+  async reviewAnswer(
+    id: string,
+    reviewerId: string,
+    data: {
+      action: 'approve' | 'reject' | 'request_changes';
+      reviewer_comment_ar?: string;
+      reviewer_comment_en?: string;
+    }
+  ): Promise<Requirement> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/review?reviewer_id=${reviewerId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Requirement>(response);
+  },
+
+  /**
+   * Get requirement activities
+   */
+  async getActivities(id: string): Promise<RequirementActivity[]> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/activities`);
+    return handleResponse<RequirementActivity[]>(response);
+  },
+
+  /**
+   * Get previous year's data for a requirement
+   */
+  async getPreviousData(id: string): Promise<PreviousRequirementData | null> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/previous-data`);
+    return handleResponse<PreviousRequirementData | null>(response);
+  },
+
+  /**
+   * Get recommendations for a requirement
+   */
+  async getRecommendations(id: string): Promise<Recommendation[]> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/recommendations`);
+    return handleResponse<Recommendation[]>(response);
+  },
+
+  /**
+   * Get previous year context for a requirement (NEW FEATURE)
+   * Returns matched requirement or المعيار group data from previous year
+   */
+  async getPreviousYearContext(id: string): Promise<PreviousYearContextResponse | null> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/previous-year-context`);
+    if (response.status === 404) {
+      return null; // No previous year exists
+    }
+    return handleResponse<PreviousYearContextResponse | null>(response);
   },
 };
 
@@ -752,6 +1034,79 @@ export const evidenceAPI = {
     const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/versions`);
     return handleResponse<EvidenceVersion[]>(response);
   },
+
+  /**
+   * Copy evidence from one requirement to another (e.g., from previous year)
+   */
+  async copy(
+    evidenceId: string,
+    targetRequirementId: string,
+    targetMaturityLevel: number,
+    copiedBy: string
+  ): Promise<Evidence> {
+    const queryParams = new URLSearchParams({
+      target_requirement_id: targetRequirementId,
+      target_maturity_level: targetMaturityLevel.toString(),
+      copied_by: copiedBy,
+    });
+    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/copy?${queryParams}`, {
+      method: 'POST',
+    });
+    return handleResponse<Evidence>(response);
+  },
+
+  /**
+   * Download evidence file
+   */
+  async download(evidenceId: string, version: number): Promise<Blob> {
+    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/download/${version}`);
+    if (!response.ok) {
+      throw new APIError('Failed to download evidence', response.status);
+    }
+    return response.blob();
+  },
+};
+
+// ============================================================================
+// Recommendations API
+// ============================================================================
+
+export const recommendationsAPI = {
+  /**
+   * Upload recommendations Excel file for an index
+   */
+  async upload(indexId: string, file: File): Promise<RecommendationUploadResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/recommendations/upload/${indexId}`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse<RecommendationUploadResult>(response);
+  },
+
+  /**
+   * Get recommendations template download URL
+   */
+  getTemplateUrl(): string {
+    return `${API_BASE_URL}/recommendations/template`;
+  },
+
+  /**
+   * Update recommendation status
+   */
+  async update(id: string, data: {
+    status?: 'pending' | 'addressed' | 'in_progress';
+    addressed_comment?: string;
+  }): Promise<Recommendation> {
+    const response = await fetch(`${API_BASE_URL}/recommendations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Recommendation>(response);
+  },
 };
 
 // ============================================================================
@@ -765,6 +1120,7 @@ export const api = {
   users: usersAPI,
   indexUsers: indexUsersAPI,
   evidence: evidenceAPI,
+  recommendations: recommendationsAPI,
 };
 
 export default api;

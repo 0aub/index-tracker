@@ -189,7 +189,7 @@ const AssigneeManager = ({ requirementId, indexId, onSave, onClose, lang }: Assi
               {/* Current Assignees */}
               <div>
                 <label className={`block text-sm font-semibold mb-3 ${colors.textPrimary}`}>
-                  {lang === 'ar' ? 'المسؤولون الحاليون' : 'Current Assignees'}
+                  {lang === 'ar' ? 'المسؤولين الحاليين' : 'Current Assignees'}
                   <span className={`ml-2 ${colors.textTertiary} font-normal`}>
                     ({assignments.length})
                   </span>

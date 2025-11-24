@@ -1,31 +1,33 @@
+import { getLevelColor, getIndexConfig } from '../config/indexConfigs';
+
 interface MaturityGaugeProps {
   value: number;
-  maxValue?: number;
+  indexType: string;  // NEW: Index type to determine config
   size?: number;
   label?: string;
   sublabel?: string;
+  lang?: 'ar' | 'en';
 }
 
 const MaturityGauge = ({
   value,
-  maxValue = 5,
+  indexType,
   size = 200,
   label = '',
-  sublabel = ''
+  sublabel = '',
+  lang = 'ar'
 }: MaturityGaugeProps) => {
+  // Get config for this index type
+  const config = getIndexConfig(indexType);
+  const maxValue = config.maxLevel;
+
   const percentage = (value / maxValue) * 100;
   const radius = (size - 20) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-  const getColor = (val: number) => {
-    if (val < 1) return '#E74C3C';
-    if (val < 2) return '#F39C12';
-    if (val < 3) return '#F1C40F';
-    if (val < 4) return '#52BE80';
-    if (val < 5) return '#3498DB';
-    return '#9B59B6';
-  };
+  // Get color based on current level (rounded down)
+  const currentLevelColor = getLevelColor(indexType, Math.floor(value));
 
   return (
     <div className="flex flex-col items-center">
@@ -43,7 +45,7 @@ const MaturityGauge = ({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={getColor(value)}
+            stroke={currentLevelColor}
             strokeWidth="10"
             fill="none"
             strokeDasharray={circumference}
@@ -53,10 +55,12 @@ const MaturityGauge = ({
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="text-4xl font-bold" style={{ color: getColor(value) }}>
+          <div className="text-4xl font-bold" style={{ color: currentLevelColor }}>
             {value.toFixed(2)}
           </div>
-          <div className="text-sm text-gray-500">من {maxValue}</div>
+          <div className="text-sm text-gray-500">
+            {lang === 'ar' ? `من ${maxValue}` : `of ${maxValue}`}
+          </div>
         </div>
       </div>
       {label && (

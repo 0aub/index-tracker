@@ -193,7 +193,6 @@ const IndexEditModal = ({
             >
               <option value="not_started">{getStatusLabel('not_started')}</option>
               <option value="in_progress">{getStatusLabel('in_progress')}</option>
-              <option value="completed">{getStatusLabel('completed')}</option>
               <option value="archived">{getStatusLabel('archived')}</option>
             </select>
           </div>

@@ -2,7 +2,7 @@
 Index model
 """
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey, Enum as SQLEnum, Index as SQLIndex, Boolean
 from sqlalchemy.orm import relationship
 import enum
 
@@ -27,6 +27,7 @@ class Index(Base):
 
     # Basic Info
     code = Column(String, unique=True, nullable=False, index=True)
+    index_type = Column(String(50), nullable=False, default='NAII', index=True)  # 'NAII', 'ETARI', etc.
     name_ar = Column(String, nullable=False)
     name_en = Column(String, nullable=True)
 
@@ -56,11 +57,25 @@ class Index(Base):
     start_date = Column(DateTime, nullable=True)
     end_date = Column(DateTime, nullable=True)
 
+    # Versioning and Completion
+    previous_index_id = Column(String, ForeignKey("indices.id"), nullable=True, index=True)
+    is_completed = Column(Boolean, default=False, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+
     # Relationships
     organization = relationship("Organization", back_populates="indices")
     requirements = relationship("Requirement", back_populates="index", cascade="all, delete-orphan")
     assignments = relationship("Assignment", back_populates="index", cascade="all, delete-orphan")
     index_users = relationship("IndexUser", back_populates="index", cascade="all, delete-orphan")
+    recommendations = relationship("Recommendation", back_populates="index", cascade="all, delete-orphan")
+
+    # Self-referencing relationship for versioning
+    previous_index = relationship("Index", remote_side=[id], foreign_keys=[previous_index_id])
+
+    # Table arguments (indexes, constraints, etc.)
+    __table_args__ = (
+        SQLIndex('idx_index_type', 'index_type'),
+    )
 
     def __repr__(self):
         return f"<Index {self.code} - {self.name_ar}>"

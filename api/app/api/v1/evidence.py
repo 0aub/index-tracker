@@ -51,23 +51,7 @@ async def list_evidence(
     return query.all()
 
 
-@router.get("/{evidence_id}", response_model=EvidenceWithVersions)
-async def get_evidence(
-    evidence_id: str,
-    db: Session = Depends(get_db)
-):
-    """
-    Get a specific evidence document with all its versions and activity log
-    """
-    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
 
-    if not evidence:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Evidence not found"
-        )
-
-    return evidence
 
 
 @router.post("/upload", response_model=EvidenceResponse, status_code=status.HTTP_201_CREATED)
@@ -403,3 +387,208 @@ async def get_evidence_versions(
     ).order_by(EvidenceVersion.version_number.desc()).all()
 
     return versions
+
+
+
+@router.api_route("/{evidence_id}/download/{version}", methods=["GET", "HEAD"], response_class=None)
+async def download_evidence(
+    evidence_id: str,
+    version: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Download a specific version of an evidence file
+    """
+    from fastapi.responses import FileResponse
+
+    # Get evidence
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+    if not evidence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence not found"
+        )
+
+    # Get the specific version
+    evidence_version = db.query(EvidenceVersion).filter(
+        EvidenceVersion.evidence_id == evidence_id,
+        EvidenceVersion.version_number == version
+    ).first()
+
+    if not evidence_version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version {version} not found"
+        )
+
+    # Check if file exists
+    if not os.path.exists(evidence_version.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on disk"
+        )
+
+    # Return file
+    return FileResponse(
+        path=evidence_version.file_path,
+        filename=evidence_version.filename,
+        media_type=evidence_version.mime_type or 'application/octet-stream'
+    )
+
+
+
+
+@router.get("/{evidence_id}", response_model=EvidenceWithVersions)
+async def get_evidence(
+    evidence_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a specific evidence document with all its versions and activity log
+    """
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+    if not evidence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence not found"
+        )
+
+    return evidence
+
+
+# ==== Copy Evidence from Previous Year ====
+
+@router.post("/{evidence_id}/copy", response_model=EvidenceResponse, status_code=status.HTTP_201_CREATED)
+async def copy_evidence(
+    evidence_id: str,
+    target_requirement_id: str,
+    target_maturity_level: int,
+    copied_by: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Copy an evidence document to a new requirement.
+
+    This is used to copy evidence from a previous year's requirement to the current year.
+    The file is copied and a new Evidence record is created with draft status.
+
+    Args:
+        evidence_id: Source evidence ID to copy from
+        target_requirement_id: Target requirement ID to copy to
+        target_maturity_level: Maturity level for the new evidence
+        copied_by: User ID who is copying the evidence
+        db: Database session
+
+    Returns:
+        New Evidence record
+    """
+    try:
+        # Get source evidence
+        source_evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+        if not source_evidence:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Source evidence not found"
+            )
+
+        # Get the latest version of the source evidence
+        source_version = db.query(EvidenceVersion).filter(
+            EvidenceVersion.evidence_id == evidence_id
+        ).order_by(EvidenceVersion.version_number.desc()).first()
+
+        if not source_version or not source_version.file_path:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Source evidence has no file to copy"
+            )
+
+        # Check if source file exists
+        if not os.path.exists(source_version.file_path):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Source evidence file not found on disk"
+            )
+
+        # Validate maturity level
+        if target_maturity_level < 0 or target_maturity_level > 5:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Maturity level must be between 0 and 5"
+            )
+
+        # Generate new IDs
+        new_evidence_id = str(uuid.uuid4())
+        version_id = str(uuid.uuid4())
+        activity_id = str(uuid.uuid4())
+
+        # Create new directory for the copied evidence
+        new_upload_dir = f"/app/uploads/evidence/{new_evidence_id}"
+        os.makedirs(new_upload_dir, exist_ok=True)
+
+        # Copy the file
+        source_filename = os.path.basename(source_version.file_path)
+        new_filename = f"v1_{source_evidence.document_name}_{os.path.splitext(source_filename)[1]}"
+        new_file_path = os.path.join(new_upload_dir, new_filename)
+
+        shutil.copy2(source_version.file_path, new_file_path)
+        file_size = os.path.getsize(new_file_path)
+
+        # Create new Evidence record
+        new_evidence = Evidence(
+            id=new_evidence_id,
+            requirement_id=target_requirement_id,
+            maturity_level=target_maturity_level,
+            document_name=source_evidence.document_name,
+            current_version=1,
+            status="draft",
+            uploaded_by=copied_by
+        )
+
+        # Create first version
+        new_version = EvidenceVersion(
+            id=version_id,
+            evidence_id=new_evidence_id,
+            version_number=1,
+            filename=new_filename,
+            file_path=new_file_path,
+            file_size=file_size,
+            mime_type=source_version.mime_type,
+            uploaded_by=copied_by,
+            upload_comment=f"Copied from previous year (source: {source_evidence.document_name})"
+        )
+
+        # Create activity log
+        new_activity = EvidenceActivity(
+            id=activity_id,
+            evidence_id=new_evidence_id,
+            version_number=1,
+            action="uploaded_draft",
+            actor_id=copied_by,
+            comment=f"Copied from previous year evidence: {source_evidence.document_name}"
+        )
+
+        db.add(new_evidence)
+        db.add(new_version)
+        db.add(new_activity)
+        db.commit()
+        db.refresh(new_evidence)
+
+        return new_evidence
+
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Database error: Invalid requirement ID or duplicate entry"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error copying evidence: {str(e)}"
+        )

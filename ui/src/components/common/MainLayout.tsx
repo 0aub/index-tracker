@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { BarChart3, FileText, CheckSquare, LogOut, User, ListTodo, Users, Settings, Layers, Moon, Sun } from 'lucide-react';
+import { BarChart3, FileText, CheckSquare, LogOut, User, ListTodo, Users, Settings, Layers, Moon, Sun, Building2, UserCog } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { colors, patterns } from '../../utils/darkMode';
@@ -16,6 +16,7 @@ const MainLayout = () => {
 
   // Check if user has management access (index_manager or section_coordinator)
   const isManagement = user?.role === 'index_manager' || user?.role === 'section_coordinator' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   const menuItems = [
     { id: 'index', path: '/index', icon: Layers, label: { ar: 'إدارة المؤشرات', en: 'Index Management' } },
@@ -23,7 +24,11 @@ const MainLayout = () => {
     { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
     // Tasks page only visible to management team (index_manager, section_coordinator, admin)
     ...(isManagement ? [{ id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } }] : []),
-    { id: 'users', path: '/users', icon: Users, label: { ar: 'إدارة المستخدمين', en: 'User Management' } },
+    { id: 'users', path: '/users', icon: Users, label: { ar: 'المستخدمين', en: 'Users' } },
+    // Admin-only pages
+    ...(isAdmin ? [
+      { id: 'organization-hierarchy', path: '/organization-hierarchy', icon: Building2, label: { ar: 'الهيكل التنظيمي', en: 'Organization' } }
+    ] : []),
     { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
   ];
 
@@ -60,7 +65,7 @@ const MainLayout = () => {
               {lang === 'ar' ? 'راقب' : 'Raqib'}
             </h1>
             <p className={`text-xs text-center ${colors.textTertiary}`}>
-              {lang === 'ar' ? 'نظام إدارة المؤشرات' : 'Index Management System'}
+              {lang === 'ar' ? 'المنصة الذكية لإدارة المؤشرات' : 'Index Management System'}
             </p>
           </div>
         </div>

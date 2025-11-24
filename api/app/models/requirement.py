@@ -2,7 +2,7 @@
 Requirement and related models
 """
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey, Float, Boolean
+from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey, Float, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -20,15 +20,23 @@ class Requirement(Base):
     id = Column(String, primary_key=True, index=True)
 
     # Basic Info
-    code = Column(String, unique=True, nullable=False, index=True)  # e.g., AI.AQ.ST.1
+    code = Column(String, nullable=False, index=True)  # e.g., AI.AQ.ST.1 or 1.1.1.1 (ETARI)
     question_ar = Column(Text, nullable=False)
     question_en = Column(Text, nullable=True)
 
     # Classification
-    main_area_ar = Column(String, nullable=False, index=True)  # المحور الأساسي
+    main_area_ar = Column(String, nullable=False, index=True)  # المحور الأساسي (NAII: Main Area, ETARI: Capability)
     main_area_en = Column(String, nullable=True)
-    sub_domain_ar = Column(String, nullable=False)  # المجال الفرعي
+    sub_domain_ar = Column(String, nullable=False)  # المجال الفرعي (NAII: Sub-domain, ETARI: Standard/Criteria)
     sub_domain_en = Column(String, nullable=True)
+
+    # ETARI-specific fields (nullable for NAII)
+    element_ar = Column(String, nullable=True)  # العنصر (ETARI only)
+    element_en = Column(String, nullable=True)
+    objective_ar = Column(Text, nullable=True)  # الهدف (ETARI: Goal/Objective)
+    objective_en = Column(Text, nullable=True)
+    evidence_description_ar = Column(Text, nullable=True)  # مستندات الاثبات (ETARI: Evidence description)
+    evidence_description_en = Column(Text, nullable=True)
 
     # Index Reference
     index_id = Column(String, ForeignKey("indices.id"), nullable=False, index=True)
@@ -36,9 +44,23 @@ class Requirement(Base):
     # Order/Display
     display_order = Column(Integer, nullable=False, default=0)
 
+    # ETARI Answer fields (for question-answer based indices)
+    answer_ar = Column(Text, nullable=True)  # Answer text in Arabic
+    answer_en = Column(Text, nullable=True)  # Answer text in English
+    answer_status = Column(String(50), nullable=True)  # draft, pending_review, approved, rejected
+    answered_by = Column(String, ForeignKey("users.id"), nullable=True)  # User who answered
+    answered_at = Column(DateTime, nullable=True)  # When answer was saved
+    reviewed_by = Column(String, ForeignKey("users.id"), nullable=True)  # Reviewer user ID
+    reviewer_comment_ar = Column(Text, nullable=True)  # Reviewer feedback in Arabic
+    reviewer_comment_en = Column(Text, nullable=True)  # Reviewer feedback in English
+    reviewed_at = Column(DateTime, nullable=True)  # When answer was reviewed
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Versioning - link to previous year's requirement
+    previous_requirement_id = Column(String, ForeignKey("requirements.id"), nullable=True, index=True)
 
     # Relationships
     index = relationship("Index", back_populates="requirements")
@@ -47,6 +69,16 @@ class Requirement(Base):
     evidence_submissions = relationship("EvidenceSubmission", back_populates="requirement", cascade="all, delete-orphan")
     evidence = relationship("Evidence", back_populates="requirement", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="requirement", cascade="all, delete-orphan")
+    activities = relationship("RequirementActivity", back_populates="requirement", cascade="all, delete-orphan")
+    recommendations = relationship("Recommendation", back_populates="requirement", cascade="all, delete-orphan")
+
+    # Self-referencing relationship for versioning
+    previous_requirement = relationship("Requirement", remote_side=[id], foreign_keys=[previous_requirement_id])
+
+    # Table arguments - composite unique constraint
+    __table_args__ = (
+        UniqueConstraint('index_id', 'code', name='requirements_index_code_unique'),
+    )
 
     def __repr__(self):
         return f"<Requirement {self.code} - {self.question_ar[:50]}>"
