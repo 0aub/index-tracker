@@ -25,11 +25,11 @@ from app.models.user import User, UserRole
 from app.models.organization import Organization
 
 # Admin credentials from environment variables (with fallbacks)
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@mewa.gov.sa")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 # Default password - should be changed on first login
 # NOTE: BCrypt has a 72-byte limit, so use a shorter password
-DEFAULT_PASSWORD = os.getenv("ADMIN_PASSWORD", "Admin123")
+DEFAULT_PASSWORD = os.getenv("ADMIN_PASSWORD", "ChangeThisPassword123")
 
 
 def seed_admin_user(db: Session):
