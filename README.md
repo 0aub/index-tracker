@@ -96,7 +96,7 @@ When you run the system for the first time, the admin account is automatically c
 **Default credentials** (if not configured in `.env`):
 - Email: `admin@example.com`
 - Username: `admin`
-- Password: `Admin123`
+- Password: `ChangeThisPassword123`
 
 ⚠️ **Important**: Always change the default password in production environments.
 
@@ -234,15 +234,27 @@ docker exec -t raqib-api python3 /app/scripts/seed_users.py
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| **Database** | | |
+| `POSTGRES_USER` | PostgreSQL username | `raqib_user` |
+| `POSTGRES_PASSWORD` | PostgreSQL password | `CHANGE_THIS_DB_PASSWORD` |
+| `POSTGRES_DB` | PostgreSQL database name | `raqib_db` |
+| **Admin Credentials** | | |
 | `ADMIN_EMAIL` | Admin account email | `admin@example.com` |
 | `ADMIN_USERNAME` | Admin account username | `admin` |
 | `ADMIN_PASSWORD` | Admin account password | `ChangeThisPassword123` |
+| **Security** | | |
 | `SECRET_KEY` | JWT signing key | *required* |
+| **Email/SMTP** | | |
+| `SMTP_HOST` | SMTP server host | `smtp.example.com` |
+| `SMTP_PORT` | SMTP server port | `587` |
 | `SMTP_USER` | SMTP account username | - |
 | `SMTP_PASSWORD` | SMTP account password | - |
 | `SMTP_FROM_EMAIL` | Email sender address | - |
+| `SMTP_FROM_NAME` | Email sender name | `Raqib Platform` |
+| **Frontend** | | |
 | `FRONTEND_URL` | Frontend application URL | `http://localhost:8080` |
 | `VITE_ADMIN_PASSWORD` | Frontend mock password (dev only) | Same as `ADMIN_PASSWORD` |
+| **Testing** | | |
 | `TEST_USER_PASSWORD` | Test users password (seed script) | `ChangeMe123!` |
 
 ## Features

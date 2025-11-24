@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # Database
-    DATABASE_URL: str = "postgresql://raqib_user:raqib_pass@postgres:5432/raqib_db"
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://raqib_user:CHANGE_THIS_DB_PASSWORD@postgres:5432/raqib_db"
+    )
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
@@ -56,13 +59,13 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_SIZE: int = 20
     MAX_PAGE_SIZE: int = 100
 
-    # Email Settings (Outlook/Microsoft 365)
-    SMTP_HOST: str = "smtp.office365.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = "noreply@example.com"
-    SMTP_PASSWORD: str = ""  # Set via environment variable
-    SMTP_FROM_EMAIL: str = "noreply@example.com"
-    SMTP_FROM_NAME: str = "منصة راقب - MEWA"
+    # Email Settings
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.example.com")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: str = os.getenv("SMTP_USER", "noreply@example.com")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "noreply@example.com")
+    SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "Raqib Platform")
 
     # Frontend URL
     FRONTEND_URL: str = "http://localhost:8080"

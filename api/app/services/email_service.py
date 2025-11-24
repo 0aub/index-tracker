@@ -17,12 +17,12 @@ class EmailService:
     """Email service for sending notifications"""
 
     def __init__(self):
-        self.smtp_host = getattr(settings, 'SMTP_HOST', 'smtp.office365.com')
-        self.smtp_port = getattr(settings, 'SMTP_PORT', 587)
-        self.smtp_user = getattr(settings, 'SMTP_USER', 'noreply@example.com')
-        self.smtp_password = getattr(settings, 'SMTP_PASSWORD', '')
-        self.from_email = getattr(settings, 'SMTP_FROM_EMAIL', 'noreply@example.com')
-        self.from_name = getattr(settings, 'SMTP_FROM_NAME', 'منصة راقب - MEWA')
+        self.smtp_host = settings.SMTP_HOST
+        self.smtp_port = settings.SMTP_PORT
+        self.smtp_user = settings.SMTP_USER
+        self.smtp_password = settings.SMTP_PASSWORD
+        self.from_email = settings.SMTP_FROM_EMAIL
+        self.from_name = settings.SMTP_FROM_NAME
 
     def send_email(
         self,

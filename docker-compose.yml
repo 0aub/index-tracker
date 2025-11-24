@@ -5,9 +5,9 @@ services:
     container_name: raqib-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: raqib_user
-      POSTGRES_PASSWORD: raqib_pass
-      POSTGRES_DB: raqib_db
+      POSTGRES_USER: ${POSTGRES_USER:-raqib_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_THIS_DB_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-raqib_db}
     ports:
       - "5432:5432"
     volumes:
@@ -46,7 +46,7 @@ services:
       - "8000:8000"
     environment:
       # Database
-      - DATABASE_URL=postgresql://raqib_user:raqib_pass@postgres:5432/raqib_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-raqib_user}:${POSTGRES_PASSWORD:-CHANGE_THIS_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-raqib_db}
       - REDIS_URL=redis://redis:6379/0
       # JWT Authentication
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production-please-use-env-variable}
@@ -56,13 +56,13 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeThisPassword123}
-      # Email / SMTP Configuration (Microsoft 365 / Outlook)
-      - SMTP_HOST=smtp.office365.com
-      - SMTP_PORT=587
+      # Email / SMTP Configuration
+      - SMTP_HOST=${SMTP_HOST:-smtp.office365.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-noreply@example.com}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-noreply@example.com}
-      - SMTP_FROM_NAME=منصة راقب
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Raqib Platform}
       # Frontend URL for emails
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
     volumes:
