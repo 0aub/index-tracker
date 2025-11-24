@@ -57,8 +57,9 @@ def create_organization(db: Session) -> Organization:
 def create_users(db: Session, org_id: str):
     """Create test users with different roles"""
 
-    # Default password for all test users: "password123"
-    default_password = hash_password("password123")
+    # Default password for all test users (from environment or default)
+    test_user_password = os.getenv("TEST_USER_PASSWORD", "ChangeMe123!")
+    default_password = hash_password(test_user_password)
 
     users_data = [
         {

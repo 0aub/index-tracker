@@ -16,6 +16,7 @@ const MOCK_ADMIN: User = {
   is_first_login: false  // Admin already completed setup
 };
 
+// NOTE: Mock password for development/demo only - removed when API is integrated
 const MOCK_PASSWORD = 'Admin@2025';
 
 export const useAuthStore = create<AuthState>()(

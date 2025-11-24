@@ -1,6 +1,7 @@
 """
 Configuration management using Pydantic Settings
 """
+import os
 from functools import lru_cache
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,7 +29,7 @@ class Settings(BaseSettings):
     REDIS_CACHE_TTL: int = 3600  # 1 hour
 
     # JWT Authentication
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "INSECURE-CHANGE-THIS-IN-PRODUCTION")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
