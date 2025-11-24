@@ -27,7 +27,7 @@ cp .env.example .env
 
 **Admin User Credentials:**
 ```env
-ADMIN_EMAIL=admin@mewa.gov.sa
+ADMIN_EMAIL=admin@example.com
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your-secure-password
 ```
@@ -94,7 +94,7 @@ docker-compose restart api
 When you run the system for the first time, the admin account is automatically created using the credentials from your `.env` file.
 
 **Default credentials** (if not configured in `.env`):
-- Email: `admin@mewa.gov.sa`
+- Email: `admin@example.com`
 - Username: `admin`
 - Password: `Admin123`
 
@@ -234,7 +234,7 @@ docker exec -t raqib-api python3 /app/scripts/seed_users.py
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ADMIN_EMAIL` | Admin account email | `admin@mewa.gov.sa` |
+| `ADMIN_EMAIL` | Admin account email | `admin@example.com` |
 | `ADMIN_USERNAME` | Admin account username | `admin` |
 | `ADMIN_PASSWORD` | Admin account password | `Admin123` |
 | `SECRET_KEY` | JWT signing key | *required* |
