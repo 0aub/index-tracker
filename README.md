@@ -236,12 +236,14 @@ docker exec -t raqib-api python3 /app/scripts/seed_users.py
 |----------|-------------|---------|
 | `ADMIN_EMAIL` | Admin account email | `admin@example.com` |
 | `ADMIN_USERNAME` | Admin account username | `admin` |
-| `ADMIN_PASSWORD` | Admin account password | `Admin123` |
+| `ADMIN_PASSWORD` | Admin account password | `ChangeThisPassword123` |
 | `SECRET_KEY` | JWT signing key | *required* |
 | `SMTP_USER` | SMTP account username | - |
 | `SMTP_PASSWORD` | SMTP account password | - |
 | `SMTP_FROM_EMAIL` | Email sender address | - |
 | `FRONTEND_URL` | Frontend application URL | `http://localhost:8080` |
+| `VITE_ADMIN_PASSWORD` | Frontend mock password (dev only) | Same as `ADMIN_PASSWORD` |
+| `TEST_USER_PASSWORD` | Test users password (seed script) | `ChangeMe123!` |
 
 ## Features
 

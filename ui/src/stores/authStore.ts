@@ -16,8 +16,9 @@ const MOCK_ADMIN: User = {
   is_first_login: false  // Admin already completed setup
 };
 
-// NOTE: Mock password for development/demo only - removed when API is integrated
-const MOCK_PASSWORD = 'Admin@2025';
+// Mock password from environment variable (Vite exposes VITE_* variables)
+// Falls back to ADMIN_PASSWORD if not set (for compatibility)
+const MOCK_PASSWORD = import.meta.env.VITE_MOCK_PASSWORD || import.meta.env.VITE_ADMIN_PASSWORD || 'ChangeThisPassword123';
 
 export const useAuthStore = create<AuthState>()(
   persist(

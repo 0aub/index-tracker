@@ -89,13 +89,13 @@ services:
     build:
       context: ./ui
       dockerfile: Dockerfile
+      args:
+        - VITE_ADMIN_PASSWORD=${VITE_ADMIN_PASSWORD:-${ADMIN_PASSWORD:-ChangeThisPassword123}}
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
     container_name: raqib-ui
     ports:
       - "8080:80"
     restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-      - REACT_APP_API_URL=http://localhost:8000
     depends_on:
       - api
     healthcheck:
