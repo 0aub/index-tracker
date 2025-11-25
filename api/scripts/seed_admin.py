@@ -94,8 +94,7 @@ def seed_admin_user(db: Session):
             id=str(uuid.uuid4()),
             name_ar="وزارة البيئة والمياه والزراعة",
             name_en="Ministry of Environment, Water and Agriculture",
-            code="MEWA",
-            is_active=True
+            code="MEWA"
         )
         db.add(organization)
         db.flush()
