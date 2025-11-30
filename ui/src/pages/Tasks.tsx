@@ -484,12 +484,13 @@ const Tasks = () => {
                 </div>
               )}
 
-              {/* Quick Status Change */}
-              <div>
-                <p className={`text-sm ${colors.textSecondary} mb-2`}>
-                  {lang === 'ar' ? 'تغيير الحالة' : 'Change Status'}
-                </p>
-                <div className="flex gap-2">
+              {/* Quick Status Change - Available to task creator and assignees */}
+              {(user?.id === selectedTask.created_by || selectedTask.assignments?.some(a => a.user_id === user?.id)) && (
+                <div>
+                  <p className={`text-sm ${colors.textSecondary} mb-2`}>
+                    {lang === 'ar' ? 'تغيير الحالة' : 'Change Status'}
+                  </p>
+                  <div className="flex gap-2">
                   <button
                     onClick={() => handleQuickStatusChange('todo')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
@@ -522,6 +523,7 @@ const Tasks = () => {
                   </button>
                 </div>
               </div>
+              )}
 
               {/* Metadata */}
               <div className="grid grid-cols-2 gap-4">
@@ -594,40 +596,36 @@ const Tasks = () => {
                   {selectedTask.comments && selectedTask.comments.length > 0 ? (
                     selectedTask.comments.map((comment) => (
                       <div key={comment.id} className={`p-4 ${colors.bgTertiary} rounded-lg`}>
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold flex-shrink-0">
-                            {(comment.user_name || 'U').charAt(0).toUpperCase()}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <p className={`font-semibold text-base ${colors.textPrimary}`}>
+                              {lang === 'ar' ? comment.user_name : (comment.user_name_en || comment.user_name)}
+                            </p>
+                            <span className={`text-xs ${colors.textTertiary}`}>•</span>
+                            <p className={`text-xs ${colors.textTertiary}`}>
+                              {new Date(comment.created_at).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US')}
+                            </p>
                           </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className={`font-medium ${colors.textPrimary}`}>
-                                {lang === 'ar' ? comment.user_name : (comment.user_name_en || comment.user_name)}
-                              </p>
-                              <p className={`text-xs ${colors.textSecondary}`}>
-                                {new Date(comment.created_at).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US')}
-                              </p>
-                            </div>
                             <p className={`${colors.textSecondary} whitespace-pre-wrap`}>
                               {comment.comment}
                             </p>
-                            {/* Attachments */}
-                            {comment.attachments && comment.attachments.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {comment.attachments.map((attachment) => (
-                                  <a
-                                    key={attachment.id}
-                                    href={attachment.file_path}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={`flex items-center gap-2 text-sm ${colors.primary} hover:underline`}
-                                  >
-                                    <Paperclip size={14} />
-                                    {attachment.file_name}
-                                  </a>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          {/* Attachments */}
+                          {comment.attachments && comment.attachments.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {comment.attachments.map((attachment) => (
+                                <a
+                                  key={attachment.id}
+                                  href={attachment.file_path}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`flex items-center gap-2 text-sm ${colors.primary} hover:underline`}
+                                >
+                                  <Paperclip size={14} />
+                                  {attachment.file_name}
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))
