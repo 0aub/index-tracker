@@ -66,8 +66,8 @@ const MainLayout = () => {
         { id: 'index', path: '/index', icon: Layers, label: { ar: 'إدارة المؤشرات', en: 'Index Management' } },
         { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
         { id: 'reports', path: '/reports', icon: BarChart3, label: { ar: 'التقارير', en: 'Reports' } },
-        // Tasks page only visible to management team (index_manager, section_coordinator, admin)
-        ...(isManagement ? [{ id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } }] : []),
+        // Tasks page visible to all users (backend filters based on role and assignments)
+        { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
         { id: 'users', path: '/users', icon: Users, label: { ar: 'المستخدمين', en: 'Users' } },
         // Admin-only pages
         ...(isAdmin ? [
