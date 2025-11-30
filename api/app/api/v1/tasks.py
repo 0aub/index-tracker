@@ -105,12 +105,12 @@ def enrich_task_response(task: Task, db: Session) -> dict:
     # Add creator info
     creator = db.query(User).filter(User.id == task.created_by).first()
     if creator:
-        task_dict["creator_name"] = creator.name
-        task_dict["creator_name_en"] = creator.name_en
+        task_dict["creator_name"] = creator.full_name_ar
+        task_dict["creator_name_en"] = creator.full_name_en
 
     # Add index info
     if task.index:
-        task_dict["index_name"] = task.index.name
+        task_dict["index_name"] = task.index.name_ar
         task_dict["index_name_en"] = task.index.name_en
 
     # Add assignments with user info
@@ -122,8 +122,8 @@ def enrich_task_response(task: Task, db: Session) -> dict:
             "user_id": assignment.user_id,
             "assigned_by": assignment.assigned_by,
             "assigned_at": assignment.assigned_at,
-            "user_name": user.name if user else None,
-            "user_name_en": user.name_en if user else None
+            "user_name": user.full_name_ar if user else None,
+            "user_name_en": user.full_name_en if user else None
         })
 
     # Add comments with user info and attachments
@@ -136,8 +136,8 @@ def enrich_task_response(task: Task, db: Session) -> dict:
             "comment": comment.comment,
             "created_at": comment.created_at,
             "updated_at": comment.updated_at,
-            "user_name": user.name if user else None,
-            "user_name_en": user.name_en if user else None,
+            "user_name": user.full_name_ar if user else None,
+            "user_name_en": user.full_name_en if user else None,
             "attachments": []
         }
 
@@ -502,8 +502,8 @@ async def add_comment(
         "comment": comment.comment,
         "created_at": comment.created_at,
         "updated_at": comment.updated_at,
-        "user_name": current_user.name,
-        "user_name_en": current_user.name_en,
+        "user_name": current_user.full_name_ar,
+        "user_name_en": current_user.full_name_en,
         "attachments": []
     }
 
