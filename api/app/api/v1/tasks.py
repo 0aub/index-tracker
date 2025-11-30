@@ -88,9 +88,7 @@ def enrich_task_response(task: Task, db: Session) -> dict:
     task_dict = {
         "id": task.id,
         "title": task.title,
-        "title_en": task.title_en,
         "description": task.description,
-        "description_en": task.description_en,
         "status": task.status.value,
         "priority": task.priority.value,
         "index_id": task.index_id,
@@ -136,7 +134,6 @@ def enrich_task_response(task: Task, db: Session) -> dict:
             "task_id": comment.task_id,
             "user_id": comment.user_id,
             "comment": comment.comment,
-            "comment_en": comment.comment_en,
             "created_at": comment.created_at,
             "updated_at": comment.updated_at,
             "user_name": user.name if user else None,
@@ -296,9 +293,7 @@ async def create_task(
     task = Task(
         id=f"task_{uuid.uuid4().hex[:12]}",
         title=task_data.title,
-        title_en=task_data.title_en,
         description=task_data.description,
-        description_en=task_data.description_en,
         status=TaskStatus.TODO,
         priority=task_data.priority,
         index_id=task_data.index_id,
@@ -483,7 +478,6 @@ async def add_comment(
         task_id=task_id,
         user_id=current_user.id,
         comment=comment_data.comment,
-        comment_en=comment_data.comment_en,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -506,7 +500,6 @@ async def add_comment(
         "task_id": comment.task_id,
         "user_id": comment.user_id,
         "comment": comment.comment,
-        "comment_en": comment.comment_en,
         "created_at": comment.created_at,
         "updated_at": comment.updated_at,
         "user_name": current_user.name,
