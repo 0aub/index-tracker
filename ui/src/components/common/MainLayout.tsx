@@ -46,9 +46,10 @@ const MainLayout = () => {
   // Menu items - Role-based access control
   const menuItems = isContributor
     ? [
-        // Contributors ALWAYS only see Home, Requirements, and Settings (regardless of hasIndices)
+        // Contributors see Home, Requirements, Tasks, and Settings (backend filters tasks by assignment)
         { id: 'home', path: '/home', icon: Home, label: { ar: 'الرئيسية', en: 'Home' } },
         { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
+        { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
         { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
       ]
     : hasIndices === false
