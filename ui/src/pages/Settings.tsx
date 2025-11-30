@@ -5,6 +5,21 @@ import { useAuthStore } from '../stores/authStore';
 import { colors, patterns } from '../utils/darkMode';
 import toast from 'react-hot-toast';
 
+// Role translation helper
+const getRoleLabel = (role: string | undefined, language: 'ar' | 'en'): string => {
+  if (!role) return '-';
+
+  const roleLabels: Record<string, { ar: string; en: string }> = {
+    'ADMIN': { ar: 'مدير النظام', en: 'Admin' },
+    'INDEX_MANAGER': { ar: 'مدير المؤشر', en: 'Index Manager' },
+    'SECTION_COORDINATOR': { ar: 'منسق القسم', en: 'Section Coordinator' },
+    'CONTRIBUTOR': { ar: 'مساهم', en: 'Contributor' },
+    'UNASSIGNED': { ar: 'غير مخصص', en: 'Unassigned' },
+  };
+
+  return roleLabels[role]?.[language] || role;
+};
+
 const Settings = () => {
   const { language, setLanguage } = useUIStore();
   const { user } = useAuthStore();
@@ -81,7 +96,7 @@ const Settings = () => {
                   </label>
                   <input
                     type="text"
-                    value={user?.role}
+                    value={getRoleLabel(user?.role, lang)}
                     disabled
                     className={`w-full px-4 py-2 border ${colors.inputBorder} rounded-lg ${colors.bgTertiary} ${colors.textSecondary}`}
                   />
@@ -92,7 +107,7 @@ const Settings = () => {
                   </label>
                   <input
                     type="text"
-                    value={user?.department || '-'}
+                    value={lang === 'ar' ? (user?.department_ar || '-') : (user?.department_en || user?.department_ar || '-')}
                     disabled
                     className={`w-full px-4 py-2 border ${colors.inputBorder} rounded-lg ${colors.bgTertiary} ${colors.textSecondary}`}
                   />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, UserCheck, UserX, Loader2, AlertCircle, Users as UsersIcon, Key, Eye } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, UserCheck, UserX, Loader2, AlertCircle, Users as UsersIcon, Key, Eye, CheckCircle, Copy, Mail } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -13,7 +13,7 @@ const Users = () => {
   const { user: currentUser } = useAuthStore();
   const { currentIndex } = useIndexStore();
   const lang = language;
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'index' | 'system'>('index');
@@ -34,11 +34,16 @@ const Users = () => {
   const [systemLoading, setSystemLoading] = useState(false);
   const [systemSearchTerm, setSystemSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('');
-  const [filterActive, setFilterActive] = useState<boolean | undefined>(true);
+  const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
   const [showAddSystemUserModal, setShowAddSystemUserModal] = useState(false);
   const [showUserDetailsModal, setShowUserDetailsModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
   const [indices, setIndices] = useState<any[]>([]);
+
+  // Password modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState('');
+  const [createdUserEmail, setCreatedUserEmail] = useState('');
 
   // New system user form
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -155,7 +160,7 @@ const Users = () => {
 
   const loadIndices = async () => {
     try {
-      const data = await api.getIndices();
+      const data = await api.indices.getAll();
       setIndices(data);
     } catch (error) {
       console.error('Failed to load indices:', error);
@@ -175,12 +180,10 @@ const Users = () => {
 
       const response = await userManagementApi.createUser(requestData);
 
-      toast.success(
-        lang === 'ar'
-          ? `تم إنشاء المستخدم بنجاح. كلمة المرور: ${response.temp_password}`
-          : `User created successfully. Password: ${response.temp_password}`,
-        { duration: 10000 }
-      );
+      // Show password in modal instead of toast
+      setCreatedUserEmail(newUserEmail);
+      setGeneratedPassword(response.temp_password);
+      setShowPasswordModal(true);
 
       setShowAddSystemUserModal(false);
       setNewUserEmail('');
@@ -191,19 +194,42 @@ const Users = () => {
     }
   };
 
+  const handleToggleUserStatus = async (userId: string, currentStatus: boolean) => {
+    try {
+      const newStatus = !currentStatus;
+      await userManagementApi.updateUserStatus({
+        user_id: userId,
+        is_active: newStatus,
+      });
+
+      toast.success(
+        lang === 'ar'
+          ? (newStatus ? 'تم تفعيل الحساب' : 'تم تعطيل الحساب')
+          : (newStatus ? 'Account activated' : 'Account deactivated')
+      );
+
+      loadSystemUsers();
+    } catch (error: any) {
+      console.error('Failed to update user status:', error);
+      toast.error(error.message || (lang === 'ar' ? 'فشل تحديث حالة المستخدم' : 'Failed to update user status'));
+    }
+  };
+
   const handleResetPassword = async (userId: string) => {
+    const user = systemUsers.find(u => u.id === userId);
+    if (!user) return;
+
     if (!window.confirm(lang === 'ar' ? 'هل تريد إعادة تعيين كلمة المرور؟' : 'Reset password?')) {
       return;
     }
 
     try {
       const response = await userManagementApi.resetPassword(userId);
-      toast.success(
-        lang === 'ar'
-          ? `تم إعادة تعيين كلمة المرور: ${response.temp_password}`
-          : `Password reset: ${response.temp_password}`,
-        { duration: 10000 }
-      );
+      // Show password in modal
+      setGeneratedPassword(response.temp_password);
+      setCreatedUserEmail(user.email);
+      setShowPasswordModal(true);
+      toast.success(lang === 'ar' ? 'تم إعادة تعيين كلمة المرور بنجاح' : 'Password reset successfully');
     } catch (error: any) {
       console.error('Failed to reset password:', error);
       toast.error(error.message || (lang === 'ar' ? 'فشل إعادة تعيين كلمة المرور' : 'Failed to reset password'));
@@ -217,14 +243,17 @@ const Users = () => {
     admin: { ar: 'مدير المنصة', en: 'Admin' },
     index_manager: { ar: 'مدير مؤشر', en: 'Index Manager' },
     section_coordinator: { ar: 'منسق قسم', en: 'Section Coordinator' },
+    unassigned: { ar: 'غير معين', en: 'Unassigned' },
   };
 
   const getRoleLabel = (role: string) => {
-    return roleLabels[role as keyof typeof roleLabels]?.[lang] || role;
+    const roleKey = role.toLowerCase();
+    return roleLabels[roleKey as keyof typeof roleLabels]?.[lang] || role;
   };
 
   const getRoleBadgeColor = (role: string) => {
-    switch (role) {
+    const roleKey = role.toLowerCase();
+    switch (roleKey) {
       case 'admin':
         return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
       case 'index_manager':
@@ -257,9 +286,9 @@ const Users = () => {
 
   const roleStats = {
     all: indexUsers.length,
-    owner: indexUsers.filter(u => u.role === 'owner').length,
-    supervisor: indexUsers.filter(u => u.role === 'supervisor').length,
-    contributor: indexUsers.filter(u => u.role === 'contributor').length
+    owner: indexUsers.filter(u => u.role?.toLowerCase() === 'owner').length,
+    supervisor: indexUsers.filter(u => u.role?.toLowerCase() === 'supervisor').length,
+    contributor: indexUsers.filter(u => u.role?.toLowerCase() === 'contributor').length
   };
 
   // Render Index Users Tab
@@ -628,6 +657,15 @@ const Users = () => {
                           >
                             <Key size={18} />
                           </button>
+                          {user.role?.toLowerCase() !== 'admin' && (
+                            <button
+                              onClick={() => handleToggleUserStatus(user.id, user.is_active)}
+                              className={`p-2 ${user.is_active ? 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300' : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300'} transition`}
+                              title={user.is_active ? (lang === 'ar' ? 'تعطيل الحساب' : 'Deactivate') : (lang === 'ar' ? 'تفعيل الحساب' : 'Activate')}
+                            >
+                              {user.is_active ? <UserX size={18} /> : <UserCheck size={18} />}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -822,6 +860,82 @@ const Users = () => {
             )}
           </div>
         </div>
+
+        {/* Password Modal */}
+        {showPasswordModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+            <div className={`${colors.bgSecondary} rounded-2xl shadow-2xl w-full max-w-lg border ${colors.border} overflow-hidden animate-in fade-in zoom-in duration-200`}>
+              {/* Success Header */}
+              <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-center">
+                <div className="w-16 h-16 bg-white rounded-full mx-auto mb-3 flex items-center justify-center">
+                  <CheckCircle className="text-green-500" size={36} />
+                </div>
+                <h2 className="text-2xl font-bold text-white">
+                  {lang === 'ar' ? 'تم إنشاء المستخدم بنجاح!' : 'User Created Successfully!'}
+                </h2>
+                <p className="text-green-50 text-sm mt-1">
+                  {lang === 'ar' ? 'يمكنك الآن مشاركة معلومات الحساب مع المستخدم' : 'You can now share account credentials with the user'}
+                </p>
+              </div>
+
+              <div className="p-8 space-y-5">
+                {/* Email */}
+                <div>
+                  <label className={`flex items-center gap-2 text-sm font-semibold mb-2 ${colors.textPrimary}`}>
+                    <Mail size={16} className={colors.textSecondary} />
+                    {lang === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}
+                  </label>
+                  <div className={`px-4 py-3 rounded-xl ${colors.bgPrimary} border-2 ${colors.border} ${colors.textPrimary} font-medium`}>
+                    {createdUserEmail}
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className={`flex items-center gap-2 text-sm font-semibold mb-2 ${colors.textPrimary}`}>
+                    <Key size={16} className={colors.textSecondary} />
+                    {lang === 'ar' ? 'كلمة المرور المؤقتة' : 'Temporary Password'}
+                  </label>
+                  <div className="relative">
+                    <div className={`px-6 py-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-2 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 font-mono text-xl tracking-widest text-center select-all font-bold shadow-inner`}>
+                      {generatedPassword}
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedPassword);
+                        toast.success(lang === 'ar' ? 'تم نسخ كلمة المرور!' : 'Password copied!');
+                      }}
+                      className="mt-3 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                    >
+                      <Copy size={18} />
+                      {lang === 'ar' ? 'نسخ كلمة المرور' : 'Copy Password'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className={`p-4 rounded-xl bg-amber-50 dark:bg-amber-950 border-2 border-amber-200 dark:border-amber-800`}>
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" size={20} />
+                    <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
+                      {lang === 'ar'
+                        ? 'يرجى إرسال هذه المعلومات للمستخدم. الحساب غير مفعّل حتى يقوم المستخدم بتسجيل الدخول وإكمال البيانات الشخصية.'
+                        : 'Please send this information to the user. The account will remain inactive until the user logs in and completes their profile.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setShowPasswordModal(false)}
+                  className={`w-full px-4 py-3 ${patterns.primaryButton} font-semibold text-base shadow-lg`}
+                >
+                  {lang === 'ar' ? 'تم، إغلاق' : 'Done'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab Content */}
         {activeTab === 'index' ? renderIndexUsersTab() : renderSystemUsersTab()}

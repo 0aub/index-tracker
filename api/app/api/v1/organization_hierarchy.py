@@ -4,7 +4,7 @@ API endpoints for managing organizational hierarchy
 """
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 import uuid
 
@@ -330,17 +330,40 @@ def delete_department(
 
 # ===== Complete Hierarchy =====
 
-@router.get("/complete", response_model=OrganizationalHierarchy)
+@router.get("/complete")
 def get_complete_hierarchy(
     is_active: bool = Query(True, description="Filter by active status"),
     db: Session = Depends(get_db)
 ):
     """Get complete organizational hierarchy (all agencies with their GMs and departments)"""
-    query = db.query(Agency)
+    # Eager load general_managements and their departments
+    query = db.query(Agency).options(
+        joinedload(Agency.general_managements).joinedload(GeneralManagement.departments)
+    )
 
     if is_active is not None:
         query = query.filter(Agency.is_active == is_active)
 
     agencies = query.order_by(Agency.display_order, Agency.name_ar).all()
 
-    return {"agencies": agencies}
+    # Manually build response to ensure all nested relationships are included
+    result = {
+        "agencies": [
+            {
+                **AgencyResponse.model_validate(agency).model_dump(),
+                "general_managements": [
+                    {
+                        **GeneralManagementResponse.model_validate(gm).model_dump(),
+                        "departments": [
+                            DepartmentResponse.model_validate(dept).model_dump()
+                            for dept in gm.departments
+                        ]
+                    }
+                    for gm in agency.general_managements
+                ]
+            }
+            for agency in agencies
+        ]
+    }
+
+    return result

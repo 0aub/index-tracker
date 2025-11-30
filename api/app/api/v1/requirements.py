@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 
 from app.database import get_db
+from app.api.dependencies import get_current_active_user, get_permissions
+from app.utils.permissions import PermissionChecker
 from app.schemas.requirement import (
     RequirementResponse,
     RequirementMinimal,
+    RequirementCreate,
     RequirementUpdate,
     AnswerSave,
     AnswerSubmitForReview,
@@ -39,16 +42,22 @@ async def list_requirements(
     main_area_ar: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
     List requirements with optional filtering
+
+    Filtering based on user role:
+    - ADMIN, OWNER, SUPERVISOR: See all requirements in their indices
+    - CONTRIBUTOR: See only assigned requirements
 
     Args:
         index_id: Filter by index
         main_area_ar: Filter by main area
         skip: Number of records to skip
         limit: Maximum number of records
+        permissions: Permission checker
         db: Database session
 
     Returns:
@@ -68,7 +77,35 @@ async def list_requirements(
     ).group_by(Requirement.id)
 
     if index_id:
+        # Check if user has access to this index
+        permissions.require_index_access(index_id)
         query = query.filter(Requirement.index_id == index_id)
+
+        # CRITICAL: Filter requirements based on user role within the index
+        accessible_requirement_ids = permissions.get_accessible_requirement_ids(index_id)
+        if accessible_requirement_ids:
+            query = query.filter(Requirement.id.in_(accessible_requirement_ids))
+        else:
+            # User has no accessible requirements in this index
+            return []
+    else:
+        # If no index_id specified, only show requirements from indices user has access to
+        user_index_ids = permissions.get_user_index_ids()
+        if not user_index_ids:
+            return []
+        query = query.filter(Requirement.index_id.in_(user_index_ids))
+
+        # For Contributors, filter to only assigned requirements across all their indices
+        if permissions.is_contributor:
+            from app.models.assignment import Assignment
+            assigned_req_ids = db.query(Assignment.requirement_id).filter(
+                Assignment.user_id == permissions.user.id
+            ).all()
+            assigned_req_ids = [r[0] for r in assigned_req_ids]
+            if assigned_req_ids:
+                query = query.filter(Requirement.id.in_(assigned_req_ids))
+            else:
+                return []
 
     if main_area_ar:
         query = query.filter(Requirement.main_area_ar == main_area_ar)
@@ -81,6 +118,7 @@ async def list_requirements(
         req_dict = {
             'id': req.id,
             'code': req.code,
+            'display_order': req.display_order,
             'question_ar': req.question_ar,
             'question_en': req.question_en,
             'main_area_ar': req.main_area_ar,
@@ -89,6 +127,7 @@ async def list_requirements(
             'objective_ar': req.objective_ar,
             'evidence_description_ar': req.evidence_description_ar,
             'evidence_description_en': req.evidence_description_en,
+            'requires_evidence': req.requires_evidence,
             'answer_status': req.answer_status,
             'evidence_count': evidence_count,
             'recommendations_count': recommendations_count
@@ -101,6 +140,7 @@ async def list_requirements(
 @router.get("/{requirement_id}", response_model=RequirementResponse)
 async def get_requirement(
     requirement_id: str,
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
@@ -108,6 +148,7 @@ async def get_requirement(
 
     Args:
         requirement_id: Requirement ID
+        permissions: Permission checker
         db: Database session
 
     Returns:
@@ -124,6 +165,18 @@ async def get_requirement(
             detail="Requirement not found"
         )
 
+    # Check if user has access to view this requirement
+    permissions.require_index_access(requirement.index_id)
+
+    # For Contributors, check if they're assigned to this specific requirement
+    if permissions.is_contributor:
+        accessible_req_ids = permissions.get_accessible_requirement_ids(requirement.index_id)
+        if requirement_id not in accessible_req_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ليس لديك صلاحية للوصول إلى هذا المتطلب"  # You don't have access to this requirement
+            )
+
     return requirement
 
 
@@ -131,14 +184,21 @@ async def get_requirement(
 async def update_requirement(
     requirement_id: str,
     requirement_update: RequirementUpdate,
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
     Update a requirement
 
+    Permissions:
+    - ADMIN: Can edit any requirement
+    - OWNER/SUPERVISOR: Can edit requirements in their indices
+    - CONTRIBUTOR: Cannot edit requirements
+
     Args:
         requirement_id: Requirement ID
         requirement_update: Fields to update
+        permissions: Permission checker
         db: Database session
 
     Returns:
@@ -151,6 +211,9 @@ async def update_requirement(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Requirement not found"
         )
+
+    # Check if user can edit this requirement
+    permissions.require_requirement_edit_access(requirement_id)
 
     # Update fields
     update_data = requirement_update.dict(exclude_unset=True)
@@ -194,6 +257,9 @@ async def save_answer(
             detail="Requirement not found"
         )
     
+    # Check if this is a modification (answer already exists)
+    is_modification = requirement.answer_ar is not None and requirement.answer_ar != ""
+
     # Save answer
     requirement.answer_ar = answer_data.answer_ar
     requirement.answer_en = answer_data.answer_en
@@ -202,14 +268,24 @@ async def save_answer(
     requirement.answered_at = datetime.utcnow()
 
     # Log activity
-    log_requirement_activity(
-        db=db,
-        requirement_id=requirement_id,
-        action_type="answer_saved",
-        actor_id=user_id,
-        description_ar="تم حفظ الإجابة كمسودة",
-        description_en="Answer saved as draft"
-    )
+    if is_modification:
+        log_requirement_activity(
+            db=db,
+            requirement_id=requirement_id,
+            action_type="answer_modified",
+            actor_id=user_id,
+            description_ar="تم تعديل الإجابة",
+            description_en="Answer modified"
+        )
+    else:
+        log_requirement_activity(
+            db=db,
+            requirement_id=requirement_id,
+            action_type="answer_saved",
+            actor_id=user_id,
+            description_ar="تم حفظ الإجابة كمسودة",
+            description_en="Answer saved as draft"
+        )
 
     db.commit()
     db.refresh(requirement)
@@ -359,6 +435,66 @@ async def review_answer(
         description_ar=description_ar,
         description_en=description_en,
         comment=comment
+    )
+
+    db.commit()
+    db.refresh(requirement)
+
+    return requirement
+
+
+@router.post("/{requirement_id}/confirm-answer", response_model=RequirementResponse)
+async def confirm_answer(
+    requirement_id: str,
+    reviewer_id: str,  # TODO: Get from auth and check permissions
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm an approved answer (final step)
+
+    Args:
+        requirement_id: Requirement ID
+        reviewer_id: Reviewer user ID (from auth)
+        db: Database session
+
+    Returns:
+        Updated requirement with confirmed status
+    """
+
+    requirement = db.query(Requirement).options(
+        joinedload(Requirement.maturity_levels)
+    ).filter(Requirement.id == requirement_id).first()
+
+    if not requirement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found"
+        )
+
+    # Check if answer exists and is approved
+    if not requirement.answer_ar:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No answer to confirm"
+        )
+
+    if requirement.answer_status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Answer is not approved (current status: {requirement.answer_status})"
+        )
+
+    # Update to confirmed status
+    requirement.answer_status = "confirmed"
+
+    # Log activity
+    log_requirement_activity(
+        db=db,
+        requirement_id=requirement_id,
+        action_type="answer_confirmed",
+        actor_id=reviewer_id,
+        description_ar="تم تأكيد الإجابة",
+        description_en="Answer confirmed"
     )
 
     db.commit()
@@ -845,3 +981,491 @@ async def get_previous_year_context(
             matched_recommendation=None,
             standard_group=standard_data
         )
+
+
+# ==================== REQUIREMENT CRUD OPERATIONS ====================
+
+
+@router.post("", response_model=RequirementResponse, status_code=status.HTTP_201_CREATED)
+async def create_requirement(
+    index_id: str,
+    requirement_data: RequirementCreate,
+    actor_id: str,
+    permissions: PermissionChecker = Depends(get_permissions),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new requirement
+
+    Only ADMIN, INDEX_MANAGER, and SECTION_COORDINATOR can create requirements
+
+    Auto-generation features:
+    - If code is not provided, it will be auto-generated based on position in group
+    - If display_order is not provided, it will be appended at the end
+    - sub_domain is auto-set to element value
+    """
+    from sqlalchemy import func
+
+    # Check permissions - only supervisors and admins can create requirements
+    if not permissions.can_manage_requirements(index_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and supervisors can create requirements"
+        )
+
+    # Verify index exists
+    index = db.query(Index).filter(Index.id == index_id).first()
+    if not index:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Index not found"
+        )
+
+    # Auto-generate code if not provided
+    if not requirement_data.code:
+        # Count existing requirements in same main_area/element group
+        count_query = db.query(func.count(Requirement.id)).filter(
+            Requirement.index_id == index_id,
+            Requirement.main_area_ar == requirement_data.main_area_ar
+        )
+
+        # If element is specified, count within that element group
+        if requirement_data.element_ar:
+            count_query = count_query.filter(Requirement.element_ar == requirement_data.element_ar)
+
+        existing_count = count_query.scalar() or 0
+        requirement_code = f"{existing_count + 1}"
+    else:
+        requirement_code = requirement_data.code
+
+        # Check if code already exists in this index
+        existing = db.query(Requirement).filter(
+            Requirement.index_id == index_id,
+            Requirement.code == requirement_code
+        ).first()
+
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Requirement with code '{requirement_code}' already exists in this index"
+            )
+
+    # Auto-calculate display_order if not provided
+    if requirement_data.display_order is None:
+        # Append at the end - get max display_order and add 1
+        max_order = db.query(func.max(Requirement.display_order)).filter(
+            Requirement.index_id == index_id
+        ).scalar() or 0
+        display_order = max_order + 1
+    else:
+        display_order = requirement_data.display_order
+        # Smart insertion: shift display_order of subsequent requirements
+        db.query(Requirement).filter(
+            Requirement.index_id == index_id,
+            Requirement.display_order >= display_order
+        ).update({
+            Requirement.display_order: Requirement.display_order + 1
+        }, synchronize_session=False)
+
+    # Auto-set sub_domain to element value
+    sub_domain_ar = requirement_data.element_ar or requirement_data.main_area_ar
+    sub_domain_en = requirement_data.element_en or requirement_data.main_area_en
+
+    # Create the new requirement
+    new_requirement = Requirement(
+        id=str(uuid.uuid4()),
+        index_id=index_id,
+        code=requirement_code,
+        question_ar=requirement_data.question_ar,
+        question_en=requirement_data.question_en,
+        main_area_ar=requirement_data.main_area_ar,
+        main_area_en=requirement_data.main_area_en,
+        sub_domain_ar=sub_domain_ar,
+        sub_domain_en=sub_domain_en,
+        element_ar=requirement_data.element_ar,
+        element_en=requirement_data.element_en,
+        objective_ar=requirement_data.objective_ar,
+        objective_en=requirement_data.objective_en,
+        evidence_description_ar=requirement_data.evidence_description_ar,
+        evidence_description_en=requirement_data.evidence_description_en,
+        requires_evidence=requirement_data.requires_evidence,
+        display_order=display_order
+    )
+
+    db.add(new_requirement)
+
+    # Log activity
+    log_requirement_activity(
+        db=db,
+        requirement_id=new_requirement.id,
+        action_type="requirement_created",
+        actor_id=actor_id,
+        description_ar=f"تم إنشاء المتطلب {requirement_code}",
+        description_en=f"Requirement {requirement_code} created"
+    )
+
+    db.commit()
+    db.refresh(new_requirement)
+
+    # Return with maturity levels (empty for new requirement)
+    return new_requirement
+
+
+@router.patch("/{requirement_id}", response_model=RequirementResponse)
+async def update_requirement(
+    requirement_id: str,
+    update_data: RequirementUpdate,
+    actor_id: str,
+    permissions: PermissionChecker = Depends(get_permissions),
+    db: Session = Depends(get_db)
+):
+    """
+    Update an existing requirement
+
+    Only ADMIN, INDEX_MANAGER, and SECTION_COORDINATOR can update requirements
+
+    Note: Changing display_order will automatically shift other requirements
+    """
+    # Get the requirement
+    requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
+    if not requirement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found"
+        )
+
+    # Check permissions
+    if not permissions.can_manage_requirements(requirement.index_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and supervisors can update requirements"
+        )
+
+    # If code is being changed, check uniqueness
+    if update_data.code and update_data.code != requirement.code:
+        existing = db.query(Requirement).filter(
+            Requirement.index_id == requirement.index_id,
+            Requirement.code == update_data.code,
+            Requirement.id != requirement_id
+        ).first()
+
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Requirement with code '{update_data.code}' already exists in this index"
+            )
+
+    # Handle display_order change (reordering)
+    old_order = requirement.display_order
+    new_order = update_data.display_order
+
+    if new_order is not None and new_order != old_order:
+        # Moving up (to a lower number)
+        if new_order < old_order:
+            # Shift down all requirements between new_order and old_order
+            db.query(Requirement).filter(
+                Requirement.index_id == requirement.index_id,
+                Requirement.display_order >= new_order,
+                Requirement.display_order < old_order,
+                Requirement.id != requirement_id
+            ).update({
+                Requirement.display_order: Requirement.display_order + 1
+            }, synchronize_session=False)
+        # Moving down (to a higher number)
+        else:
+            # Shift up all requirements between old_order and new_order
+            db.query(Requirement).filter(
+                Requirement.index_id == requirement.index_id,
+                Requirement.display_order > old_order,
+                Requirement.display_order <= new_order,
+                Requirement.id != requirement_id
+            ).update({
+                Requirement.display_order: Requirement.display_order - 1
+            }, synchronize_session=False)
+
+    # Update fields
+    update_dict = update_data.model_dump(exclude_unset=True)
+    for field, value in update_dict.items():
+        setattr(requirement, field, value)
+
+    # Log activity
+    log_requirement_activity(
+        db=db,
+        requirement_id=requirement_id,
+        action_type="requirement_updated",
+        actor_id=actor_id,
+        description_ar="تم تحديث المتطلب",
+        description_en="Requirement updated"
+    )
+
+    db.commit()
+    db.refresh(requirement)
+
+    return requirement
+
+
+@router.delete("/{requirement_id}", status_code=status.HTTP_200_OK)
+async def delete_requirement(
+    requirement_id: str,
+    actor_id: str,
+    force: bool = False,
+    permissions: PermissionChecker = Depends(get_permissions),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a requirement
+
+    Only ADMIN, INDEX_MANAGER, and SECTION_COORDINATOR can delete requirements
+
+    Args:
+        force: If False (default), will fail if requirement has data (answers, evidence, etc.)
+               If True, will delete requirement and all associated data (cascade)
+
+    Returns:
+        Success message with information about what was deleted
+    """
+    # Get the requirement
+    requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
+    if not requirement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found"
+        )
+
+    # Check permissions
+    if not permissions.can_manage_requirements(requirement.index_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and supervisors can delete requirements"
+        )
+
+    # Check if requirement has data
+    has_answer = requirement.answer_ar is not None
+    evidence_count = db.query(Evidence).filter(Evidence.requirement_id == requirement_id).count()
+    recommendation_count = db.query(Recommendation).filter(Recommendation.requirement_id == requirement_id).count()
+
+    has_data = has_answer or evidence_count > 0 or recommendation_count > 0
+
+    if has_data and not force:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "Requirement has associated data. Use force=true to delete anyway.",
+                "has_answer": has_answer,
+                "evidence_count": evidence_count,
+                "recommendation_count": recommendation_count
+            }
+        )
+
+    # Store info for response
+    code = requirement.code
+    display_order = requirement.display_order
+    index_id = requirement.index_id
+
+    # Delete the requirement (cascade will handle related data)
+    db.delete(requirement)
+
+    # Shift up all subsequent requirements to fill the gap
+    db.query(Requirement).filter(
+        Requirement.index_id == index_id,
+        Requirement.display_order > display_order
+    ).update({
+        Requirement.display_order: Requirement.display_order - 1
+    }, synchronize_session=False)
+
+    db.commit()
+
+    return {
+        "message": "Requirement deleted successfully",
+        "deleted_code": code,
+        "deleted_answer": has_answer,
+        "deleted_evidence_count": evidence_count,
+        "deleted_recommendation_count": recommendation_count
+    }
+
+
+@router.post("/reorder", status_code=status.HTTP_200_OK)
+async def reorder_requirements(
+    index_id: str,
+    requirement_id: str,
+    direction: str,  # "up" or "down"
+    actor_id: str,
+    permissions: PermissionChecker = Depends(get_permissions),
+    db: Session = Depends(get_db)
+):
+    """
+    Reorder a requirement up or down by one position
+
+    Only ADMIN, INDEX_MANAGER, and SECTION_COORDINATOR can reorder requirements
+
+    Args:
+        index_id: The index containing the requirement
+        requirement_id: The requirement to move
+        direction: "up" (decrease display_order) or "down" (increase display_order)
+        actor_id: User performing the action
+    """
+    if direction not in ["up", "down"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Direction must be 'up' or 'down'"
+        )
+
+    # Check permissions
+    if not permissions.can_manage_requirements(index_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and supervisors can reorder requirements"
+        )
+
+    # Get the requirement
+    requirement = db.query(Requirement).filter(
+        Requirement.id == requirement_id,
+        Requirement.index_id == index_id
+    ).first()
+
+    if not requirement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found"
+        )
+
+    current_order = requirement.display_order
+
+    if direction == "up":
+        # Find the requirement immediately above
+        target = db.query(Requirement).filter(
+            Requirement.index_id == index_id,
+            Requirement.display_order < current_order
+        ).order_by(Requirement.display_order.desc()).first()
+
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Requirement is already at the top"
+            )
+
+        # Swap display_order
+        target_order = target.display_order
+        requirement.display_order = target_order
+        target.display_order = current_order
+
+    else:  # down
+        # Find the requirement immediately below
+        target = db.query(Requirement).filter(
+            Requirement.index_id == index_id,
+            Requirement.display_order > current_order
+        ).order_by(Requirement.display_order.asc()).first()
+
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Requirement is already at the bottom"
+            )
+
+        # Swap display_order
+        target_order = target.display_order
+        requirement.display_order = target_order
+        target.display_order = current_order
+
+    # Log activity
+    log_requirement_activity(
+        db=db,
+        requirement_id=requirement_id,
+        action_type="requirement_reordered",
+        actor_id=actor_id,
+        description_ar=f"تم إعادة ترتيب المتطلب ({direction})",
+        description_en=f"Requirement reordered ({direction})"
+    )
+
+    db.commit()
+
+    return {
+        "message": "Requirement reordered successfully",
+        "old_order": current_order,
+        "new_order": requirement.display_order
+    }
+
+
+@router.get("/sections/{index_id}")
+async def get_sections(
+    index_id: str,
+    permissions: PermissionChecker = Depends(get_permissions),
+    db: Session = Depends(get_db)
+):
+    """
+    Get unique sections/domains for autocomplete in requirement form
+
+    Returns distinct values for:
+    - main_area_ar / main_area_en
+    - sub_domain_ar / sub_domain_en
+    - element_ar / element_en with relationships to main_areas
+    """
+    # Check access to index
+    permissions.require_index_access(index_id)
+
+    # Get all unique sections from existing requirements in this index
+    requirements = db.query(Requirement).filter(Requirement.index_id == index_id).all()
+
+    # Collect unique values
+    main_areas = set()
+    sub_domains = set()
+    elements = set()
+
+    # Build relationship maps:
+    # main_area -> list of elements
+    # element -> list of sub_domains
+    main_area_to_elements = {}
+    element_to_sub_domains = {}
+
+    for req in requirements:
+        if req.main_area_ar:
+            main_areas.add((req.main_area_ar, req.main_area_en or ""))
+
+            # Build main_area -> elements relationship
+            if req.element_ar:
+                if req.main_area_ar not in main_area_to_elements:
+                    main_area_to_elements[req.main_area_ar] = set()
+                main_area_to_elements[req.main_area_ar].add((req.element_ar, req.element_en or ""))
+
+                # Build element -> sub_domains relationship
+                if req.sub_domain_ar:
+                    if req.element_ar not in element_to_sub_domains:
+                        element_to_sub_domains[req.element_ar] = set()
+                    element_to_sub_domains[req.element_ar].add((req.sub_domain_ar, req.sub_domain_en or ""))
+
+        if req.sub_domain_ar:
+            sub_domains.add((req.sub_domain_ar, req.sub_domain_en or ""))
+        if req.element_ar:
+            elements.add((req.element_ar, req.element_en or ""))
+
+    # Convert relationship maps to list format
+    main_areas_with_elements = []
+    for ar, en in sorted(main_areas):
+        elements_for_area = []
+        if ar in main_area_to_elements:
+            # For each element in this main_area, include its sub_domains
+            for el_ar, el_en in sorted(main_area_to_elements[ar]):
+                sub_domains_for_element = []
+                if el_ar in element_to_sub_domains:
+                    sub_domains_for_element = [
+                        {"ar": sd_ar, "en": sd_en}
+                        for sd_ar, sd_en in sorted(element_to_sub_domains[el_ar])
+                    ]
+
+                elements_for_area.append({
+                    "ar": el_ar,
+                    "en": el_en,
+                    "sub_domains": sub_domains_for_element
+                })
+
+        main_areas_with_elements.append({
+            "ar": ar,
+            "en": en,
+            "elements": elements_for_area
+        })
+
+    return {
+        "main_areas": main_areas_with_elements,
+        "sub_domains": [{"ar": ar, "en": en} for ar, en in sorted(sub_domains)],
+        "elements": [{"ar": ar, "en": en} for ar, en in sorted(elements)]
+    }

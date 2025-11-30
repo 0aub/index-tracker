@@ -128,8 +128,8 @@ class GeneralManagementWithChildren(GeneralManagementResponse):
 
 
 class AgencyWithChildren(AgencyResponse):
-    """Schema for agency with general managements"""
-    general_managements: List[GeneralManagementResponse] = []
+    """Schema for agency with general managements (including their departments)"""
+    general_managements: List[GeneralManagementWithChildren] = []
 
     class Config:
         from_attributes = True

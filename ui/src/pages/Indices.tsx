@@ -227,7 +227,7 @@ const Indices = () => {
                 : 'Manage and track all assessment indices in the system'}
             </p>
           </div>
-          {(user?.role === 'admin' || user?.role === 'index_manager') && (
+          {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
             <button
               onClick={handleAddIndex}
               className={`flex items-center gap-2 px-4 py-2.5 ${patterns.button}`}
@@ -362,7 +362,7 @@ const Indices = () => {
                   >
                     {lang === 'ar' ? 'عرض المؤشر' : 'View Index'}
                   </button>
-                  {(user?.role === 'admin' || user?.role === 'index_manager') && (
+                  {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
                     <>
                       <button
                         onClick={() => handleEditIndex(index)}
@@ -403,7 +403,7 @@ const Indices = () => {
               </div>
 
               {/* Completion & Recommendations Actions */}
-              {(user?.role === 'admin' || user?.role === 'index_manager') && (
+              {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
                 <div className={`mt-4 pt-4 border-t ${colors.border}`}>
                   {/* Show Complete Button for non-completed indices */}
                   {!index.is_completed && (
@@ -523,7 +523,7 @@ const Indices = () => {
               ? 'ابدأ بإضافة مؤشر جديد لتتبع وقياس الأداء'
               : 'Start by adding a new index to track and measure performance'}
           </p>
-          {(user?.role === 'admin' || user?.role === 'index_manager') && (
+          {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
             <button
               onClick={handleAddIndex}
               className={`px-6 py-3 ${patterns.button}`}

@@ -50,29 +50,54 @@ def generate_temp_password(length: int = 12) -> str:
     return ''.join(password)
 
 
-def validate_password_strength(password: str) -> tuple[bool, str]:
+def validate_password_strength(password: str, lang: str = 'en') -> tuple[bool, str]:
     """
     Validate password strength
 
     Args:
         password: Password to validate
+        lang: Language for error messages ('en' or 'ar')
 
     Returns:
         Tuple of (is_valid, error_message)
     """
+    # Error messages in both languages
+    errors = {
+        'min_length': {
+            'en': 'Password must be at least 8 characters',
+            'ar': 'كلمة المرور يجب أن تحتوي على 8 أحرف على الأقل'
+        },
+        'uppercase': {
+            'en': 'Password must contain at least one uppercase letter (A-Z)',
+            'ar': 'كلمة المرور يجب أن تحتوي على حرف كبير واحد على الأقل (A-Z)'
+        },
+        'lowercase': {
+            'en': 'Password must contain at least one lowercase letter (a-z)',
+            'ar': 'كلمة المرور يجب أن تحتوي على حرف صغير واحد على الأقل (a-z)'
+        },
+        'digit': {
+            'en': 'Password must contain at least one number (0-9)',
+            'ar': 'كلمة المرور يجب أن تحتوي على رقم واحد على الأقل (0-9)'
+        },
+        'special': {
+            'en': 'Password must contain at least one special character (!@#$%^&*)',
+            'ar': 'كلمة المرور يجب أن تحتوي على رمز خاص واحد على الأقل (!@#$%^&*)'
+        }
+    }
+
     if len(password) < 8:
-        return False, "Password must be at least 8 characters long"
+        return False, errors['min_length'][lang]
 
     if not any(c.isupper() for c in password):
-        return False, "Password must contain at least one uppercase letter"
+        return False, errors['uppercase'][lang]
 
     if not any(c.islower() for c in password):
-        return False, "Password must contain at least one lowercase letter"
+        return False, errors['lowercase'][lang]
 
     if not any(c.isdigit() for c in password):
-        return False, "Password must contain at least one digit"
+        return False, errors['digit'][lang]
 
     if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
-        return False, "Password must contain at least one special character"
+        return False, errors['special'][lang]
 
     return True, ""

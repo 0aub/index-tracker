@@ -1,0 +1,30 @@
+# Exclude uploads directory (contains user-uploaded files, managed via volumes)
+uploads/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+temp_evidence/
+*.log
+.DS_Store

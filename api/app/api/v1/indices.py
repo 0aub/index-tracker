@@ -10,6 +10,8 @@ import os
 from app.database import get_db
 from app.config import settings
 from app.index_config.index_configs import get_index_config, get_available_index_types
+from app.api.dependencies import get_current_active_user, get_permissions
+from app.utils.permissions import PermissionChecker
 from app.schemas.index import (
     IndexResponse,
     IndexMinimal,
@@ -79,6 +81,7 @@ async def create_index_from_excel(
     version: str = Form("1.0"),
     organization_id: str = Form(...),
     created_by_user_id: str = Form(...),
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
@@ -86,6 +89,12 @@ async def create_index_from_excel(
 
     The Excel file must follow the template format for the specified index type.
     Column requirements vary by index type (NAII, ETARI, etc.)
+
+    Permissions:
+    - ADMIN: Can create any index type
+    - INDEX_MANAGER: Can create index of same type as their existing indices
+    - SECTION_COORDINATOR: Cannot create indices
+    - CONTRIBUTOR: Cannot create indices
 
     Args:
         file: Excel file with requirements
@@ -98,11 +107,19 @@ async def create_index_from_excel(
         version: Index version
         organization_id: Organization ID
         created_by_user_id: ID of user creating the index
+        permissions: Permission checker
         db: Database session
 
     Returns:
         Created index with all requirements
     """
+    # Check if user can create an index of this type
+    if not permissions.can_create_index(index_type):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ليس لديك صلاحية لإنشاء مؤشر من هذا النوع"  # You don't have permission to create an index of this type
+        )
+
     # Validate index type
     try:
         config = get_index_config(index_type)
@@ -179,22 +196,34 @@ async def list_indices(
     status: Optional[IndexStatus] = None,
     skip: int = 0,
     limit: int = 20,
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
     List all indices with optional filtering
+    Users can only see indices they have access to (based on role and assignments)
 
     Args:
         organization_id: Filter by organization
         status: Filter by status
         skip: Number of records to skip (pagination)
         limit: Maximum number of records to return
+        permissions: Permission checker
         db: Database session
 
     Returns:
-        List of indices
+        List of indices user has access to
     """
     query = db.query(Index)
+
+    # CRITICAL: Filter by user access - only show indices the user has access to
+    if not permissions.is_admin:
+        # Non-admin users only see their assigned indices
+        user_index_ids = permissions.get_user_index_ids()
+        if not user_index_ids:
+            # User has no indices assigned, return empty list
+            return []
+        query = query.filter(Index.id.in_(user_index_ids))
 
     if organization_id:
         query = query.filter(Index.organization_id == organization_id)
@@ -240,6 +269,7 @@ async def list_indices(
 @router.get("/{index_id}", response_model=IndexResponse)
 async def get_index(
     index_id: str,
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
@@ -247,6 +277,7 @@ async def get_index(
 
     Args:
         index_id: Index ID
+        permissions: Permission checker
         db: Database session
 
     Returns:
@@ -261,6 +292,9 @@ async def get_index(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Index not found"
         )
+
+    # Check if user has access to this index
+    permissions.require_index_access(index_id)
 
     # Calculate evidence count for this index
     evidence_count = db.query(func.count(Evidence.id)).join(
@@ -297,6 +331,7 @@ async def get_index(
 @router.get("/{index_id}/statistics", response_model=IndexStatistics)
 async def get_index_statistics(
     index_id: str,
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
@@ -304,6 +339,7 @@ async def get_index_statistics(
 
     Args:
         index_id: Index ID
+        permissions: Permission checker
         db: Database session
 
     Returns:
@@ -316,6 +352,9 @@ async def get_index_statistics(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Index not found"
         )
+
+    # Check if user has access to this index
+    permissions.require_index_access(index_id)
 
     # Get statistics
     stats = IndexCreationService.get_index_statistics(db, index_id)
@@ -445,14 +484,22 @@ async def get_index_user_engagement(
 async def update_index(
     index_id: str,
     index_update: IndexUpdate,
+    permissions: PermissionChecker = Depends(get_permissions),
     db: Session = Depends(get_db)
 ):
     """
-    Update an index
+    Update an index (metadata like name, description, dates, status, etc.)
+
+    Permissions:
+    - ADMIN: Can edit any index
+    - INDEX_MANAGER with OWNER role: Can edit their indices
+    - SECTION_COORDINATOR: Cannot edit index metadata
+    - CONTRIBUTOR: Cannot edit index metadata
 
     Args:
         index_id: Index ID
         index_update: Fields to update
+        permissions: Permission checker
         db: Database session
 
     Returns:
@@ -465,6 +512,9 @@ async def update_index(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Index not found"
         )
+
+    # Check if user can edit this index
+    permissions.require_index_edit_access(index_id)
 
     # Update fields
     update_data = index_update.dict(exclude_unset=True)

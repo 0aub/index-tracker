@@ -304,6 +304,7 @@ const RequirementDetail = () => {
   const [answerText, setAnswerText] = useState('');
   const [savingAnswer, setSavingAnswer] = useState(false);
   const [submittingForReview, setSubmittingForReview] = useState(false);
+  const [confirmingAnswer, setConfirmingAnswer] = useState(false);
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | 'request_changes' | null>(null);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewing, setReviewing] = useState(false);
@@ -666,22 +667,34 @@ const RequirementDetail = () => {
         return <MessageSquare className="text-purple-600" size={20} />;
       // ETARI Answer activities
       case 'answer_saved':
+        return <FileText className="text-gray-600 dark:text-gray-400" size={20} />;
+      case 'answer_modified':
         return <FileText className="text-blue-600 dark:text-blue-400" size={20} />;
       case 'answer_submitted':
-        return <Upload className="text-blue-600 dark:text-blue-400" size={20} />;
+        return <Upload className="text-yellow-600 dark:text-yellow-400" size={20} />;
       case 'answer_approved':
+        return <CheckCircle2 className="text-blue-600 dark:text-blue-400" size={20} />;
+      case 'answer_confirmed':
         return <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />;
       case 'answer_rejected':
         return <X className="text-red-600 dark:text-red-400" size={20} />;
       case 'answer_changes_requested':
-        return <AlertCircle className="text-yellow-600 dark:text-yellow-400" size={20} />;
+        return <AlertCircle className="text-orange-600 dark:text-orange-400" size={20} />;
       // Evidence activities
       case 'evidence_uploaded':
         return <Upload className="text-green-600 dark:text-green-400" size={20} />;
+      case 'evidence_version_uploaded':
+        return <Upload className="text-purple-600 dark:text-purple-400" size={20} />;
+      case 'evidence_submitted':
+        return <Upload className="text-yellow-600 dark:text-yellow-400" size={20} />;
+      case 'evidence_confirmed':
+        return <CheckCircle2 className="text-blue-600 dark:text-blue-400" size={20} />;
       case 'evidence_approved':
         return <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />;
       case 'evidence_rejected':
         return <X className="text-red-600 dark:text-red-400" size={20} />;
+      case 'evidence_deleted':
+        return <Trash2 className="text-red-600 dark:text-red-400" size={20} />;
       // Assignment activities
       case 'assignment_created':
         return <Users className="text-purple-600 dark:text-purple-400" size={20} />;
@@ -700,15 +713,21 @@ const RequirementDetail = () => {
       case 'document_removed': return 'bg-red-100 dark:bg-red-900';
       case 'comment_added': return 'bg-purple-100 dark:bg-purple-900';
       // ETARI Answer activities
-      case 'answer_saved': return 'bg-blue-100 dark:bg-blue-900';
-      case 'answer_submitted': return 'bg-blue-100 dark:bg-blue-900';
-      case 'answer_approved': return 'bg-green-100 dark:bg-green-900';
+      case 'answer_saved': return 'bg-gray-100 dark:bg-gray-900';
+      case 'answer_modified': return 'bg-blue-100 dark:bg-blue-900';
+      case 'answer_submitted': return 'bg-yellow-100 dark:bg-yellow-900';
+      case 'answer_approved': return 'bg-blue-100 dark:bg-blue-900';
+      case 'answer_confirmed': return 'bg-green-100 dark:bg-green-900';
       case 'answer_rejected': return 'bg-red-100 dark:bg-red-900';
-      case 'answer_changes_requested': return 'bg-yellow-100 dark:bg-yellow-900';
+      case 'answer_changes_requested': return 'bg-orange-100 dark:bg-orange-900';
       // Evidence activities
       case 'evidence_uploaded': return 'bg-green-100 dark:bg-green-900';
+      case 'evidence_version_uploaded': return 'bg-purple-100 dark:bg-purple-900';
+      case 'evidence_submitted': return 'bg-yellow-100 dark:bg-yellow-900';
+      case 'evidence_confirmed': return 'bg-blue-100 dark:bg-blue-900';
       case 'evidence_approved': return 'bg-green-100 dark:bg-green-900';
       case 'evidence_rejected': return 'bg-red-100 dark:bg-red-900';
+      case 'evidence_deleted': return 'bg-red-100 dark:bg-red-900';
       // Assignment activities
       case 'assignment_created': return 'bg-purple-100 dark:bg-purple-900';
       case 'assignment_removed': return 'bg-red-100 dark:bg-red-900';
@@ -726,13 +745,13 @@ const RequirementDetail = () => {
         );
       case 'submitted':
         return (
-          <span className="px-2 py-1 bg-green-200 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs font-medium rounded">
+          <span className="px-2 py-1 bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300 text-xs font-medium rounded">
             {lang === 'ar' ? 'مرسل للمراجعة' : 'Submitted'}
           </span>
         );
       case 'confirmed':
         return (
-          <span className="px-2 py-1 bg-green-200 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs font-medium rounded">
+          <span className="px-2 py-1 bg-blue-200 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-medium rounded">
             {lang === 'ar' ? 'مؤكد' : 'Confirmed'}
           </span>
         );
@@ -740,6 +759,12 @@ const RequirementDetail = () => {
         return (
           <span className="px-2 py-1 bg-green-700 dark:bg-green-600 text-white text-xs font-bold rounded">
             {lang === 'ar' ? 'معتمد' : 'Approved'}
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="px-2 py-1 bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300 text-xs font-bold rounded">
+            {lang === 'ar' ? 'مرفوض' : 'Rejected'}
           </span>
         );
     }
@@ -815,6 +840,14 @@ const RequirementDetail = () => {
           docsGroupedByLevel[level].push(transformedDoc);
         }
         setDocuments(docsGroupedByLevel);
+
+        // Reload requirement activities after upload
+        try {
+          const activitiesData = await api.requirements.getActivities(id);
+          setActivities(activitiesData);
+        } catch (err) {
+          console.error('Failed to reload activities:', err);
+        }
       } else {
         // Creating a new document
         const newEvidence = await api.evidence.upload({
@@ -873,6 +906,14 @@ const RequirementDetail = () => {
           docsGroupedByLevel[level].push(transformedDoc);
         }
         setDocuments(docsGroupedByLevel);
+
+        // Reload requirement activities after upload
+        try {
+          const activitiesData = await api.requirements.getActivities(id);
+          setActivities(activitiesData);
+        } catch (err) {
+          console.error('Failed to reload activities:', err);
+        }
       }
 
       setUploadingToLevel(null);
@@ -1010,10 +1051,10 @@ const RequirementDetail = () => {
   };
 
   const handleDeleteDocument = async (level: number, docId: string) => {
-    if (!id) return;
+    if (!id || !user) return;
 
     try {
-      await api.evidence.delete(docId);
+      await api.evidence.delete(docId, user.id);
       toast.success(lang === 'ar' ? 'تم حذف المستند' : 'Document deleted');
 
       // Reload evidence data
@@ -1052,6 +1093,14 @@ const RequirementDetail = () => {
         docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
+
+      // Reload requirement activities after delete
+      try {
+        const activitiesData = await api.requirements.getActivities(id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to reload activities:', err);
+      }
     } catch (err: any) {
       console.error('Failed to delete document:', err);
       toast.error(lang === 'ar' ? 'فشل حذف المستند' : 'Failed to delete document');
@@ -1059,8 +1108,71 @@ const RequirementDetail = () => {
   };
 
   const handleChangeStatus = async (level: number, docId: string, newStatus: DocumentStatus) => {
-    // This function is not used since we have specific handlers below
-    toast.success(lang === 'ar' ? 'تم تحديث الحالة' : 'Status updated');
+    if (!user || !id) return;
+
+    try {
+      // Map status to action
+      let action: 'submit' | 'confirm' | 'approve' = 'submit';
+      if (newStatus === 'submitted') action = 'submit';
+      else if (newStatus === 'confirmed') action = 'confirm';
+      else if (newStatus === 'approved') action = 'approve';
+
+      await api.evidence.performAction(docId, action, user.id);
+
+      const statusMessages = {
+        'submitted': lang === 'ar' ? 'تم إرسال المستند للمراجعة' : 'Document submitted for review',
+        'confirmed': lang === 'ar' ? 'تم تأكيد المستند' : 'Document confirmed',
+        'approved': lang === 'ar' ? 'تم اعتماد المستند' : 'Document approved'
+      };
+      toast.success(statusMessages[newStatus] || (lang === 'ar' ? 'تم تحديث الحالة' : 'Status updated'));
+
+      // Reload evidence data
+      const evidenceData = await api.evidence.getAll({ requirement_id: id });
+      const docsGroupedByLevel: Record<number, UploadedDoc[]> = {};
+      for (const evidence of evidenceData) {
+        const evidenceDetails = await api.evidence.getById(evidence.id);
+        const transformedDoc: UploadedDoc = {
+          id: evidence.id,
+          document_name: evidence.document_name,
+          current_version: evidence.current_version,
+          status: evidence.status as DocumentStatus,
+          versions: evidenceDetails.versions.map(v => ({
+            version: v.version_number,
+            filename: v.filename,
+            file_size: v.file_size || undefined,
+            uploaded_by: v.uploaded_by,
+            uploaded_at: v.uploaded_at,
+            comment: v.upload_comment || undefined
+          })),
+          review_history: evidenceDetails.activities.map(a => ({
+            id: a.id,
+            reviewer_id: a.actor_id,
+            reviewer_name: a.actor_id,
+            action: a.action as any,
+            version: a.version_number || 0,
+            comment: a.comment || undefined,
+            timestamp: a.created_at
+          }))
+        };
+        const level = evidence.maturity_level ?? 0;
+        if (!docsGroupedByLevel[level]) {
+          docsGroupedByLevel[level] = [];
+        }
+        docsGroupedByLevel[level].push(transformedDoc);
+      }
+      setDocuments(docsGroupedByLevel);
+
+      // Reload requirement activities
+      try {
+        const activitiesData = await api.requirements.getActivities(id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to reload activities:', err);
+      }
+    } catch (err: any) {
+      console.error('Failed to change status:', err);
+      toast.error(lang === 'ar' ? 'فشل تحديث الحالة' : 'Failed to update status');
+    }
   };
 
   const handleConfirmDocument = async (level: number, docId: string) => {
@@ -1106,6 +1218,14 @@ const RequirementDetail = () => {
         docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
+
+      // Reload requirement activities
+      try {
+        const activitiesData = await api.requirements.getActivities(id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to reload activities:', err);
+      }
     } catch (err: any) {
       console.error('Failed to confirm document:', err);
       toast.error(lang === 'ar' ? 'فشل تأكيد المستند' : 'Failed to confirm document');
@@ -1155,6 +1275,14 @@ const RequirementDetail = () => {
         docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
+
+      // Reload requirement activities
+      try {
+        const activitiesData = await api.requirements.getActivities(id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to reload activities:', err);
+      }
     } catch (err: any) {
       console.error('Failed to approve document:', err);
       toast.error(lang === 'ar' ? 'فشل اعتماد المستند' : 'Failed to approve document');
@@ -1211,6 +1339,14 @@ const RequirementDetail = () => {
         docsGroupedByLevel[level].push(transformedDoc);
       }
       setDocuments(docsGroupedByLevel);
+
+      // Reload requirement activities
+      try {
+        const activitiesData = await api.requirements.getActivities(id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to reload activities:', err);
+      }
     } catch (err: any) {
       console.error('Failed to reject document:', err);
       toast.error(lang === 'ar' ? 'فشل رفض المستند' : 'Failed to reject document');
@@ -1272,6 +1408,31 @@ const RequirementDetail = () => {
       toast.error(lang === 'ar' ? 'فشل إرسال الإجابة للمراجعة' : 'Failed to submit for review');
     } finally {
       setSubmittingForReview(false);
+    }
+  };
+
+  const handleConfirmAnswer = async () => {
+    if (!requirement?.real_id || !user?.id) return;
+
+    try {
+      setConfirmingAnswer(true);
+      const updatedReq = await api.requirements.confirmAnswer(requirement.real_id, user.id);
+      setRequirement({ ...requirement, answer_status: updatedReq.answer_status });
+
+      // Refetch activities to show the new activity
+      try {
+        const activitiesData = await api.requirements.getActivities(requirement.real_id);
+        setActivities(activitiesData);
+      } catch (err) {
+        console.error('Failed to refresh activities:', err);
+      }
+
+      toast.success(lang === 'ar' ? 'تم تأكيد الإجابة' : 'Answer confirmed');
+    } catch (err: any) {
+      console.error('Failed to confirm answer:', err);
+      toast.error(lang === 'ar' ? 'فشل تأكيد الإجابة' : 'Failed to confirm answer');
+    } finally {
+      setConfirmingAnswer(false);
     }
   };
 
@@ -1587,13 +1748,17 @@ const RequirementDetail = () => {
                           {previousData.matched_requirement.answer_status && (
                             <div className="mt-3 flex items-center gap-2">
                               <span className={`text-xs px-2 py-1 rounded-full ${
-                                previousData.matched_requirement.answer_status === 'approved' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
-                                previousData.matched_requirement.answer_status === 'pending_review' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
-                                previousData.matched_requirement.answer_status === 'rejected' ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' :
+                                previousData.matched_requirement.answer_status === 'approved' ? 'bg-blue-600 text-white dark:bg-blue-700' :
+                                previousData.matched_requirement.answer_status === 'confirmed' ? 'bg-green-700 text-white dark:bg-green-600' :
+                                previousData.matched_requirement.answer_status === 'pending_review' ? 'bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300' :
+                                previousData.matched_requirement.answer_status === 'changes_requested' ? 'bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-300' :
+                                previousData.matched_requirement.answer_status === 'rejected' ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' :
                                 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                               }`}>
-                                {previousData.matched_requirement.answer_status === 'approved' ? (lang === 'ar' ? 'معتمدة' : 'Approved') :
+                                {previousData.matched_requirement.answer_status === 'approved' ? (lang === 'ar' ? 'موافق عليها' : 'Approved') :
+                                 previousData.matched_requirement.answer_status === 'confirmed' ? (lang === 'ar' ? 'مؤكدة' : 'Confirmed') :
                                  previousData.matched_requirement.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review') :
+                                 previousData.matched_requirement.answer_status === 'changes_requested' ? (lang === 'ar' ? 'مطلوب تعديلات' : 'Changes Requested') :
                                  previousData.matched_requirement.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
                                  (lang === 'ar' ? 'مسودة' : 'Draft')}
                               </span>
@@ -1745,13 +1910,17 @@ const RequirementDetail = () => {
                               </span>
                               {req.answer_status && (
                                 <span className={`text-xs px-2 py-1 rounded-full ${
-                                  req.answer_status === 'approved' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
-                                  req.answer_status === 'pending_review' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
-                                  req.answer_status === 'rejected' ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' :
+                                  req.answer_status === 'approved' ? 'bg-blue-600 text-white dark:bg-blue-700' :
+                                  req.answer_status === 'confirmed' ? 'bg-green-700 text-white dark:bg-green-600' :
+                                  req.answer_status === 'pending_review' ? 'bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300' :
+                                  req.answer_status === 'changes_requested' ? 'bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-300' :
+                                  req.answer_status === 'rejected' ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' :
                                   'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                                 }`}>
-                                  {req.answer_status === 'approved' ? (lang === 'ar' ? 'معتمدة' : 'Approved') :
+                                  {req.answer_status === 'approved' ? (lang === 'ar' ? 'موافق عليها' : 'Approved') :
+                                   req.answer_status === 'confirmed' ? (lang === 'ar' ? 'مؤكدة' : 'Confirmed') :
                                    req.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review') :
+                                   req.answer_status === 'changes_requested' ? (lang === 'ar' ? 'مطلوب تعديلات' : 'Changes Requested') :
                                    req.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
                                    (lang === 'ar' ? 'مسودة' : 'Draft')}
                                 </span>
@@ -1935,7 +2104,7 @@ const RequirementDetail = () => {
                           </p>
                           <p className={`text-sm ${colors.textSecondary}`}>
                             {lang === 'ar' ? activity.actor_name : activity.actor_name_en}
-                            {activity.maturity_level !== null && (
+                            {activity.maturity_level !== null && activity.maturity_level > 0 && currentIndex?.index_type !== 'ETARI' && (
                               <>
                                 {' • '}
                                 {lang === 'ar' ? `المستوى ${activity.maturity_level}` : `Level ${activity.maturity_level}`}
@@ -2012,14 +2181,18 @@ const RequirementDetail = () => {
                   </span>
                   <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${
                     !requirement.answer_status || requirement.answer_status === 'draft' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
-                    requirement.answer_status === 'pending_review' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                    requirement.answer_status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                    'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                    requirement.answer_status === 'pending_review' ? 'bg-yellow-200 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
+                    requirement.answer_status === 'changes_requested' ? 'bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300' :
+                    requirement.answer_status === 'approved' ? 'bg-blue-600 text-white dark:bg-blue-700' :
+                    requirement.answer_status === 'confirmed' ? 'bg-green-700 text-white dark:bg-green-600' :
+                    'bg-red-200 text-red-700 dark:bg-red-900 dark:text-red-300'
                   }`}>
                     {!requirement.answer_status && (lang === 'ar' ? 'لم يبدأ' : 'Not Started')}
                     {requirement.answer_status === 'draft' && (lang === 'ar' ? 'مسودة' : 'Draft')}
                     {requirement.answer_status === 'pending_review' && (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review')}
+                    {requirement.answer_status === 'changes_requested' && (lang === 'ar' ? 'مطلوب تعديلات' : 'Changes Requested')}
                     {requirement.answer_status === 'approved' && (lang === 'ar' ? 'موافق عليها' : 'Approved')}
+                    {requirement.answer_status === 'confirmed' && (lang === 'ar' ? 'مؤكدة' : 'Confirmed')}
                     {requirement.answer_status === 'rejected' && (lang === 'ar' ? 'مرفوضة' : 'Rejected')}
                   </span>
                 </div>
@@ -2048,11 +2221,11 @@ const RequirementDetail = () => {
                     </>
                   )}
 
-                  {requirement.answer_status === 'pending_review' && (user?.role === 'admin' || user?.role === 'supervisor') && !reviewAction && (
+                  {requirement.answer_status === 'pending_review' && (user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER' || user?.role === 'SECTION_COORDINATOR') && !reviewAction && (
                     <>
                       <button
                         onClick={() => setReviewAction('approve')}
-                        className={`px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm`}
+                        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm`}
                       >
                         {lang === 'ar' ? 'موافقة' : 'Approve'}
                       </button>
@@ -2069,6 +2242,18 @@ const RequirementDetail = () => {
                         {lang === 'ar' ? 'رفض' : 'Reject'}
                       </button>
                     </>
+                  )}
+
+                  {/* Confirm approved answer */}
+                  {requirement.answer_status === 'approved' && (user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER' || user?.role === 'SECTION_COORDINATOR') && (
+                    <button
+                      onClick={handleConfirmAnswer}
+                      disabled={confirmingAnswer}
+                      className={`px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm flex items-center gap-2`}
+                    >
+                      {confirmingAnswer && <Loader2 size={16} className="animate-spin" />}
+                      {lang === 'ar' ? 'تأكيد الإجابة' : 'Confirm Answer'}
+                    </button>
                   )}
                 </div>
               </div>
@@ -2119,18 +2304,12 @@ const RequirementDetail = () => {
               )}
             </div>
 
-            {/* Evidence Upload Section - Show if evidence_description exists OR documents are already uploaded */}
+            {/* Evidence Upload Section - Always show for ETARI, or if evidence_description exists OR documents are uploaded */}
             {(() => {
+              const isETARI = currentIndex?.index_type === 'ETARI';
               const hasEvidenceDesc = requirement.evidence_description && requirement.evidence_description.trim().length > 0;
               const hasDocs = documents[0] && documents[0].length > 0;
-              console.log('[Evidence Section Debug]', {
-                hasEvidenceDesc,
-                hasDocs,
-                documentsKeys: Object.keys(documents),
-                documents0Length: documents[0]?.length,
-                evidence_description: requirement.evidence_description
-              });
-              return hasEvidenceDesc || hasDocs;
+              return isETARI || hasEvidenceDesc || hasDocs;
             })() && (
             <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6`}>
               <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4 flex items-center gap-2`}>
@@ -2144,18 +2323,92 @@ const RequirementDetail = () => {
                   : 'Please upload documents and evidence supporting your answer to this question'}
               </p>
 
-              <button
-                onClick={() => setUploadingToLevel(0)}
-                className={`px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center gap-2`}
-              >
-                <Upload size={16} />
-                {lang === 'ar' ? 'رفع ملف' : 'Upload File'}
-              </button>
+              {/* Upload Form */}
+              {uploadingToLevel === 0 ? (
+                <div className={`p-4 ${colors.primaryLight} border-2 ${colors.primaryBorder} rounded-lg`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className={`text-md font-bold ${colors.primaryText} flex items-center gap-2`}>
+                      <Upload size={20} />
+                      {uploadingVersionForDoc
+                        ? (lang === 'ar' ? 'رفع نسخة جديدة' : 'Upload New Version')
+                        : (lang === 'ar' ? 'رفع مستند جديد' : 'Upload New Document')
+                      }
+                    </h4>
+                    <button
+                      onClick={() => {
+                        setUploadingToLevel(null);
+                        setUploadingVersionForDoc(null);
+                        setUploadComment('');
+                        setSelectedFile(null);
+                      }}
+                      className={colors.textTertiary}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className={`block text-sm font-medium ${colors.textSecondary} mb-2`}>
+                        {lang === 'ar' ? 'اختر الملف' : 'Select File'}
+                      </label>
+                      <input
+                        type="file"
+                        onChange={handleFileSelect}
+                        className={`w-full text-sm ${colors.textSecondary} file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:${colors.primary} file:text-white file:${colors.primaryHover}`}
+                      />
+                      {selectedFile && (
+                        <p className={`text-xs ${colors.primaryText} mt-2`}>
+                          {lang === 'ar' ? 'تم اختيار:' : 'Selected:'} {selectedFile.name}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium ${colors.textSecondary} mb-2`}>
+                        {lang === 'ar' ? 'تعليق (اختياري)' : 'Comment (Optional)'}
+                      </label>
+                      <textarea
+                        value={uploadComment}
+                        onChange={(e) => setUploadComment(e.target.value)}
+                        rows={3}
+                        placeholder={lang === 'ar' ? 'أضف تعليقاً أو ملاحظة حول المستند...' : 'Add a comment or note about the document...'}
+                        className={`w-full px-3 py-2 ${patterns.input} text-sm`}
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleUploadDocument(0, true)}
+                        className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2`}
+                      >
+                        {lang === 'ar' ? 'حفظ كمسودة' : 'Save as Draft'}
+                      </button>
+                      <button
+                        onClick={() => handleUploadDocument(0, false)}
+                        className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2`}
+                      >
+                        <CheckCircle2 size={16} />
+                        {lang === 'ar' ? 'رفع وإرسال' : 'Upload & Submit'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setUploadingToLevel(0)}
+                  className={`px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center gap-2`}
+                >
+                  <Upload size={16} />
+                  {lang === 'ar' ? 'رفع ملف' : 'Upload File'}
+                </button>
+              )}
 
               {/* Display uploaded files */}
               {documents[0] && documents[0].length > 0 && (
-                <div className="mt-6 space-y-3">
-                  <h4 className={`text-sm font-medium ${colors.textSecondary}`}>
+                <div className="mt-6 space-y-4">
+                  <h4 className={`text-md font-bold ${colors.textPrimary} flex items-center gap-2`}>
+                    <Download className={colors.primaryIcon} size={20} />
                     {lang === 'ar' ? 'المستندات المرفوعة' : 'Uploaded Documents'}
                   </h4>
                   {documents[0].map((doc: any) => {
@@ -2170,22 +2423,11 @@ const RequirementDetail = () => {
 
                     // Extract extension
                     const ext = filename.split('.').pop()?.toUpperCase() || 'FILE';
-                    const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
 
-                    // Extension color mapping - subtle outline style
-                    const extColors: Record<string, { border: string; text: string; bg: string }> = {
-                      'PDF': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'DOCX': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'DOC': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'XLSX': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'XLS': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'PPTX': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'PPT': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'PNG': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'JPG': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                      'JPEG': { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` },
-                    };
-                    const extColor = extColors[ext] || { border: `${colors.border}`, text: `${colors.textSecondary}`, bg: `${colors.bgSecondary}` };
+                    // Extract clean filename (remove version prefix like "v2_")
+                    const cleanFilename = filename.replace(/^v\d+_/, '');
+                    // Use clean filename without extension as display name
+                    const displayName = cleanFilename.replace(/\.[^/.]+$/, '');
 
                     const handleDownload = async () => {
                       try {
@@ -2206,32 +2448,199 @@ const RequirementDetail = () => {
                     return (
                       <div
                         key={doc.id}
-                        className={`flex items-center justify-between p-3.5 border ${colors.border} rounded-lg ${colors.bgHover} hover:shadow-sm transition-all cursor-pointer group`}
-                        onClick={handleDownload}
+                        className={`p-4 ${colors.bgSecondary} border ${colors.border} rounded-lg hover:shadow-md transition`}
                       >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <File className={`${colors.textSecondary} group-hover:${colors.primaryIcon} transition-colors flex-shrink-0`} size={20} />
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${colors.textPrimary} truncate`} title={filename}>
-                              {nameWithoutExt}
-                            </p>
-                            <div className={`flex items-center gap-2 text-xs ${colors.textSecondary} mt-0.5`}>
-                              <Clock size={11} />
-                              <span>
-                                {currentVersion?.uploaded_at ? new Date(currentVersion.uploaded_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US') : 'N/A'}
-                              </span>
-                              {formattedSize && (
-                                <>
-                                  <span>•</span>
-                                  <span>{formattedSize}</span>
-                                </>
-                              )}
+                        {/* Document Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-start gap-3 flex-1">
+                            <FileText className={colors.primaryIcon} size={20} />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className={`text-sm font-bold ${colors.textPrimary}`}>{displayName}</p>
+                                <span className={`text-xs ${colors.primaryLight} ${colors.primaryText} px-2 py-0.5 rounded-full font-semibold`}>
+                                  {lang === 'ar' ? `إصدار ${doc.current_version}` : `v${doc.current_version}`}
+                                </span>
+                              </div>
+                              <p className={`text-xs ${colors.textSecondary} mb-1`}>
+                                {lang === 'ar' ? 'آخر تحديث بواسطة' : 'Last updated by'} {currentVersion?.uploaded_by || 'N/A'} • {currentVersion?.uploaded_at ? new Date(currentVersion.uploaded_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US') : 'N/A'}
+                              </p>
+                              <p className={`text-xs ${colors.textTertiary}`}>
+                                {cleanFilename} {formattedSize && `• ${formattedSize}`}
+                              </p>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2 ml-3">
+                            {getDocumentStatusBadge(doc.status)}
+                          </div>
                         </div>
-                        <span className={`${extColor.bg} ${extColor.border} ${extColor.text} border-2 text-xs font-semibold px-2.5 py-1 rounded min-w-[50px] text-center flex-shrink-0`}>
-                          {ext}
-                        </span>
+
+                        {/* Latest Version Comment */}
+                        {currentVersion?.comment && (
+                          <div className={`mb-3 p-2 ${colors.primaryLight} rounded border ${colors.primaryBorder}`}>
+                            <p className={`text-xs ${colors.textSecondary}`}>
+                              <span className="font-semibold">{lang === 'ar' ? 'ملاحظة:' : 'Comment:'}</span> {currentVersion.comment}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Rejection Notice */}
+                        {doc.status === 'rejected' && (() => {
+                          // Find the most recent rejection in review history
+                          const rejections = doc.review_history?.filter((h: any) => h.action === 'reject') || [];
+                          const latestRejection = rejections.sort((a: any, b: any) =>
+                            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                          )[0];
+
+                          if (latestRejection) {
+                            return (
+                              <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border-2 border-red-500 rounded-lg">
+                                <div className="flex items-start gap-2">
+                                  <X className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={18} />
+                                  <div className="flex-1">
+                                    <p className="text-sm font-bold text-red-700 dark:text-red-300 mb-1">
+                                      {lang === 'ar' ? 'تم رفض هذا المستند' : 'This document was rejected'}
+                                    </p>
+                                    {latestRejection.comment && (
+                                      <p className="text-sm text-red-600 dark:text-red-400">
+                                        <span className="font-semibold">{lang === 'ar' ? 'السبب:' : 'Reason:'}</span> {latestRejection.comment}
+                                      </p>
+                                    )}
+                                    <p className="text-xs text-red-500 dark:text-red-500 mt-1">
+                                      {lang === 'ar' ? 'يرجى رفع نسخة جديدة وإعادة الإرسال' : 'Please upload a new version and re-submit'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+
+                        {/* Action Buttons */}
+                        <div className={`flex items-center gap-2 mb-3 pb-3 border-b ${colors.border} flex-wrap`}>
+                          <button
+                            onClick={handleDownload}
+                            className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center gap-1"
+                          >
+                            <Download size={14} />
+                            {lang === 'ar' ? 'تحميل' : 'Download'}
+                          </button>
+
+                          {/* Draft Status - Submit button */}
+                          {doc.status === 'draft' && (
+                            <button
+                              onClick={() => handleChangeStatus(0, doc.id, 'submitted')}
+                              className={`px-3 py-1.5 text-xs ${colors.primary} text-white rounded ${colors.primaryHover} transition flex items-center gap-1`}
+                            >
+                              <CheckCircle2 size={14} />
+                              {lang === 'ar' ? 'إرسال للمراجعة' : 'Submit for Review'}
+                            </button>
+                          )}
+
+                          {/* Submitted Status - Supervisor/Admin buttons (Confirm/Reject) */}
+                          {doc.status === 'submitted' && (user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER' || user?.role === 'SECTION_COORDINATOR') && (
+                            <>
+                              <button
+                                onClick={() => handleConfirmDocument(0, doc.id)}
+                                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center gap-1"
+                              >
+                                <CheckCircle2 size={14} />
+                                {lang === 'ar' ? 'تأكيد' : 'Confirm'}
+                              </button>
+                              <button
+                                onClick={() => setRejectingDoc({ level: 0, docId: doc.id })}
+                                className="px-3 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition flex items-center gap-1"
+                              >
+                                <X size={14} />
+                                {lang === 'ar' ? 'رفض' : 'Reject'}
+                              </button>
+                            </>
+                          )}
+
+                          {/* Confirmed Status - Approve button */}
+                          {doc.status === 'confirmed' && user?.role === 'ADMIN' && (
+                            <button
+                              onClick={() => handleApproveDocument(0, doc.id)}
+                              className="px-3 py-1.5 text-xs bg-green-700 text-white rounded hover:bg-green-800 transition flex items-center gap-1 font-semibold"
+                            >
+                              <CheckCircle2 size={14} />
+                              {lang === 'ar' ? 'اعتماد' : 'Approve'}
+                            </button>
+                          )}
+
+                          {/* Rejected Status - Re-submit button */}
+                          {doc.status === 'rejected' && (
+                            <button
+                              onClick={() => handleChangeStatus(0, doc.id, 'submitted')}
+                              className={`px-3 py-1.5 text-xs ${colors.primary} text-white rounded ${colors.primaryHover} transition flex items-center gap-1`}
+                            >
+                              <CheckCircle2 size={14} />
+                              {lang === 'ar' ? 'إعادة الإرسال للمراجعة' : 'Re-submit for Review'}
+                            </button>
+                          )}
+
+                          {/* Review History Button */}
+                          {doc.review_history && doc.review_history.length > 0 && (
+                            <button
+                              onClick={() => setShowReviewHistory({ level: 0, docId: doc.id })}
+                              className={`px-3 py-1.5 text-xs ${colors.bgTertiary} ${colors.textSecondary} rounded hover:${colors.bgHover} transition flex items-center gap-1`}
+                            >
+                              <History size={14} />
+                              {lang === 'ar' ? 'سجل المراجعة' : 'Review History'}
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setUploadingToLevel(0);
+                              setUploadingVersionForDoc(doc.id);
+                            }}
+                            className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition flex items-center gap-1"
+                          >
+                            <Upload size={14} />
+                            {lang === 'ar' ? 'رفع نسخة جديدة' : 'Upload New Version'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDocument(0, doc.id)}
+                            className={`px-3 py-1.5 text-xs ${colors.errorLight} ${colors.error} rounded hover:bg-red-200 dark:hover:bg-red-800 transition flex items-center gap-1`}
+                          >
+                            <Trash2 size={14} />
+                            {lang === 'ar' ? 'حذف' : 'Delete'}
+                          </button>
+                        </div>
+
+                        {/* Rejection Form */}
+                        {rejectingDoc && rejectingDoc.docId === doc.id && rejectingDoc.level === 0 && (
+                          <div className={`mb-3 p-4 ${colors.errorLight} border ${colors.error} rounded-lg`}>
+                            <h5 className={`text-sm font-bold ${colors.error} mb-2`}>
+                              {lang === 'ar' ? 'سبب الرفض' : 'Rejection Reason'}
+                            </h5>
+                            <textarea
+                              value={rejectionComment}
+                              onChange={(e) => setRejectionComment(e.target.value)}
+                              rows={3}
+                              placeholder={lang === 'ar' ? 'اكتب سبب رفض المستند...' : 'Enter reason for rejecting document...'}
+                              className={`w-full px-3 py-2 border ${colors.error} rounded ${colors.focusRing} text-sm mb-2 ${colors.inputBg} ${colors.inputText}`}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleRejectDocument(0, doc.id)}
+                                className={`px-4 py-2 ${colors.errorBg} text-white rounded hover:bg-red-700 transition text-sm`}
+                              >
+                                {lang === 'ar' ? 'تأكيد الرفض' : 'Confirm Rejection'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRejectingDoc(null);
+                                  setRejectionComment('');
+                                }}
+                                className={`px-4 py-2 ${colors.bgTertiary} ${colors.textSecondary} rounded hover:${colors.bgHover} transition text-sm`}
+                              >
+                                {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2283,7 +2692,7 @@ const RequirementDetail = () => {
                   </div>
                   <div className="flex items-center gap-3">
                     {/* Admin Level Completion Toggle */}
-                    {user?.role === 'admin' && criteria.level > 0 && (
+                    {user?.role === 'ADMIN' && criteria.level > 0 && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2435,11 +2844,11 @@ const RequirementDetail = () => {
                                   )}
 
                                   {/* Submitted Status - Auditor buttons (Confirm/Reject) */}
-                                  {doc.status === 'submitted' && user?.role === 'admin' && (
+                                  {doc.status === 'submitted' && user?.role === 'ADMIN' && (
                                     <>
                                       <button
                                         onClick={() => handleConfirmDocument(criteria.level, doc.id)}
-                                        className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center gap-1"
+                                        className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center gap-1"
                                       >
                                         <CheckCircle2 size={14} />
                                         {lang === 'ar' ? 'تأكيد' : 'Confirm'}
@@ -2455,7 +2864,7 @@ const RequirementDetail = () => {
                                   )}
 
                                   {/* Confirmed Status - Approve button */}
-                                  {doc.status === 'confirmed' && user?.role === 'admin' && (
+                                  {doc.status === 'confirmed' && user?.role === 'ADMIN' && (
                                     <button
                                       onClick={() => handleApproveDocument(criteria.level, doc.id)}
                                       className="px-3 py-1.5 text-xs bg-green-700 text-white rounded hover:bg-green-800 transition flex items-center gap-1 font-semibold"

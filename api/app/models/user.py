@@ -11,10 +11,11 @@ from app.database import Base
 
 class UserRole(str, enum.Enum):
     """User roles in the system"""
-    ADMIN = "admin"
-    INDEX_MANAGER = "index_manager"
-    SECTION_COORDINATOR = "section_coordinator"
-    CONTRIBUTOR = "contributor"
+    ADMIN = "ADMIN"
+    INDEX_MANAGER = "INDEX_MANAGER"
+    SECTION_COORDINATOR = "SECTION_COORDINATOR"
+    CONTRIBUTOR = "CONTRIBUTOR"
+    UNASSIGNED = "UNASSIGNED"  # User not yet assigned to any index
 
 
 class User(Base):

@@ -21,6 +21,8 @@ from app.schemas.evidence import (
     EvidenceActionRequest
 )
 from app.models.evidence import Evidence, EvidenceVersion, EvidenceActivity
+from app.models.user import User
+from app.api.v1.requirements import log_requirement_activity
 
 router = APIRouter(prefix="/evidence", tags=["Evidence"])
 
@@ -119,7 +121,7 @@ async def upload_evidence(
             upload_comment=upload_comment
         )
 
-        # Create activity log
+        # Create evidence activity log
         new_activity = EvidenceActivity(
             id=activity_id,
             evidence_id=evidence_id,
@@ -128,10 +130,23 @@ async def upload_evidence(
             actor_id=uploaded_by,
             comment=upload_comment
         )
+        db.add(new_activity)
+
+        # Log upload to requirement activity timeline
+        actor = db.query(User).filter(User.id == uploaded_by).first()
+        log_requirement_activity(
+            db=db,
+            requirement_id=requirement_id,
+            action_type="evidence_uploaded",
+            actor_id=uploaded_by,
+            description_ar=f"تم رفع دليل جديد: {document_name}",
+            description_en=f"New evidence uploaded: {document_name}",
+            comment=upload_comment,
+            maturity_level=maturity_level
+        )
 
         db.add(new_evidence)
         db.add(new_version)
-        db.add(new_activity)
         db.commit()
         db.refresh(new_evidence)
 
@@ -206,6 +221,10 @@ async def upload_new_version(
         evidence.current_version = new_version_number
         evidence.updated_at = datetime.utcnow()
 
+        # Reset status to draft if it was rejected (allows re-submission)
+        if evidence.status == "rejected":
+            evidence.status = "draft"
+
         # Create activity log
         new_activity = EvidenceActivity(
             id=activity_id,
@@ -214,6 +233,18 @@ async def upload_new_version(
             action="uploaded_version",
             actor_id=uploaded_by,
             comment=upload_comment
+        )
+
+        # Log version upload to requirement activity timeline
+        log_requirement_activity(
+            db=db,
+            requirement_id=evidence.requirement_id,
+            action_type="evidence_version_uploaded",
+            actor_id=uploaded_by,
+            description_ar=f"تم رفع نسخة جديدة من الدليل: {evidence.document_name} (الإصدار {new_version_number})",
+            description_en=f"New version uploaded for evidence: {evidence.document_name} (Version {new_version_number})",
+            comment=upload_comment,
+            maturity_level=evidence.maturity_level
         )
 
         db.add(new_version)
@@ -294,7 +325,7 @@ async def evidence_action(
     # Update evidence
     evidence.updated_at = datetime.utcnow()
 
-    # Create activity log
+    # Create evidence activity log
     activity = EvidenceActivity(
         id=str(uuid.uuid4()),
         evidence_id=evidence_id,
@@ -303,8 +334,33 @@ async def evidence_action(
         actor_id=actor_id,
         comment=action_request.comment
     )
-
     db.add(activity)
+
+    # Get actor name for requirement activity log
+    actor = db.query(User).filter(User.id == actor_id).first()
+    actor_name = actor.full_name_ar if actor else "Unknown"
+
+    # Log activity to requirement timeline
+    action_texts = {
+        "submit": ("تم إرسال الدليل للمراجعة", f"Evidence submitted for review: {evidence.document_name}"),
+        "confirm": ("تم تأكيد الدليل", f"Evidence confirmed: {evidence.document_name}"),
+        "approve": ("تم اعتماد الدليل", f"Evidence approved: {evidence.document_name}"),
+        "reject": ("تم رفض الدليل", f"Evidence rejected: {evidence.document_name}")
+    }
+
+    if action in action_texts:
+        desc_ar, desc_en = action_texts[action]
+        log_requirement_activity(
+            db=db,
+            requirement_id=evidence.requirement_id,
+            action_type=f"evidence_{action}ed",
+            actor_id=actor_id,
+            description_ar=f"{desc_ar}: {evidence.document_name}",
+            description_en=f"{desc_en}",
+            comment=action_request.comment,
+            maturity_level=evidence.maturity_level
+        )
+
     db.commit()
     db.refresh(evidence)
 
@@ -314,6 +370,7 @@ async def evidence_action(
 @router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_evidence(
     evidence_id: str,
+    actor_id: str,
     db: Session = Depends(get_db)
 ):
     """
@@ -326,6 +383,18 @@ async def delete_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evidence not found"
         )
+
+    # Log deletion to requirement activity timeline before deleting
+    log_requirement_activity(
+        db=db,
+        requirement_id=evidence.requirement_id,
+        action_type="evidence_deleted",
+        actor_id=actor_id,
+        description_ar=f"تم حذف الدليل: {evidence.document_name}",
+        description_en=f"Evidence deleted: {evidence.document_name}",
+        comment=None,
+        maturity_level=evidence.maturity_level
+    )
 
     # Delete files from filesystem
     upload_dir = f"/app/uploads/evidence/{evidence_id}"

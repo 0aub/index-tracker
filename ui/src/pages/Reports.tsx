@@ -125,7 +125,8 @@ const Reports = () => {
           question: req.question_ar,
           question_en: req.question_en,
           section: req.main_area_ar, // Use main_area_ar as section
-          sub_domain: req.sub_domain_ar, // Include sub_domain (المعيار) for domain grouping
+          sub_domain: req.sub_domain_ar, // Use sub_domain_ar for domains grouping
+          criterion: req.element_ar, // Use element_ar (المعيار) for grouping
           current_level: assignment?.current_level || 0,
           evidence_description_ar: req.evidence_description_ar,
           evidence_description_en: req.evidence_description_en,
@@ -388,21 +389,21 @@ const Reports = () => {
   });
 
   // Create domain-level data for enhanced bar chart
-  // Group requirements by section and domain (sub_domain_ar)
+  // Group requirements by section and criterion (element_ar/المعيار)
   const domainData: any[] = [];
   sections.forEach(section => {
     const sectionReqs = requirements.filter(r => r.section === section);
-    // Get unique domains within this section - FIX: filter before Set
-    const domains = Array.from(new Set(
+    // Get unique criteria within this section - FIX: filter before Set
+    const criteria = Array.from(new Set(
       sectionReqs
-        .map(r => r.sub_domain)
+        .map(r => r.criterion)
         .filter(d => d && d.trim() !== '')
     )).sort();
 
-    console.log(`Section: ${section}, Domains found:`, domains.length, domains);
+    console.log(`Section: ${section}, Criteria found:`, criteria.length, criteria);
 
-    domains.forEach(domain => {
-      const domainReqs = sectionReqs.filter(r => r.sub_domain === domain);
+    criteria.forEach(criterion => {
+      const domainReqs = sectionReqs.filter(r => r.criterion === criterion);
 
       // Calculate completion for this domain
       let domainCompletion;
@@ -428,13 +429,13 @@ const Reports = () => {
 
       domainData.push({
         section: section,
-        domain: domain,
+        domain: criterion,
         completion: Number(domainCompletion.toFixed(1)),
         totalRequirements: domainReqs.length,
         approvedRequirements: approvedCount,
         evidenceCount: domainEvidence.length,
-        // Use section+domain as unique key for grouping
-        sectionDomainKey: `${section} - ${domain}`
+        // Use section+criterion as unique key for grouping
+        sectionDomainKey: `${section} - ${criterion}`
       });
     });
   });
@@ -1155,8 +1156,8 @@ const Reports = () => {
               const sectionReqs = requirements.filter(r => r.section === section);
               const isExpanded = expandedSections.includes(section);
 
-              // Group requirements by domain (sub_domain) within this section
-              const domains = Array.from(new Set(sectionReqs.map(r => r.sub_domain || ''))).filter(d => d).sort();
+              // Group requirements by criterion (element_ar - المعيار) within this section
+              const criteria = Array.from(new Set(sectionReqs.map(r => r.criterion || ''))).filter(d => d).sort();
 
               return (
                 <div key={section} className={`border ${colors.border} rounded-lg overflow-hidden`}>
@@ -1169,7 +1170,7 @@ const Reports = () => {
                         {section}
                       </h3>
                       <span className={`text-sm ${colors.textSecondary}`}>
-                        ({sectionReqs.length} {lang === 'ar' ? 'متطلبات' : 'requirements'} • {domains.length} {lang === 'ar' ? 'معايير' : 'domains'})
+                        ({sectionReqs.length} {lang === 'ar' ? 'متطلبات' : 'requirements'} • {criteria.length} {lang === 'ar' ? 'معايير' : 'criteria'})
                       </span>
                     </div>
                     {isExpanded ? <ChevronUp size={20} className={colors.textSecondary} /> : <ChevronDown size={20} className={colors.textSecondary} />}
@@ -1177,22 +1178,22 @@ const Reports = () => {
                   {isExpanded && (
                     <div className={`p-6 ${colors.bgSecondary}`}>
                       <div className="space-y-6">
-                        {domains.map(domain => {
-                          const domainReqs = sectionReqs.filter(r => r.sub_domain === domain);
-                          const approvedDomainReqs = domainReqs.filter(r => r.answer_status === 'approved');
-                          const completionRate = domainReqs.length > 0
-                            ? Math.round((approvedDomainReqs.length / domainReqs.length) * 100)
+                        {criteria.map(criterion => {
+                          const criterionReqs = sectionReqs.filter(r => r.criterion === criterion);
+                          const approvedCriterionReqs = criterionReqs.filter(r => r.answer_status === 'approved');
+                          const completionRate = criterionReqs.length > 0
+                            ? Math.round((approvedCriterionReqs.length / criterionReqs.length) * 100)
                             : 0;
 
                           return (
-                            <div key={domain} className={`border ${colors.border} rounded-lg p-4 ${colors.bgPrimary}`}>
+                            <div key={criterion} className={`border ${colors.border} rounded-lg p-4 ${colors.bgPrimary}`}>
                               <div className="flex items-center justify-between mb-3">
                                 <h4 className={`text-md font-semibold ${colors.textPrimary}`}>
-                                  {lang === 'ar' ? 'المعيار: ' : 'Domain: '}{domain}
+                                  {lang === 'ar' ? 'المعيار: ' : 'Criterion: '}{criterion}
                                 </h4>
                                 <div className="flex items-center gap-3">
                                   <span className={`text-sm ${colors.textSecondary}`}>
-                                    {approvedDomainReqs.length} / {domainReqs.length} {lang === 'ar' ? 'مكتملة' : 'completed'}
+                                    {approvedCriterionReqs.length} / {criterionReqs.length} {lang === 'ar' ? 'مكتملة' : 'completed'}
                                   </span>
                                   <span className={`text-sm font-bold ${
                                     completionRate >= 75 ? 'text-green-600 dark:text-green-400' :
@@ -1204,7 +1205,7 @@ const Reports = () => {
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                {domainReqs.map(req => {
+                                {criterionReqs.map(req => {
                                   const reqEvidence = evidence.filter(e => e.requirement_id === req.requirement_db_id);
                                   const approvedCount = reqEvidence.filter(e => e.status === 'approved').length;
                                   const rejectedCount = reqEvidence.filter(e => e.status === 'rejected').length;

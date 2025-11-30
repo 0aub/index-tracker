@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.config import settings
+from app.utils.permissions import PermissionChecker, get_permission_checker
 
 security = HTTPBearer()
 
@@ -192,3 +193,20 @@ def optional_current_user(
 
     except JWTError:
         return None
+
+
+def get_permissions(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> PermissionChecker:
+    """
+    Get a PermissionChecker instance for the current user
+
+    Args:
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        PermissionChecker instance for authorization checks
+    """
+    return get_permission_checker(current_user, db)

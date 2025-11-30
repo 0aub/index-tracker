@@ -48,7 +48,7 @@ class MaturityLevelResponse(BaseModel):
 
 # Requirement base schema
 class RequirementBase(BaseModel):
-    code: str = Field(..., min_length=3, max_length=50)
+    code: str = Field(..., min_length=1, max_length=50)
     question_ar: str = Field(..., min_length=5)
     question_en: Optional[str] = None
     main_area_ar: str = Field(..., min_length=2, max_length=200)
@@ -63,6 +63,9 @@ class RequirementBase(BaseModel):
     objective_en: Optional[str] = None
     evidence_description_ar: Optional[str] = None
     evidence_description_en: Optional[str] = None
+
+    # Evidence requirement flag
+    requires_evidence: bool = True
 
 
 # Requirement response with full details
@@ -94,6 +97,7 @@ class RequirementResponse(RequirementBase):
 class RequirementMinimal(BaseModel):
     id: str
     code: str
+    display_order: int
     question_ar: str
     question_en: Optional[str] = None
     main_area_ar: str
@@ -103,6 +107,8 @@ class RequirementMinimal(BaseModel):
     # Evidence description fields for attachment icon
     evidence_description_ar: Optional[str] = None
     evidence_description_en: Optional[str] = None
+    # Evidence requirement flag
+    requires_evidence: bool = True
     # ETARI Answer fields for list view
     answer_status: Optional[str] = None
     # Evidence count for attachment indicator
@@ -114,8 +120,26 @@ class RequirementMinimal(BaseModel):
         from_attributes = True
 
 
+# Schema for requirement creation
+class RequirementCreate(BaseModel):
+    code: Optional[str] = Field(None, min_length=1, max_length=50)  # Optional - auto-generated if not provided
+    question_ar: str = Field(..., min_length=5)
+    question_en: Optional[str] = None
+    main_area_ar: str = Field(..., min_length=2, max_length=200)
+    main_area_en: Optional[str] = Field(None, max_length=200)
+    element_ar: Optional[str] = Field(None, max_length=200)
+    element_en: Optional[str] = Field(None, max_length=200)
+    objective_ar: Optional[str] = None
+    objective_en: Optional[str] = None
+    evidence_description_ar: Optional[str] = None
+    evidence_description_en: Optional[str] = None
+    requires_evidence: bool = True
+    display_order: Optional[int] = None  # Optional - auto-calculated if not provided
+
+
 # Schema for requirement update
 class RequirementUpdate(BaseModel):
+    code: Optional[str] = Field(None, min_length=1, max_length=50)
     question_ar: Optional[str] = Field(None, min_length=5)
     question_en: Optional[str] = None
     main_area_ar: Optional[str] = Field(None, min_length=2, max_length=200)
@@ -128,6 +152,8 @@ class RequirementUpdate(BaseModel):
     objective_en: Optional[str] = None
     evidence_description_ar: Optional[str] = None
     evidence_description_en: Optional[str] = None
+    requires_evidence: Optional[bool] = None
+    display_order: Optional[int] = None
 
 
 # Schema for saving ETARI answer

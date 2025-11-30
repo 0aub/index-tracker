@@ -5,10 +5,16 @@ export interface User {
   name: string;
   name_en: string;
   role: UserRole;
-  department?: string;
+  department?: string; // For backward compatibility
+  department_ar?: string | null;
+  department_en?: string | null;
+  agency_id?: string | null;
+  general_management_id?: string | null;
+  department_id?: string | null;
   active: boolean;
   created_at: string;
   last_login?: string;
+  is_first_login?: boolean;
 }
 
 export enum UserRole {
@@ -24,9 +30,10 @@ export interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   checkAuth: () => void;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 // Requirement Types

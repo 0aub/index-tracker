@@ -15,9 +15,9 @@ const ManagementRoute = ({ children }: ManagementRouteProps) => {
   const { user } = useAuthStore();
 
   // Check if user has management access
-  const isManagement = user?.role === 'index_manager' ||
-                       user?.role === 'section_coordinator' ||
-                       user?.role === 'admin';
+  const isManagement = user?.role === 'INDEX_MANAGER' ||
+                       user?.role === 'SECTION_COORDINATOR' ||
+                       user?.role === 'ADMIN';
 
   if (!isManagement) {
     // Redirect to forbidden page for non-management users

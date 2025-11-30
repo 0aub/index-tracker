@@ -155,7 +155,7 @@ export const IndexSelector: React.FC = () => {
             </div>
 
             {/* Create New Button */}
-            {(user?.role === 'admin' || user?.role === 'index_manager') && (
+            {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
               <>
                 <div className={`border-t ${colors.border}`}></div>
                 <button

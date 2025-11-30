@@ -149,11 +149,6 @@ const Login = () => {
               </button>
             </form>
           </div>
-
-          {/* Footer */}
-          <div className={`mt-8 text-center text-sm ${colors.textTertiary}`}>
-            {lang === 'ar' ? '© 2025 جميع الحقوق محفوظة' : '© 2025 All Rights Reserved'}
-          </div>
         </div>
       </div>
     </div>

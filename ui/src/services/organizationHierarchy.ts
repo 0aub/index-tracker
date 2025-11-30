@@ -2,7 +2,9 @@
  * Organization Hierarchy API Service
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// Build API base URL with /api/v1 prefix (consistent with api.ts)
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = apiUrl.endsWith('/api/v1') ? apiUrl : `${apiUrl}/api/v1`;
 
 export interface Agency {
   id: string;
@@ -45,14 +47,36 @@ export interface OrganizationalHierarchy {
   agencies: Agency[];
 }
 
+// Helper function to get auth token from localStorage
+function getAuthToken(): string | null {
+  try {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      const parsed = JSON.parse(authStorage);
+      return parsed.state?.token || null;
+    }
+  } catch (error) {
+    console.error('Failed to get auth token:', error);
+  }
+  return null;
+}
+
 // Helper function for fetch requests
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...options?.headers as Record<string, string>,
+  };
+
+  // Add Authorization header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {

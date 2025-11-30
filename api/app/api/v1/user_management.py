@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from passlib.context import CryptContext
+import bcrypt
 import uuid
 from datetime import datetime
 
@@ -23,15 +23,15 @@ from app.schemas.user_management import (
     CompleteSetupRequest, CompleteSetupResponse,
     ChangePasswordRequest, ChangePasswordResponse,
     UserWithIndexRoles, UserIndexRole,
-    ResetPasswordRequest, ResetPasswordResponse
+    ResetPasswordRequest, ResetPasswordResponse,
+    UpdateUserStatusRequest, UpdateUserStatusResponse
 )
 from app.utils.password_generator import generate_temp_password, validate_password_strength
 from app.services.email_service import email_service
 from app.config import settings
-from app.api.dependencies import require_admin
+from app.api.dependencies import require_admin, get_current_user
 
 router = APIRouter(prefix="/user-management", tags=["User Management"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ===== User Creation =====
@@ -58,28 +58,6 @@ def create_user(
             detail=f"User with email {user_data.email} already exists"
         )
 
-    # Validate role
-    try:
-        user_role = UserRole(user_data.role.lower())
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role: {user_data.role}. Must be one of: admin, index_manager, section_coordinator, contributor"
-        )
-
-    # If not admin, require index_id
-    if user_role != UserRole.ADMIN and not user_data.index_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="index_id is required for non-admin users"
-        )
-
-    # Verify index exists
-    if user_data.index_id:
-        index = db.query(Index).filter(Index.id == user_data.index_id).first()
-        if not index:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index not found")
-
     # Get default organization
     org = db.query(Organization).first()
     if not org:
@@ -87,9 +65,10 @@ def create_user(
 
     # Generate temporary password
     temp_password = generate_temp_password()
-    hashed_password = pwd_context.hash(temp_password)
+    hashed_password = bcrypt.hashpw(temp_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-    # Create user
+    # Create user with no role (role is assigned per index when user is added to an index)
+    # User is inactive by default until they complete first-time setup
     user_id = str(uuid.uuid4())
     new_user = User(
         id=user_id,
@@ -98,50 +77,24 @@ def create_user(
         hashed_password=hashed_password,
         full_name_ar="مستخدم جديد",  # Placeholder, will be updated on first login
         full_name_en="New User",
-        role=user_role,
+        role=UserRole.UNASSIGNED,  # No role until assigned to an index
         organization_id=org.id,
-        is_active=True,
+        is_active=False,  # Inactive until first-time setup is completed
         is_first_login=True,
-        temp_password=temp_password  # Store temporarily for email
+        temp_password=temp_password
     )
 
     db.add(new_user)
-    db.flush()
-
-    # If index_id provided, create IndexUser relationship
-    if user_data.index_id:
-        index_user = IndexUser(
-            id=str(uuid.uuid4()),
-            index_id=user_data.index_id,
-            user_id=user_id,
-            role=user_role.value,
-            added_by=user_id  # For now, self-assigned; in production use current user's ID
-        )
-        db.add(index_user)
-
     db.commit()
     db.refresh(new_user)
 
-    # Send welcome email
-    email_sent = False
-    try:
-        email_sent = email_service.send_welcome_email(
-            user_email=new_user.email,
-            user_name_ar="مستخدم جديد",
-            temp_password=temp_password,
-            login_url=settings.FRONTEND_URL
-        )
-    except Exception as e:
-        # Log error but don't fail the user creation
-        print(f"Failed to send welcome email: {e}")
-
+    # Don't send email - admin will manually share credentials
     return UserCreateResponse(
         id=new_user.id,
         email=new_user.email,
-        role=new_user.role.value,
-        temp_password=temp_password,  # Return for admin to see (in case email fails)
-        is_first_login=True,
-        message=f"User created successfully. {'Welcome email sent.' if email_sent else 'Email could not be sent - please provide credentials manually.'}"
+        temp_password=temp_password,
+        is_active=False,
+        message="User created successfully"
     )
 
 
@@ -151,7 +104,7 @@ def create_user(
 def complete_first_time_setup(
     setup_data: CompleteSetupRequest,
     db: Session = Depends(get_db),
-    # TODO: Add current_user dependency from JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Complete first-time user setup
@@ -161,63 +114,67 @@ def complete_first_time_setup(
     - Organizational hierarchy (Agency, GM, Department)
     - New password
     """
-    # TODO: Get current user from JWT token
-    # For now, we'll accept user_id in request (temporary)
-    # In production, this should come from the authenticated user
+    print(f"[COMPLETE_SETUP] User: {current_user.email}, is_first_login: {current_user.is_first_login}")
+    print(f"[COMPLETE_SETUP] Data received: {setup_data}")
 
-    # Validate password strength
-    is_valid, error_msg = validate_password_strength(setup_data.new_password)
+    # Verify user is in first-time setup mode
+    if not current_user.is_first_login:
+        print(f"[COMPLETE_SETUP] ERROR: User has already completed setup")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="المستخدم أكمل الإعداد مسبقاً")
+
+    # Validate password strength (use Arabic error messages)
+    is_valid, error_msg = validate_password_strength(setup_data.new_password, lang='ar')
+    print(f"[COMPLETE_SETUP] Password validation: {is_valid}, error: {error_msg}")
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     # Verify organizational hierarchy exists
     agency = db.query(Agency).filter(Agency.id == setup_data.agency_id).first()
     if not agency:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agency not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الوكالة غير موجودة")
 
     gm = db.query(GeneralManagement).filter(GeneralManagement.id == setup_data.general_management_id).first()
     if not gm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="General Management not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الإدارة العامة غير موجودة")
 
     dept = db.query(Department).filter(Department.id == setup_data.department_id).first()
     if not dept:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الإدارة غير موجودة")
 
     # Verify hierarchy is valid (GM belongs to Agency, Dept belongs to GM)
     if gm.agency_id != agency.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="General Management does not belong to selected Agency")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="الإدارة العامة لا تنتمي للوكالة المختارة")
 
     if dept.general_management_id != gm.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Department does not belong to selected General Management")
-
-    # TODO: Get user from JWT token
-    # For now, find user by is_first_login=True (temporary solution)
-    # In production: user = get_current_user_from_token()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="الإدارة لا تنتمي للإدارة العامة المختارة")
 
     # Update user
-    # user.first_name_ar = setup_data.first_name_ar
-    # user.last_name_ar = setup_data.last_name_ar
-    # user.first_name_en = setup_data.first_name_en
-    # user.last_name_en = setup_data.last_name_en
-    # user.full_name_ar = f"{setup_data.first_name_ar} {setup_data.last_name_ar}"
-    # user.full_name_en = f"{setup_data.first_name_en} {setup_data.last_name_en}"
-    # user.agency_id = setup_data.agency_id
-    # user.general_management_id = setup_data.general_management_id
-    # user.department_id = setup_data.department_id
-    # user.hashed_password = pwd_context.hash(setup_data.new_password)
-    # user.is_first_login = False
-    # user.temp_password = None
-    # user.password_changed_at = datetime.utcnow()
+    current_user.first_name_ar = setup_data.first_name_ar
+    current_user.last_name_ar = setup_data.last_name_ar
+    current_user.first_name_en = setup_data.first_name_en
+    current_user.last_name_en = setup_data.last_name_en
+    current_user.full_name_ar = f"{setup_data.first_name_ar} {setup_data.last_name_ar}"
+    current_user.full_name_en = f"{setup_data.first_name_en} {setup_data.last_name_en}"
+    current_user.agency_id = setup_data.agency_id
+    current_user.general_management_id = setup_data.general_management_id
+    current_user.department_id = setup_data.department_id
 
-    # db.commit()
-    # db.refresh(user)
+    # Hash and update password
+    hashed_password = bcrypt.hashpw(setup_data.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    current_user.hashed_password = hashed_password
+    current_user.is_first_login = False
+    current_user.is_active = True  # Activate user after completing setup
+    current_user.temp_password = None
+    current_user.password_changed_at = datetime.utcnow()
 
-    # Temporary response (until JWT is implemented)
+    db.commit()
+    db.refresh(current_user)
+
     return CompleteSetupResponse(
-        message="Setup endpoint ready. JWT authentication will be added next.",
-        user_id="pending-jwt-implementation",
-        full_name_ar=f"{setup_data.first_name_ar} {setup_data.last_name_ar}",
-        full_name_en=f"{setup_data.first_name_en} {setup_data.last_name_en}"
+        message="Setup completed successfully!",
+        user_id=current_user.id,
+        full_name_ar=current_user.full_name_ar,
+        full_name_en=current_user.full_name_en
     )
 
 
@@ -356,7 +313,7 @@ def reset_user_password(
 
     # Generate new temporary password
     temp_password = generate_temp_password()
-    hashed_password = pwd_context.hash(temp_password)
+    hashed_password = bcrypt.hashpw(temp_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
     # Update user
     user.hashed_password = hashed_password
@@ -381,4 +338,42 @@ def reset_user_password(
         message="Password reset successfully",
         temp_password=temp_password,
         email_sent=email_sent
+    )
+
+
+# ===== Activate/Deactivate User (Admin) =====
+
+@router.post("/users/update-status", response_model=UpdateUserStatusResponse)
+def update_user_status(
+    status_data: UpdateUserStatusRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Activate or deactivate a user (Admin only)
+
+    Inactive users cannot login to the system
+    """
+    user = db.query(User).filter(User.id == status_data.user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Prevent deactivating admin users
+    if user.role == UserRole.ADMIN and not status_data.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot deactivate admin users"
+        )
+
+    # Update user status
+    user.is_active = status_data.is_active
+    db.commit()
+
+    status_text = "activated" if status_data.is_active else "deactivated"
+
+    return UpdateUserStatusResponse(
+        message=f"User {status_text} successfully",
+        user_id=user.id,
+        is_active=user.is_active
     )

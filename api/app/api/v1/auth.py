@@ -3,7 +3,7 @@ Authentication API Endpoints - Login, Logout, Token Management
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timedelta
 
@@ -13,7 +13,6 @@ from app.api.dependencies import create_access_token, get_current_user
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ===== Request/Response Schemas =====
@@ -37,6 +36,11 @@ class CurrentUserResponse(BaseModel):
     role: str
     is_first_login: bool
     is_active: bool
+    department_ar: str | None
+    department_en: str | None
+    agency_id: str | None
+    general_management_id: str | None
+    department_id: str | None
 
 
 # ===== Login Endpoint =====
@@ -60,8 +64,18 @@ def login(
             detail="Incorrect email or password"
         )
 
-    # Verify password
-    if not pwd_context.verify(login_data.password, user.hashed_password):
+    # Verify password using bcrypt directly
+    try:
+        password_bytes = login_data.password.encode('utf-8')
+        hashed_bytes = user.hashed_password.encode('utf-8')
+
+        if not bcrypt.checkpw(password_bytes, hashed_bytes):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password"
+            )
+    except Exception as e:
+        # Handle any bcrypt errors
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
@@ -94,7 +108,12 @@ def login(
             "full_name_en": user.full_name_en,
             "role": user.role.value,
             "is_first_login": user.is_first_login,
-            "is_active": user.is_active
+            "is_active": user.is_active,
+            "department_ar": user.department_ar,
+            "department_en": user.department_en,
+            "agency_id": user.agency_id,
+            "general_management_id": user.general_management_id,
+            "department_id": user.department_id
         }
     )
 
@@ -115,7 +134,12 @@ def get_me(
         full_name_en=current_user.full_name_en,
         role=current_user.role.value,
         is_first_login=current_user.is_first_login,
-        is_active=current_user.is_active
+        is_active=current_user.is_active,
+        department_ar=current_user.department_ar,
+        department_en=current_user.department_en,
+        agency_id=current_user.agency_id,
+        general_management_id=current_user.general_management_id,
+        department_id=current_user.department_id
     )
 
 

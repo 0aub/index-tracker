@@ -2,7 +2,9 @@
  * User Management API Service
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// Build API base URL with /api/v1 prefix (consistent with api.ts)
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = apiUrl.endsWith('/api/v1') ? apiUrl : `${apiUrl}/api/v1`;
 
 export interface UserIndexRole {
   index_id: string;
@@ -37,16 +39,13 @@ export interface UserWithRoles {
 
 export interface CreateUserRequest {
   email: string;
-  role: string;
-  index_id?: string;
 }
 
 export interface CreateUserResponse {
   id: string;
   email: string;
-  role: string;
   temp_password: string;
-  is_first_login: boolean;
+  is_active: boolean;
   message: string;
 }
 
@@ -56,14 +55,47 @@ export interface ResetPasswordResponse {
   email_sent: boolean;
 }
 
+export interface UpdateUserStatusRequest {
+  user_id: string;
+  is_active: boolean;
+}
+
+export interface UpdateUserStatusResponse {
+  message: string;
+  user_id: string;
+  is_active: boolean;
+}
+
+// Helper function to get auth token from localStorage
+function getAuthToken(): string | null {
+  try {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      const parsed = JSON.parse(authStorage);
+      return parsed.state?.token || null;
+    }
+  } catch (error) {
+    console.error('Failed to get auth token:', error);
+  }
+  return null;
+}
+
 // Helper function for fetch requests
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...options?.headers as Record<string, string>,
+  };
+
+  // Add Authorization header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -124,6 +156,14 @@ export const userManagementApi = {
     new_password: string;
   }) => {
     return fetchJson(`${API_URL}/user-management/complete-setup`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Update user status (activate/deactivate)
+  updateUserStatus: async (data: UpdateUserStatusRequest): Promise<UpdateUserStatusResponse> => {
+    return fetchJson<UpdateUserStatusResponse>(`${API_URL}/user-management/users/update-status`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

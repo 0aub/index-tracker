@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ChevronRight, ChevronLeft, Users, UserCog, Loader2, AlertCircle, Layers, FileText, Paperclip, Lightbulb } from 'lucide-react';
+import { Search, ChevronRight, ChevronLeft, Users, UserCog, Loader2, AlertCircle, Layers, FileText, Paperclip, Lightbulb, Plus, Edit2, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
 import LevelIndicator from '../components/LevelIndicator';
 import AssigneeManager from '../components/requirements/AssigneeManager';
+import { RequirementFormModal, RequirementFormData } from '../components/requirements/RequirementFormModal';
+import { DeleteRequirementDialog } from '../components/requirements/DeleteRequirementDialog';
 import { colors, patterns } from '../utils/darkMode';
 import { api, Requirement, AssignmentWithUser } from '../services/api';
 import toast from 'react-hot-toast';
@@ -29,16 +31,44 @@ const Requirements = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Check if user has management access (can edit assignees)
-  const canManageAssignees = user?.role === 'index_manager' ||
-                            user?.role === 'section_coordinator' ||
-                            user?.role === 'admin';
+  const canManageAssignees = user?.role === 'INDEX_MANAGER' ||
+                            user?.role === 'SECTION_COORDINATOR' ||
+                            user?.role === 'ADMIN';
+
+  // Check if user can manage requirements (create/edit/delete/reorder)
+  const canManageRequirements = canManageAssignees; // Same permissions as assignee management
+
+  // Modal states for requirement CRUD
+  const [showRequirementModal, setShowRequirementModal] = useState(false);
+  const [editingRequirement, setEditingRequirement] = useState<Requirement | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletingRequirement, setDeletingRequirement] = useState<Requirement | null>(null);
+  const [sections, setSections] = useState<{
+    main_areas: Array<{ ar: string; en: string }>;
+    sub_domains: Array<{ ar: string; en: string }>;
+    elements: Array<{ ar: string; en: string }>;
+  } | null>(null);
 
   // Load requirements when index changes
   useEffect(() => {
     if (currentIndex) {
       loadRequirements();
+      loadSections();
     }
   }, [currentIndex?.id]);
+
+  // Load sections data for autocomplete
+  const loadSections = async () => {
+    if (!currentIndex) return;
+
+    try {
+      const sectionsData = await api.requirements.getSections(currentIndex.id);
+      setSections(sectionsData);
+    } catch (err) {
+      console.error('Failed to load sections:', err);
+      // Non-critical - continue without sections
+    }
+  };
 
   const loadRequirements = async () => {
     if (!currentIndex) {
@@ -91,12 +121,18 @@ const Requirements = () => {
 
     return matchesSearch && matchesSection;
   }).sort((a, b) => {
-    // Sort by code (handles both numeric and alphanumeric codes)
-    return a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' });
+    // Sort by display_order
+    return a.display_order - b.display_order;
   });
 
-  // Get unique main areas (sections) from requirements
-  const sections = Array.from(new Set(requirements.map(r => r.main_area_ar))).sort();
+  // Get unique main areas (sections) from requirements, preserving display order
+  const sortedRequirements = [...requirements].sort((a, b) => a.display_order - b.display_order);
+  const mainAreas: string[] = [];
+  sortedRequirements.forEach(r => {
+    if (!mainAreas.includes(r.main_area_ar)) {
+      mainAreas.push(r.main_area_ar);
+    }
+  });
 
   const handleSaveAssignees = async (requirementId: string) => {
     // Reload requirements to get updated assignments
@@ -106,6 +142,91 @@ const Requirements = () => {
   const handleEditAssignees = (e: React.MouseEvent, requirementId: string) => {
     e.stopPropagation(); // Prevent row click navigation
     setEditingAssignees(requirementId);
+  };
+
+  // Requirement CRUD handlers
+  const handleCreateRequirement = () => {
+    setEditingRequirement(null);
+    setShowRequirementModal(true);
+  };
+
+  const handleEditRequirement = (e: React.MouseEvent, requirement: Requirement) => {
+    e.stopPropagation(); // Prevent row click navigation
+    setEditingRequirement(requirement);
+    setShowRequirementModal(true);
+  };
+
+  const handleDeleteRequirement = async (e: React.MouseEvent, requirement: Requirement) => {
+    e.stopPropagation(); // Prevent row click navigation
+    setDeletingRequirement(requirement);
+    setShowDeleteDialog(true);
+  };
+
+  const handleSubmitRequirement = async (data: RequirementFormData) => {
+    if (!currentIndex || !user) return;
+
+    try {
+      if (editingRequirement) {
+        // Update existing requirement
+        await api.requirements.updateRequirement(editingRequirement.id, user.id, data);
+        toast.success(lang === 'ar' ? 'تم تحديث المتطلب بنجاح' : 'Requirement updated successfully');
+      } else {
+        // Create new requirement
+        await api.requirements.create(currentIndex.id, user.id, data);
+        toast.success(lang === 'ar' ? 'تم إنشاء المتطلب بنجاح' : 'Requirement created successfully');
+      }
+
+      setShowRequirementModal(false);
+      setEditingRequirement(null);
+      await loadRequirements();
+      await loadSections(); // Refresh sections for autocomplete
+    } catch (err: any) {
+      console.error('Failed to save requirement:', err);
+      toast.error(
+        lang === 'ar'
+          ? err.response?.data?.detail || 'فشل حفظ المتطلب'
+          : err.response?.data?.detail || 'Failed to save requirement'
+      );
+    }
+  };
+
+  const handleConfirmDelete = async (force: boolean) => {
+    if (!deletingRequirement || !user) return;
+
+    try {
+      await api.requirements.delete(deletingRequirement.id, user.id, force);
+      toast.success(lang === 'ar' ? 'تم حذف المتطلب بنجاح' : 'Requirement deleted successfully');
+      setShowDeleteDialog(false);
+      setDeletingRequirement(null);
+      await loadRequirements();
+      await loadSections(); // Refresh sections
+    } catch (err: any) {
+      console.error('Failed to delete requirement:', err);
+      toast.error(
+        lang === 'ar'
+          ? err.response?.data?.detail || 'فشل حذف المتطلب'
+          : err.response?.data?.detail || 'Failed to delete requirement'
+      );
+    }
+  };
+
+  const handleReorder = async (e: React.MouseEvent, requirementId: string, direction: 'up' | 'down') => {
+    e.stopPropagation(); // Prevent row click navigation
+
+    if (!currentIndex || !user) return;
+
+    try {
+      await api.requirements.reorder(currentIndex.id, requirementId, direction, user.id);
+      toast.success(lang === 'ar' ? 'تم إعادة الترتيب بنجاح' : 'Reordered successfully');
+      await loadRequirements();
+    } catch (err: any) {
+      console.error('Failed to reorder requirement:', err);
+      toast.error(
+        lang === 'ar'
+          ? err.response?.data?.detail || 'فشل إعادة الترتيب'
+          : err.response?.data?.detail || 'Failed to reorder'
+      );
+    }
   };
 
   // No index selected
@@ -177,13 +298,24 @@ const Requirements = () => {
   return (
     <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className={`text-3xl font-bold ${colors.textPrimary}`}>
-            {lang === 'ar' ? 'إدارة المتطلبات' : 'Requirements Management'}
-          </h1>
-          <p className={`mt-2 ${colors.textSecondary}`}>
-            {lang === 'ar' ? 'إدارة ومتابعة جميع متطلبات المؤشر' : 'Manage and track all index requirements'}
-          </p>
+        <div className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className={`text-3xl font-bold ${colors.textPrimary}`}>
+              {lang === 'ar' ? 'إدارة المتطلبات' : 'Requirements Management'}
+            </h1>
+            <p className={`mt-2 ${colors.textSecondary}`}>
+              {lang === 'ar' ? 'إدارة ومتابعة جميع متطلبات المؤشر' : 'Manage and track all index requirements'}
+            </p>
+          </div>
+          {canManageRequirements && (
+            <button
+              onClick={handleCreateRequirement}
+              className={`flex items-center gap-2 px-4 py-2 ${patterns.button}`}
+            >
+              <Plus size={20} />
+              {lang === 'ar' ? 'إضافة متطلب' : 'Add Requirement'}
+            </button>
+          )}
         </div>
 
         <div className={`${patterns.section} p-6 mb-6`}>
@@ -205,7 +337,7 @@ const Requirements = () => {
               className={`px-4 py-2 ${patterns.select}`}
             >
               <option value="all">{lang === 'ar' ? 'جميع الأقسام' : 'All Sections'}</option>
-              {sections.map(section => (
+              {mainAreas.map(section => (
                 <option key={section} value={section}>
                   {section}
                 </option>
@@ -232,22 +364,32 @@ const Requirements = () => {
                   <th className={`w-52 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
                     {lang === 'ar' ? 'المسؤولين' : 'Assignees'}
                   </th>
+                  {canManageRequirements && (
+                    <th className={`w-40 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
+                      {lang === 'ar' ? 'الإجراءات' : 'Actions'}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgb(var(--color-border))]">
-                {sections.map(section => {
+                {mainAreas.map(section => {
                   const sectionReqs = filteredRequirements.filter(r => r.main_area_ar === section);
                   if (sectionReqs.length === 0 && selectedSection !== 'all' && selectedSection !== section) return null;
                   if (sectionReqs.length === 0 && selectedSection === 'all') return null;
 
-                  // Get unique sub-domains within this section
-                  const subDomains = Array.from(new Set(sectionReqs.map(r => r.sub_domain_ar))).sort();
+                  // Get unique criteria (المعيار/element_ar) within this section, preserving display order
+                  const criteria: string[] = [];
+                  sectionReqs.forEach(r => {
+                    if (r.element_ar && !criteria.includes(r.element_ar)) {
+                      criteria.push(r.element_ar);
+                    }
+                  });
 
                   return (
                     <>
                       {/* Section Header Row */}
                       <tr key={`section-${section}`}>
-                        <td colSpan={4} className="p-0">
+                        <td colSpan={canManageRequirements ? 5 : 4} className="p-0">
                           <div className={`${colors.primary} px-5 py-3`}>
                             <h3 className="text-base font-semibold text-white">
                               {section}
@@ -256,25 +398,25 @@ const Requirements = () => {
                         </td>
                       </tr>
 
-                      {/* Sub-domain groups */}
-                      {subDomains.map(subDomain => {
-                        const subDomainReqs = sectionReqs.filter(r => r.sub_domain_ar === subDomain);
+                      {/* Criteria groups (المعيار) */}
+                      {criteria.map(criterion => {
+                        const criterionReqs = sectionReqs.filter(r => r.element_ar === criterion);
 
                         return (
                           <>
-                            {/* Sub-domain Header Row */}
-                            <tr key={`subdomain-${section}-${subDomain}`}>
-                              <td colSpan={4} className="p-0">
+                            {/* Criterion Header Row (المعيار) */}
+                            <tr key={`criterion-${section}-${criterion}`}>
+                              <td colSpan={canManageRequirements ? 5 : 4} className="p-0">
                                 <div className={`${colors.bgTertiary} px-5 py-2`}>
                                   <h4 className={`text-sm font-semibold ${colors.textPrimary}`}>
-                                    {subDomain}
+                                    {criterion}
                                   </h4>
                                 </div>
                               </td>
                             </tr>
 
                             {/* Requirement Rows */}
-                            {subDomainReqs.map(req => {
+                            {criterionReqs.map(req => {
                         const assignees = req.assignments || [];
 
                         return (
@@ -338,9 +480,9 @@ const Requirements = () => {
                                   // Show single dot status indicator for ETARI - 5 colors for 5 statuses
                                   <div
                                     className={`w-4 h-4 rounded-full transition-all shadow-sm ${
-                                      req.answer_status === 'approved' ? 'bg-green-500' :
+                                      req.answer_status === 'approved' ? 'bg-blue-500' :
                                       req.answer_status === 'rejected' ? 'bg-orange-500' :
-                                      req.answer_status === 'pending_review' ? 'bg-blue-500' :
+                                      req.answer_status === 'pending_review' ? 'bg-green-500' :
                                       req.answer_status === 'draft' ? 'bg-yellow-500' :
                                       'bg-red-500'
                                     }`}
@@ -399,6 +541,59 @@ const Requirements = () => {
                                 )}
                               </div>
                             </td>
+
+                            {/* Actions - Edit, Delete, Reorder */}
+                            {canManageRequirements && (
+                              <td className="px-4 py-4">
+                                <div className="flex items-center justify-center gap-1">
+                                  {/* Reorder Up */}
+                                  <button
+                                    onClick={(e) => handleReorder(e, req.id, 'up')}
+                                    disabled={req.display_order === 1}
+                                    className={`p-1.5 rounded-lg transition ${
+                                      req.display_order === 1
+                                        ? 'opacity-30 cursor-not-allowed'
+                                        : `${colors.textSecondary} hover:${colors.primaryIcon} hover:bg-blue-50 dark:hover:${colors.bgHover}`
+                                    }`}
+                                    title={lang === 'ar' ? 'تحريك لأعلى' : 'Move Up'}
+                                  >
+                                    <ChevronUp size={16} />
+                                  </button>
+
+                                  {/* Reorder Down */}
+                                  <button
+                                    onClick={(e) => handleReorder(e, req.id, 'down')}
+                                    disabled={req.display_order === requirements.length}
+                                    className={`p-1.5 rounded-lg transition ${
+                                      req.display_order === requirements.length
+                                        ? 'opacity-30 cursor-not-allowed'
+                                        : `${colors.textSecondary} hover:${colors.primaryIcon} hover:bg-blue-50 dark:hover:${colors.bgHover}`
+                                    }`}
+                                    title={lang === 'ar' ? 'تحريك لأسفل' : 'Move Down'}
+                                  >
+                                    <ChevronDown size={16} />
+                                  </button>
+
+                                  {/* Edit */}
+                                  <button
+                                    onClick={(e) => handleEditRequirement(e, req)}
+                                    className={`p-1.5 ${colors.textSecondary} hover:${colors.primaryIcon} hover:bg-yellow-50 dark:hover:${colors.bgHover} rounded-lg transition`}
+                                    title={lang === 'ar' ? 'تعديل المتطلب' : 'Edit Requirement'}
+                                  >
+                                    <Edit2 size={16} />
+                                  </button>
+
+                                  {/* Delete */}
+                                  <button
+                                    onClick={(e) => handleDeleteRequirement(e, req)}
+                                    className={`p-1.5 ${colors.textSecondary} hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition`}
+                                    title={lang === 'ar' ? 'حذف المتطلب' : 'Delete Requirement'}
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -437,6 +632,42 @@ const Requirements = () => {
           lang={lang}
         />
       )}
+
+      {/* Requirement Form Modal (Create/Edit) */}
+      {currentIndex && (
+        <RequirementFormModal
+          isOpen={showRequirementModal}
+          onClose={() => {
+            setShowRequirementModal(false);
+            setEditingRequirement(null);
+          }}
+          onSubmit={handleSubmitRequirement}
+          requirement={editingRequirement}
+          indexId={currentIndex.id}
+          sections={sections}
+          maxDisplayOrder={requirements.length > 0 ? Math.max(...requirements.map(r => r.display_order)) : 0}
+        />
+      )}
+
+      {/* Delete Requirement Dialog */}
+      <DeleteRequirementDialog
+        isOpen={showDeleteDialog}
+        onClose={() => {
+          setShowDeleteDialog(false);
+          setDeletingRequirement(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        requirement={deletingRequirement}
+        hasData={
+          deletingRequirement
+            ? {
+                has_answer: !!deletingRequirement.answer_ar,
+                evidence_count: deletingRequirement.evidence_count || 0,
+                recommendation_count: deletingRequirement.recommendations_count || 0,
+              }
+            : null
+        }
+      />
     </div>
   );
 };

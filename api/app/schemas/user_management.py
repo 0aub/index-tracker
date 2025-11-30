@@ -18,9 +18,8 @@ class UserCreateResponse(BaseModel):
     """Response after creating a user"""
     id: str
     email: str
-    role: str
     temp_password: str
-    is_first_login: bool
+    is_active: bool
     message: str
 
 
@@ -105,3 +104,17 @@ class ResetPasswordResponse(BaseModel):
     message: str
     temp_password: str
     email_sent: bool
+
+
+# Activate/Deactivate User
+class UpdateUserStatusRequest(BaseModel):
+    """Request to activate or deactivate a user"""
+    user_id: str
+    is_active: bool
+
+
+class UpdateUserStatusResponse(BaseModel):
+    """Response after updating user status"""
+    message: str
+    user_id: str
+    is_active: bool

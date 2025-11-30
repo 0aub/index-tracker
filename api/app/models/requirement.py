@@ -44,6 +44,9 @@ class Requirement(Base):
     # Order/Display
     display_order = Column(Integer, nullable=False, default=0)
 
+    # Evidence requirement flag
+    requires_evidence = Column(Boolean, default=True, nullable=False)  # Whether this requirement needs evidence/attachments
+
     # ETARI Answer fields (for question-answer based indices)
     answer_ar = Column(Text, nullable=True)  # Answer text in Arabic
     answer_en = Column(Text, nullable=True)  # Answer text in English

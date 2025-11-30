@@ -15,10 +15,12 @@ RUN npm install
 COPY . .
 
 # Accept build arguments for environment variables
+ARG VITE_ADMIN_EMAIL=admin@example.com
 ARG VITE_ADMIN_PASSWORD=ChangeThisPassword123
 ARG VITE_API_URL=http://localhost:8000
 
 # Set environment variables for build
+ENV VITE_ADMIN_EMAIL=$VITE_ADMIN_EMAIL
 ENV VITE_ADMIN_PASSWORD=$VITE_ADMIN_PASSWORD
 ENV VITE_API_URL=$VITE_API_URL
 

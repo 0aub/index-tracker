@@ -126,7 +126,7 @@ const IndexCreate: React.FC = () => {
         name_ar: selectedTemplateData.name_ar,
         name_en: selectedTemplateData.name_en,
         version: '1.0',
-        organization_id: user?.organizationId || 'default-org',
+        organization_id: '404bb2f7-672d-4f65-b907-6b2bea76a55f', // Default organization
         created_by_user_id: user?.id || 'unknown',
       });
 

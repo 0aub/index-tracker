@@ -4,8 +4,10 @@ import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ManagementRoute from './components/auth/ManagementRoute';
+import AdminRoute from './components/auth/AdminRoute';
 import Login from './pages/Login';
 import MainLayout from './components/common/MainLayout';
+import Home from './pages/Home';
 import Indices from './pages/Indices';
 import IndexCreate from './pages/IndexCreate';
 import Dashboard from './pages/Dashboard';
@@ -90,11 +92,36 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/index" replace />} />
-            <Route path="index" element={<Indices />} />
-            <Route path="index/new" element={<IndexCreate />} />
+            <Route index element={<Home />} />
+            <Route path="home" element={<Home />} />
+            {/* Index Management - Only accessible to management team */}
+            <Route
+              path="index"
+              element={
+                <ManagementRoute>
+                  <Indices />
+                </ManagementRoute>
+              }
+            />
+            <Route
+              path="index/new"
+              element={
+                <ManagementRoute>
+                  <IndexCreate />
+                </ManagementRoute>
+              }
+            />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="reports" element={<Reports />} />
+            {/* Reports - Only accessible to management team */}
+            <Route
+              path="reports"
+              element={
+                <ManagementRoute>
+                  <Reports />
+                </ManagementRoute>
+              }
+            />
+            {/* Requirements - Accessible to all authenticated users */}
             <Route path="requirements" element={<Requirements />} />
             <Route path="requirements/:id" element={<RequirementDetail />} />
             {/* Tasks page - Only accessible to management team (index_manager, section_coordinator, admin) */}
@@ -106,9 +133,25 @@ function App() {
                 </ManagementRoute>
               }
             />
-            <Route path="users" element={<Users />} />
+            {/* Users - Only accessible to management team */}
+            <Route
+              path="users"
+              element={
+                <ManagementRoute>
+                  <Users />
+                </ManagementRoute>
+              }
+            />
             {/* Organization Hierarchy - Admin only */}
-            <Route path="organization-hierarchy" element={<OrganizationHierarchy />} />
+            <Route
+              path="organization-hierarchy"
+              element={
+                <AdminRoute>
+                  <OrganizationHierarchy />
+                </AdminRoute>
+              }
+            />
+            {/* Settings - Accessible to all authenticated users */}
             <Route path="settings" element={<Settings />} />
           </Route>
 

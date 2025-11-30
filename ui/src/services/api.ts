@@ -2,7 +2,9 @@
  * API Service - Handles all backend API calls
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// Build API base URL with /api/v1 prefix
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = apiUrl.endsWith('/api/v1') ? apiUrl : `${apiUrl}/api/v1`;
 
 // ============================================================================
 // Types
@@ -103,6 +105,7 @@ export interface MaturityLevel {
 export interface Requirement {
   id: string;
   code: string;
+  display_order: number;
   question_ar: string;
   question_en: string | null;
   main_area_ar: string;
@@ -116,6 +119,8 @@ export interface Requirement {
   objective_en?: string | null;
   evidence_description_ar?: string | null;
   evidence_description_en?: string | null;
+  // Evidence requirement flag
+  requires_evidence: boolean;
   // ETARI Answer fields
   answer_ar?: string | null;
   answer_en?: string | null;
@@ -131,7 +136,6 @@ export interface Requirement {
   // Recommendations count (populated in list view)
   recommendations_count?: number;
   index_id: string;
-  display_order: number;
   maturity_levels: MaturityLevel[];
   created_at: string;
   updated_at: string;
@@ -309,7 +313,7 @@ export interface IndexUserWithDetails extends IndexUser {
 }
 
 // ============================================================================
-// API Error Handling
+// API Error Handling & Auth
 // ============================================================================
 
 class APIError extends Error {
@@ -321,6 +325,58 @@ class APIError extends Error {
     super(message);
     this.name = 'APIError';
   }
+}
+
+// Helper function to get auth token from localStorage
+function getAuthToken(): string | null {
+  try {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      const parsed = JSON.parse(authStorage);
+      return parsed.state?.token || null;
+    }
+  } catch (error) {
+    console.error('Failed to get auth token:', error);
+  }
+  return null;
+}
+
+// Helper function to get auth headers for JSON requests
+function getAuthHeaders(): HeadersInit {
+  const token = getAuthToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
+// Helper function to get auth headers for FormData/file uploads (no Content-Type)
+function getAuthHeadersForUpload(): HeadersInit {
+  const token = getAuthToken();
+  const headers: HeadersInit = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
+// Helper function to add auth headers to existing headers
+function addAuthToHeaders(headers: HeadersInit = {}): HeadersInit {
+  const token = getAuthToken();
+  if (token) {
+    return {
+      ...headers,
+      'Authorization': `Bearer ${token}`,
+    };
+  }
+  return headers;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -357,9 +413,9 @@ export const indicesAPI = {
 
     const response = await fetch(`${API_BASE_URL}/indices?${queryParams}`, {
       cache: 'no-store',
-      headers: {
+      headers: addAuthToHeaders({
         'Cache-Control': 'no-cache'
-      }
+      })
     });
     return handleResponse<Index[]>(response);
   },
@@ -368,7 +424,9 @@ export const indicesAPI = {
    * Get single index by ID
    */
   async getById(id: string): Promise<Index> {
-    const response = await fetch(`${API_BASE_URL}/indices/${id}`);
+    const response = await fetch(`${API_BASE_URL}/indices/${id}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Index>(response);
   },
 
@@ -408,6 +466,7 @@ export const indicesAPI = {
 
     const response = await fetch(`${API_BASE_URL}/indices/upload`, {
       method: 'POST',
+      headers: getAuthHeadersForUpload(),
       body: formData,
     });
     return handleResponse<Index>(response);
@@ -428,7 +487,7 @@ export const indicesAPI = {
   ): Promise<Index> {
     const response = await fetch(`${API_BASE_URL}/indices/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Index>(response);
@@ -446,6 +505,7 @@ export const indicesAPI = {
 
     const response = await fetch(url, {
       method: 'DELETE',
+      headers: addAuthToHeaders(),
     });
     if (!response.ok) {
       throw new APIError('Failed to delete index', response.status);
@@ -463,7 +523,9 @@ export const indicesAPI = {
     total_unique_areas: number;
     expected_levels_per_requirement: number;
   }> {
-    const response = await fetch(`${API_BASE_URL}/indices/${id}/statistics`);
+    const response = await fetch(`${API_BASE_URL}/indices/${id}/statistics`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse(response);
   },
 
@@ -486,7 +548,9 @@ export const indicesAPI = {
       review_comments: number;
     }>;
   }> {
-    const response = await fetch(`${API_BASE_URL}/indices/${id}/user-engagement`);
+    const response = await fetch(`${API_BASE_URL}/indices/${id}/user-engagement`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse(response);
   },
 
@@ -496,6 +560,7 @@ export const indicesAPI = {
   async complete(id: string): Promise<Index> {
     const response = await fetch(`${API_BASE_URL}/indices/${id}/complete`, {
       method: 'POST',
+      headers: addAuthToHeaders(),
     });
     return handleResponse<Index>(response);
   },
@@ -516,7 +581,9 @@ export const indicesAPI = {
       created_at: string;
     }>;
   }> {
-    const response = await fetch(`${API_BASE_URL}/indices/${id}/recommendations`);
+    const response = await fetch(`${API_BASE_URL}/indices/${id}/recommendations`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse(response);
   },
 
@@ -531,7 +598,9 @@ export const indicesAPI = {
     if (params?.organization_id) queryParams.append('organization_id', params.organization_id);
     if (params?.index_type) queryParams.append('index_type', params.index_type);
 
-    const response = await fetch(`${API_BASE_URL}/indices/completed/list?${queryParams}`);
+    const response = await fetch(`${API_BASE_URL}/indices/completed/list?${queryParams}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Index[]>(response);
   },
 };
@@ -556,7 +625,9 @@ export const requirementsAPI = {
     if (params?.skip) queryParams.append('skip', params.skip.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
 
-    const response = await fetch(`${API_BASE_URL}/requirements?${queryParams}`);
+    const response = await fetch(`${API_BASE_URL}/requirements?${queryParams}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Requirement[]>(response);
   },
 
@@ -564,7 +635,9 @@ export const requirementsAPI = {
    * Get single requirement with all details
    */
   async getById(id: string): Promise<Requirement> {
-    const response = await fetch(`${API_BASE_URL}/requirements/${id}`);
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Requirement>(response);
   },
 
@@ -584,7 +657,7 @@ export const requirementsAPI = {
   ): Promise<Requirement> {
     const response = await fetch(`${API_BASE_URL}/requirements/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Requirement>(response);
@@ -603,7 +676,7 @@ export const requirementsAPI = {
   ): Promise<Requirement> {
     const response = await fetch(`${API_BASE_URL}/requirements/${id}/answer?user_id=${userId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Requirement>(response);
@@ -615,7 +688,18 @@ export const requirementsAPI = {
   async submitForReview(id: string, userId: string): Promise<Requirement> {
     const response = await fetch(`${API_BASE_URL}/requirements/${id}/submit-for-review?user_id=${userId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<Requirement>(response);
+  },
+
+  /**
+   * Confirm an approved answer
+   */
+  async confirmAnswer(id: string, reviewerId: string): Promise<Requirement> {
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/confirm-answer?reviewer_id=${reviewerId}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
     });
     return handleResponse<Requirement>(response);
   },
@@ -634,7 +718,7 @@ export const requirementsAPI = {
   ): Promise<Requirement> {
     const response = await fetch(`${API_BASE_URL}/requirements/${id}/review?reviewer_id=${reviewerId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Requirement>(response);
@@ -644,7 +728,9 @@ export const requirementsAPI = {
    * Get requirement activities
    */
   async getActivities(id: string): Promise<RequirementActivity[]> {
-    const response = await fetch(`${API_BASE_URL}/requirements/${id}/activities`);
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/activities`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<RequirementActivity[]>(response);
   },
 
@@ -652,7 +738,9 @@ export const requirementsAPI = {
    * Get previous year's data for a requirement
    */
   async getPreviousData(id: string): Promise<PreviousRequirementData | null> {
-    const response = await fetch(`${API_BASE_URL}/requirements/${id}/previous-data`);
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/previous-data`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<PreviousRequirementData | null>(response);
   },
 
@@ -660,7 +748,9 @@ export const requirementsAPI = {
    * Get recommendations for a requirement
    */
   async getRecommendations(id: string): Promise<Recommendation[]> {
-    const response = await fetch(`${API_BASE_URL}/requirements/${id}/recommendations`);
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/recommendations`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Recommendation[]>(response);
   },
 
@@ -669,11 +759,141 @@ export const requirementsAPI = {
    * Returns matched requirement or المعيار group data from previous year
    */
   async getPreviousYearContext(id: string): Promise<PreviousYearContextResponse | null> {
-    const response = await fetch(`${API_BASE_URL}/requirements/${id}/previous-year-context`);
+    const response = await fetch(`${API_BASE_URL}/requirements/${id}/previous-year-context`, {
+      headers: addAuthToHeaders()
+    });
     if (response.status === 404) {
       return null; // No previous year exists
     }
     return handleResponse<PreviousYearContextResponse | null>(response);
+  },
+
+  /**
+   * Create a new requirement
+   */
+  async create(
+    indexId: string,
+    actorId: string,
+    data: {
+      code: string;
+      question_ar: string;
+      question_en?: string;
+      main_area_ar: string;
+      main_area_en?: string;
+      sub_domain_ar: string;
+      sub_domain_en?: string;
+      element_ar?: string;
+      element_en?: string;
+      objective_ar?: string;
+      objective_en?: string;
+      evidence_description_ar?: string;
+      evidence_description_en?: string;
+      requires_evidence: boolean;
+      display_order: number;
+    }
+  ): Promise<Requirement> {
+    const response = await fetch(
+      `${API_BASE_URL}/requirements?index_id=${indexId}&actor_id=${actorId}`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }
+    );
+    return handleResponse<Requirement>(response);
+  },
+
+  /**
+   * Update an existing requirement
+   */
+  async updateRequirement(
+    id: string,
+    actorId: string,
+    data: {
+      code?: string;
+      question_ar?: string;
+      question_en?: string;
+      main_area_ar?: string;
+      main_area_en?: string;
+      sub_domain_ar?: string;
+      sub_domain_en?: string;
+      element_ar?: string;
+      element_en?: string;
+      objective_ar?: string;
+      objective_en?: string;
+      evidence_description_ar?: string;
+      evidence_description_en?: string;
+      requires_evidence?: boolean;
+      display_order?: number;
+    }
+  ): Promise<Requirement> {
+    const response = await fetch(
+      `${API_BASE_URL}/requirements/${id}?actor_id=${actorId}`,
+      {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }
+    );
+    return handleResponse<Requirement>(response);
+  },
+
+  /**
+   * Delete a requirement
+   */
+  async delete(
+    id: string,
+    actorId: string,
+    force: boolean = false
+  ): Promise<{ message: string; deleted_code: string; deleted_answer: boolean; deleted_evidence_count: number; deleted_recommendation_count: number }> {
+    const response = await fetch(
+      `${API_BASE_URL}/requirements/${id}?actor_id=${actorId}&force=${force}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<{ message: string; deleted_code: string; deleted_answer: boolean; deleted_evidence_count: number; deleted_recommendation_count: number }>(response);
+  },
+
+  /**
+   * Reorder a requirement (move up or down)
+   */
+  async reorder(
+    indexId: string,
+    requirementId: string,
+    direction: 'up' | 'down',
+    actorId: string
+  ): Promise<{ message: string; old_order: number; new_order: number }> {
+    const response = await fetch(
+      `${API_BASE_URL}/requirements/reorder?index_id=${indexId}&requirement_id=${requirementId}&direction=${direction}&actor_id=${actorId}`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<{ message: string; old_order: number; new_order: number }>(response);
+  },
+
+  /**
+   * Get unique sections/domains for autocomplete
+   */
+  async getSections(indexId: string): Promise<{
+    main_areas: Array<{ ar: string; en: string }>;
+    sub_domains: Array<{ ar: string; en: string }>;
+    elements: Array<{ ar: string; en: string }>;
+  }> {
+    const response = await fetch(
+      `${API_BASE_URL}/requirements/sections/${indexId}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<{
+      main_areas: Array<{ ar: string; en: string }>;
+      sub_domains: Array<{ ar: string; en: string }>;
+      elements: Array<{ ar: string; en: string }>;
+    }>(response);
   },
 };
 
@@ -693,7 +913,7 @@ export const assignmentsAPI = {
   }): Promise<Assignment> {
     const response = await fetch(`${API_BASE_URL}/assignments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Assignment>(response);
@@ -710,7 +930,7 @@ export const assignmentsAPI = {
   }): Promise<Assignment[]> {
     const response = await fetch(`${API_BASE_URL}/assignments/batch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Assignment[]>(response);
@@ -720,7 +940,9 @@ export const assignmentsAPI = {
    * Get assignments for a requirement
    */
   async getByRequirement(requirementId: string): Promise<AssignmentWithUser[]> {
-    const response = await fetch(`${API_BASE_URL}/assignments/requirement/${requirementId}`);
+    const response = await fetch(`${API_BASE_URL}/assignments/requirement/${requirementId}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<AssignmentWithUser[]>(response);
   },
 
@@ -728,7 +950,9 @@ export const assignmentsAPI = {
    * Get assignments for a user
    */
   async getByUser(userId: string): Promise<Assignment[]> {
-    const response = await fetch(`${API_BASE_URL}/assignments/user/${userId}`);
+    const response = await fetch(`${API_BASE_URL}/assignments/user/${userId}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Assignment[]>(response);
   },
 
@@ -736,7 +960,9 @@ export const assignmentsAPI = {
    * Get assignments for an index
    */
   async getByIndex(indexId: string): Promise<Assignment[]> {
-    const response = await fetch(`${API_BASE_URL}/assignments/index/${indexId}`);
+    const response = await fetch(`${API_BASE_URL}/assignments/index/${indexId}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Assignment[]>(response);
   },
 
@@ -753,7 +979,7 @@ export const assignmentsAPI = {
   ): Promise<Assignment> {
     const response = await fetch(`${API_BASE_URL}/assignments/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Assignment>(response);
@@ -765,6 +991,7 @@ export const assignmentsAPI = {
   async delete(id: string): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/assignments/${id}`, {
       method: 'DELETE',
+      headers: addAuthToHeaders(),
     });
     if (!response.ok) {
       throw new APIError('Failed to delete assignment', response.status);
@@ -777,7 +1004,10 @@ export const assignmentsAPI = {
   async deleteByRequirementAndUser(requirementId: string, userId: string): Promise<void> {
     const response = await fetch(
       `${API_BASE_URL}/assignments/requirement/${requirementId}/user/${userId}`,
-      { method: 'DELETE' }
+      {
+        method: 'DELETE',
+        headers: addAuthToHeaders(),
+      }
     );
     if (!response.ok) {
       throw new APIError('Failed to delete assignment', response.status);
@@ -809,7 +1039,9 @@ export const usersAPI = {
     if (params?.skip) queryParams.append('skip', params.skip.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
 
-    const response = await fetch(`${API_BASE_URL}/users?${queryParams}`);
+    const response = await fetch(`${API_BASE_URL}/users?${queryParams}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<User[]>(response);
   },
 
@@ -817,7 +1049,9 @@ export const usersAPI = {
    * Get single user by ID
    */
   async getById(id: string): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`);
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<User>(response);
   },
 };
@@ -840,7 +1074,9 @@ export const indexUsersAPI = {
     if (params?.user_id) queryParams.append('user_id', params.user_id);
     if (params?.role) queryParams.append('role', params.role);
 
-    const response = await fetch(`${API_BASE_URL}/index-users?${queryParams}`);
+    const response = await fetch(`${API_BASE_URL}/index-users?${queryParams}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<IndexUser[]>(response);
   },
 
@@ -853,7 +1089,9 @@ export const indexUsersAPI = {
     const queryParams = new URLSearchParams();
     if (params?.index_id) queryParams.append('index_id', params.index_id);
 
-    const response = await fetch(`${API_BASE_URL}/index-users/with-details?${queryParams}`);
+    const response = await fetch(`${API_BASE_URL}/index-users/with-details?${queryParams}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<IndexUserWithDetails[]>(response);
   },
 
@@ -861,7 +1099,9 @@ export const indexUsersAPI = {
    * Get single index user by ID
    */
   async getById(id: string): Promise<IndexUser> {
-    const response = await fetch(`${API_BASE_URL}/index-users/${id}`);
+    const response = await fetch(`${API_BASE_URL}/index-users/${id}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<IndexUser>(response);
   },
 
@@ -876,7 +1116,7 @@ export const indexUsersAPI = {
   }): Promise<IndexUser> {
     const response = await fetch(`${API_BASE_URL}/index-users`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<IndexUser>(response);
@@ -890,7 +1130,7 @@ export const indexUsersAPI = {
   }): Promise<IndexUser> {
     const response = await fetch(`${API_BASE_URL}/index-users/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<IndexUser>(response);
@@ -902,6 +1142,7 @@ export const indexUsersAPI = {
   async delete(id: string): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/index-users/${id}`, {
       method: 'DELETE',
+      headers: addAuthToHeaders(),
     });
     if (!response.ok) {
       throw new Error('Failed to delete index user');
@@ -927,7 +1168,9 @@ export const evidenceAPI = {
     if (params?.assignment_id) queryParams.append('assignment_id', params.assignment_id);
     if (params?.status_filter) queryParams.append('status_filter', params.status_filter);
 
-    const response = await fetch(`${API_BASE_URL}/evidence?${queryParams}`);
+    const response = await fetch(`${API_BASE_URL}/evidence?${queryParams}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<Evidence[]>(response);
   },
 
@@ -935,7 +1178,9 @@ export const evidenceAPI = {
    * Get single evidence by ID with versions and activities
    */
   async getById(id: string): Promise<EvidenceWithVersions> {
-    const response = await fetch(`${API_BASE_URL}/evidence/${id}`);
+    const response = await fetch(`${API_BASE_URL}/evidence/${id}`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<EvidenceWithVersions>(response);
   },
 
@@ -962,6 +1207,7 @@ export const evidenceAPI = {
 
     const response = await fetch(`${API_BASE_URL}/evidence/upload`, {
       method: 'POST',
+      headers: getAuthHeadersForUpload(),
       body: formData,
     });
     return handleResponse<Evidence>(response);
@@ -985,6 +1231,7 @@ export const evidenceAPI = {
 
     const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/upload-version`, {
       method: 'POST',
+      headers: getAuthHeadersForUpload(),
       body: formData,
     });
     return handleResponse<EvidenceVersion>(response);
@@ -1001,7 +1248,7 @@ export const evidenceAPI = {
   ): Promise<Evidence> {
     const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/action?actor_id=${actorId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ action, comment }),
     });
     return handleResponse<Evidence>(response);
@@ -1010,9 +1257,10 @@ export const evidenceAPI = {
   /**
    * Delete evidence
    */
-  async delete(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/evidence/${id}`, {
+  async delete(id: string, actorId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/evidence/${id}?actor_id=${actorId}`, {
       method: 'DELETE',
+      headers: addAuthToHeaders(),
     });
     if (!response.ok) {
       throw new APIError('Failed to delete evidence', response.status);
@@ -1023,7 +1271,9 @@ export const evidenceAPI = {
    * Get activity log for evidence
    */
   async getActivities(evidenceId: string): Promise<EvidenceActivity[]> {
-    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/activities`);
+    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/activities`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<EvidenceActivity[]>(response);
   },
 
@@ -1031,7 +1281,9 @@ export const evidenceAPI = {
    * Get all versions of evidence
    */
   async getVersions(evidenceId: string): Promise<EvidenceVersion[]> {
-    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/versions`);
+    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/versions`, {
+      headers: addAuthToHeaders()
+    });
     return handleResponse<EvidenceVersion[]>(response);
   },
 
@@ -1051,6 +1303,7 @@ export const evidenceAPI = {
     });
     const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/copy?${queryParams}`, {
       method: 'POST',
+      headers: addAuthToHeaders(),
     });
     return handleResponse<Evidence>(response);
   },
@@ -1059,7 +1312,9 @@ export const evidenceAPI = {
    * Download evidence file
    */
   async download(evidenceId: string, version: number): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/download/${version}`);
+    const response = await fetch(`${API_BASE_URL}/evidence/${evidenceId}/download/${version}`, {
+      headers: addAuthToHeaders()
+    });
     if (!response.ok) {
       throw new APIError('Failed to download evidence', response.status);
     }
@@ -1081,6 +1336,7 @@ export const recommendationsAPI = {
 
     const response = await fetch(`${API_BASE_URL}/recommendations/upload/${indexId}`, {
       method: 'POST',
+      headers: getAuthHeadersForUpload(),
       body: formData,
     });
     return handleResponse<RecommendationUploadResult>(response);
@@ -1102,7 +1358,7 @@ export const recommendationsAPI = {
   }): Promise<Recommendation> {
     const response = await fetch(`${API_BASE_URL}/recommendations/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse<Recommendation>(response);
