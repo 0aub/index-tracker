@@ -60,9 +60,9 @@ const TaskCard = ({ task, onClick, lang }: TaskCardProps) => {
         </h3>
         <div className="flex items-center gap-2">
           {/* Priority Badge */}
-          <span className={`px-2 py-1 rounded text-xs font-medium ${priorityColor}`}>
-            <Flag size={12} className="inline mr-1" />
-            {priorityLabel[lang]}
+          <span className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${priorityColor}`}>
+            <Flag size={12} />
+            <span>{priorityLabel[lang]}</span>
           </span>
 
           {/* Late Completion Indicator */}

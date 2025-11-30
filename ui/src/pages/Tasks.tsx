@@ -96,6 +96,20 @@ const Tasks = () => {
     }
   };
 
+  const handleQuickStatusChange = async (status: 'todo' | 'in_progress' | 'completed') => {
+    if (!selectedTask) return;
+
+    try {
+      await updateTask(selectedTask.id, { status });
+      toast.success(lang === 'ar' ? 'تم تحديث حالة المهمة' : 'Task status updated');
+      // Update local state
+      setSelectedTask({ ...selectedTask, status });
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || (lang === 'ar' ? 'فشل تحديث الحالة' : 'Failed to update status'));
+    }
+  };
+
   const handleDeleteTask = async (taskId: string) => {
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه المهمة؟' : 'Are you sure you want to delete this task?')) {
       return;
@@ -425,18 +439,25 @@ const Tasks = () => {
                 {selectedTask.title}
               </h2>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => openEditForm(selectedTask)}
-                  className={`p-2 ${colors.textSecondary} hover:${colors.textPrimary} ${colors.bgHover} rounded-lg transition`}
-                >
-                  <Edit2 size={20} />
-                </button>
-                <button
-                  onClick={() => handleDeleteTask(selectedTask.id)}
-                  className={`p-2 text-red-600 hover:text-red-700 ${colors.bgHover} rounded-lg transition`}
-                >
-                  <Trash2 size={20} />
-                </button>
+                {/* Only show edit/delete buttons to task creator */}
+                {user?.id === selectedTask.created_by && (
+                  <>
+                    <button
+                      onClick={() => openEditForm(selectedTask)}
+                      className={`p-2 ${colors.textSecondary} hover:${colors.textPrimary} ${colors.bgHover} rounded-lg transition`}
+                      title={lang === 'ar' ? 'تعديل' : 'Edit'}
+                    >
+                      <Edit2 size={20} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTask(selectedTask.id)}
+                      className={`p-2 text-red-600 hover:text-red-700 ${colors.bgHover} rounded-lg transition`}
+                      title={lang === 'ar' ? 'حذف' : 'Delete'}
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => {
                     setShowTaskDetail(false);
@@ -463,18 +484,47 @@ const Tasks = () => {
                 </div>
               )}
 
+              {/* Quick Status Change */}
+              <div>
+                <p className={`text-sm ${colors.textSecondary} mb-2`}>
+                  {lang === 'ar' ? 'تغيير الحالة' : 'Change Status'}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleQuickStatusChange('todo')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                      selectedTask.status === 'todo'
+                        ? 'bg-gray-500 text-white'
+                        : `${colors.bgTertiary} ${colors.textSecondary} hover:${colors.bgHover}`
+                    }`}
+                  >
+                    {lang === 'ar' ? 'قيد الانتظار' : 'To Do'}
+                  </button>
+                  <button
+                    onClick={() => handleQuickStatusChange('in_progress')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                      selectedTask.status === 'in_progress'
+                        ? 'bg-blue-500 text-white'
+                        : `${colors.bgTertiary} ${colors.textSecondary} hover:${colors.bgHover}`
+                    }`}
+                  >
+                    {lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'}
+                  </button>
+                  <button
+                    onClick={() => handleQuickStatusChange('completed')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                      selectedTask.status === 'completed'
+                        ? 'bg-green-500 text-white'
+                        : `${colors.bgTertiary} ${colors.textSecondary} hover:${colors.bgHover}`
+                    }`}
+                  >
+                    {lang === 'ar' ? 'مكتملة' : 'Completed'}
+                  </button>
+                </div>
+              </div>
+
               {/* Metadata */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className={`text-sm ${colors.textSecondary} mb-1`}>
-                    {lang === 'ar' ? 'الحالة' : 'Status'}
-                  </p>
-                  <p className={`font-medium ${colors.textPrimary}`}>
-                    {selectedTask.status === 'todo' ? (lang === 'ar' ? 'قيد الانتظار' : 'To Do') :
-                     selectedTask.status === 'in_progress' ? (lang === 'ar' ? 'قيد التنفيذ' : 'In Progress') :
-                     (lang === 'ar' ? 'مكتملة' : 'Completed')}
-                  </p>
-                </div>
                 <div>
                   <p className={`text-sm ${colors.textSecondary} mb-1`}>
                     {lang === 'ar' ? 'الأولوية' : 'Priority'}
