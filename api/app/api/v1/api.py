@@ -3,7 +3,7 @@ API v1 Router - Aggregates all endpoint routers
 """
 from fastapi import APIRouter
 
-from app.api.v1 import auth, indices, requirements, assignments, users, evidence, index_users, organization_hierarchy, user_management, recommendations
+from app.api.v1 import auth, indices, requirements, assignments, users, evidence, index_users, organization_hierarchy, user_management, recommendations, tasks
 
 api_router = APIRouter()
 
@@ -18,3 +18,4 @@ api_router.include_router(index_users.router)
 api_router.include_router(organization_hierarchy.router)
 api_router.include_router(user_management.router)
 api_router.include_router(recommendations.router)
+api_router.include_router(tasks.router)

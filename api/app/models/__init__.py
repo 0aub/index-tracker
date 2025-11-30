@@ -1,7 +1,7 @@
 """
 SQLAlchemy models
 """
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.organization import Organization
 from app.models.agency import Agency
 from app.models.general_management import GeneralManagement
@@ -16,9 +16,11 @@ from app.models.evidence import Evidence, EvidenceVersion, EvidenceActivity
 from app.models.index_user import IndexUser
 from app.models.requirement_activity import RequirementActivity
 from app.models.recommendation import Recommendation
+from app.models.task import Task, TaskAssignment, TaskComment, TaskAttachment, TaskStatus, TaskPriority
 
 __all__ = [
     "User",
+    "UserRole",
     "Organization",
     "Agency",
     "GeneralManagement",
@@ -38,4 +40,10 @@ __all__ = [
     "IndexUser",
     "RequirementActivity",
     "Recommendation",
+    "Task",
+    "TaskAssignment",
+    "TaskComment",
+    "TaskAttachment",
+    "TaskStatus",
+    "TaskPriority",
 ]

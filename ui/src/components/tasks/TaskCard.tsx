@@ -1,211 +1,144 @@
-import { useNavigate } from 'react-router-dom';
-import { Calendar, User, AlertCircle, CheckCircle, Clock, Edit, Trash2, Flag } from 'lucide-react';
+import { Calendar, Users, MessageSquare, AlertCircle, CheckCircle, Flag, Clock } from 'lucide-react';
 import { Task } from '../../types';
-import { colors, patterns } from '../../utils/darkMode';
-import toast from 'react-hot-toast';
-import usersData from '../../data/users.json';
+import { colors } from '../../utils/darkMode';
 
 interface TaskCardProps {
   task: Task;
-  onEdit: (task: Task) => void;
-  onDelete: (taskId: string) => void;
-  onStatusChange: (taskId: string, newStatus: string) => void;
+  onClick: () => void;
   lang: 'ar' | 'en';
 }
 
-const STATUS_CONFIG = {
-  assigned: {
-    icon: Clock,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-    border: 'border-blue-200',
-    label: { ar: 'مُسندة', en: 'Assigned' }
-  },
-  in_progress: {
-    icon: Clock,
-    color: 'text-yellow-600',
-    bg: 'bg-yellow-50',
-    border: 'border-yellow-200',
-    label: { ar: 'قيد التنفيذ', en: 'In Progress' }
-  },
-  completed: {
-    icon: CheckCircle,
-    color: 'text-green-600',
-    bg: 'bg-green-50',
-    border: 'border-green-200',
-    label: { ar: 'مكتملة', en: 'Completed' }
-  },
-  overdue: {
-    icon: AlertCircle,
-    color: 'text-red-600',
-    bg: 'bg-red-50',
-    border: 'border-red-200',
-    label: { ar: 'متأخرة', en: 'Overdue' }
-  }
-};
+const TaskCard = ({ task, onClick, lang }: TaskCardProps) => {
+  const title = task.title;
+  const description = task.description;
 
-const PRIORITY_CONFIG = {
-  urgent: { color: 'text-red-600', bg: 'bg-red-100', label: { ar: 'عاجل', en: 'Urgent' } },
-  high: { color: 'text-orange-600', bg: 'bg-orange-100', label: { ar: 'عالية', en: 'High' } },
-  medium: { color: 'text-yellow-600', bg: 'bg-yellow-100', label: { ar: 'متوسطة', en: 'Medium' } },
-  low: { color: 'text-green-600', bg: 'bg-green-100', label: { ar: 'منخفضة', en: 'Low' } }
-};
-
-const TaskCard = ({ task, onEdit, onDelete, onStatusChange, lang }: TaskCardProps) => {
-  const navigate = useNavigate();
-  const users = usersData.users;
-
-  const dueDate = new Date(task.due_date);
-  const isOverdue = dueDate < new Date() && task.status !== 'completed';
-  const displayStatus = isOverdue ? 'overdue' : task.status;
-
-  const statusConfig = STATUS_CONFIG[displayStatus as keyof typeof STATUS_CONFIG];
-  const priorityConfig = PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG];
-  const StatusIcon = statusConfig.icon;
-
-  const assignedUser = users.find(u => u.id === task.assigned_to);
-  const assignedByUser = users.find(u => u.id === task.assigned_by);
-
-  const handleDelete = () => {
-    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه المهمة؟' : 'Are you sure you want to delete this task?')) {
-      onDelete(task.id);
-      toast.success(lang === 'ar' ? 'تم حذف المهمة بنجاح' : 'Task deleted successfully');
-    }
+  // Priority colors
+  const priorityColors = {
+    low: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20',
+    medium: 'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20',
+    high: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
   };
 
-  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newStatus = e.target.value;
-    onStatusChange(task.id, newStatus);
-    toast.success(lang === 'ar' ? 'تم تحديث حالة المهمة' : 'Task status updated');
+  const priorityLabels = {
+    low: { ar: 'منخفضة', en: 'Low' },
+    medium: { ar: 'متوسطة', en: 'Medium' },
+    high: { ar: 'عالية', en: 'High' }
   };
+
+  const statusLabels = {
+    todo: { ar: 'قيد الانتظار', en: 'To Do' },
+    in_progress: { ar: 'قيد التنفيذ', en: 'In Progress' },
+    completed: { ar: 'مكتملة', en: 'Completed' }
+  };
+
+  const priorityColor = priorityColors[task.priority as keyof typeof priorityColors];
+  const priorityLabel = priorityLabels[task.priority as keyof typeof priorityLabels];
+  const statusLabel = statusLabels[task.status as keyof typeof statusLabels];
+
+  // Check if task is/was overdue
+  const isCurrentlyOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed';
+
+  // Check if task was completed late (for performance tracking)
+  const wasCompletedLate = task.status === 'completed' &&
+    task.due_date &&
+    task.completed_at &&
+    new Date(task.completed_at) > new Date(task.due_date);
 
   return (
-    <div className={`${colors.bgSecondary} rounded-lg shadow dark:shadow-gray-900/50 border-l-4 ${statusConfig.border} p-6 hover:shadow-lg transition`}>
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
+    <div
+      onClick={onClick}
+      className={`${colors.bgSecondary} ${colors.border} border rounded-lg p-4 hover:shadow-md transition cursor-pointer relative ${
+        isCurrentlyOverdue ? 'border-l-4 border-l-red-500' : ''
+      } ${
+        wasCompletedLate ? 'border-l-4 border-l-orange-500' : ''
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <h3 className={`text-lg font-semibold ${colors.textPrimary} flex-1`}>
+          {title}
+        </h3>
+        <div className="flex items-center gap-2">
           {/* Priority Badge */}
-          <div className="flex items-center gap-3 mb-3">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold ${priorityConfig.bg} dark:bg-opacity-20 ${priorityConfig.color} dark:text-opacity-90`}>
-              <Flag size={14} />
-              {priorityConfig.label[lang]}
-            </span>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold ${statusConfig.bg} dark:bg-opacity-20 ${statusConfig.color} dark:text-opacity-90`}>
-              <StatusIcon size={14} />
-              {statusConfig.label[lang]}
-            </span>
-          </div>
+          <span className={`px-2 py-1 rounded text-xs font-medium ${priorityColor}`}>
+            <Flag size={12} className="inline mr-1" />
+            {priorityLabel[lang]}
+          </span>
 
-          {/* Title */}
-          <h3 className={`text-lg font-bold mb-2 ${colors.textPrimary}`}>
-            {task.title}
-          </h3>
-
-          {/* Description */}
-          {task.description && (
-            <p className={`text-sm mb-3 ${colors.textSecondary}`}>
-              {task.description}
-            </p>
-          )}
-
-          {/* Requirement Link */}
-          {task.requirement_id && (
-            <button
-              onClick={() => navigate(`/requirements/${task.requirement_id}`)}
-              className={`inline-flex items-center text-sm font-medium mb-3 ${patterns.link}`}
+          {/* Late Completion Indicator */}
+          {wasCompletedLate && (
+            <span
+              className="px-2 py-1 rounded text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20"
+              title={lang === 'ar' ? 'مكتملة متأخرة' : 'Completed Late'}
             >
-              {lang === 'ar' ? 'المتطلب:' : 'Requirement:'} {task.requirement_id}
-            </button>
+              <Clock size={12} className="inline mr-1" />
+              {lang === 'ar' ? 'متأخر' : 'Late'}
+            </span>
           )}
-
-          {/* Metadata */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`flex items-center gap-2 text-sm ${colors.textSecondary}`}>
-              <User size={16} />
-              <div>
-                <span className={`block text-xs ${colors.textTertiary}`}>
-                  {lang === 'ar' ? 'المسؤول' : 'Assigned To'}
-                </span>
-                <span className={`font-medium ${colors.textPrimary}`}>
-                  {lang === 'ar' ? assignedUser?.name : assignedUser?.name_en}
-                </span>
-              </div>
-            </div>
-
-            <div className={`flex items-center gap-2 text-sm ${colors.textSecondary}`}>
-              <Calendar size={16} />
-              <div>
-                <span className={`block text-xs ${colors.textTertiary}`}>
-                  {lang === 'ar' ? 'الموعد النهائي' : 'Due Date'}
-                </span>
-                <span className={`font-medium ${isOverdue ? 'text-red-600 dark:text-red-400' : colors.textPrimary}`}>
-                  {dueDate.toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
-                </span>
-              </div>
-            </div>
-
-            <div className={`flex items-center gap-2 text-sm ${colors.textSecondary}`}>
-              <User size={16} />
-              <div>
-                <span className={`block text-xs ${colors.textTertiary}`}>
-                  {lang === 'ar' ? 'مُسندة من' : 'Assigned By'}
-                </span>
-                <span className={`font-medium ${colors.textPrimary}`}>
-                  {lang === 'ar' ? assignedByUser?.name : assignedByUser?.name_en}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 ml-4">
-          <button
-            onClick={() => onEdit(task)}
-            className={`p-2 ${colors.primaryIcon} hover:bg-green-50 dark:hover:${colors.bgHover} rounded-lg transition`}
-            title={lang === 'ar' ? 'تعديل' : 'Edit'}
-          >
-            <Edit size={18} />
-          </button>
-          <button
-            onClick={handleDelete}
-            className={`p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:${colors.bgHover} rounded-lg transition`}
-            title={lang === 'ar' ? 'حذف' : 'Delete'}
-          >
-            <Trash2 size={18} />
-          </button>
         </div>
       </div>
 
-      {/* Status Changer */}
-      {task.status !== 'completed' && (
-        <div className={`mt-4 pt-4 border-t ${colors.border}`}>
-          <label className={`block text-sm font-medium mb-2 ${colors.textSecondary}`}>
-            {lang === 'ar' ? 'تحديث الحالة' : 'Update Status'}
-          </label>
-          <select
-            value={task.status}
-            onChange={handleStatusChange}
-            className={`w-full md:w-auto px-4 py-2 ${patterns.select}`}
-          >
-            <option value="assigned">{lang === 'ar' ? 'مُسندة' : 'Assigned'}</option>
-            <option value="in_progress">{lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'}</option>
-            <option value="completed">{lang === 'ar' ? 'مكتملة' : 'Completed'}</option>
-          </select>
-        </div>
+      {/* Description */}
+      {description && (
+        <p className={`${colors.textSecondary} text-sm mb-3 line-clamp-2`}>
+          {description}
+        </p>
       )}
 
-      {/* Completed Info */}
-      {task.status === 'completed' && task.completed_at && (
-        <div className={`mt-4 pt-4 border-t ${colors.border}`}>
-          <div className={`flex items-center gap-2 text-sm ${colors.primaryIcon}`}>
-            <CheckCircle size={16} />
+      {/* Metadata */}
+      <div className="flex items-center gap-4 flex-wrap text-sm">
+        {/* Status */}
+        <div className={`flex items-center gap-1 ${colors.textSecondary}`}>
+          {task.status === 'completed' ? (
+            <CheckCircle size={14} className="text-green-600 dark:text-green-400" />
+          ) : (
+            <AlertCircle size={14} className={task.status === 'in_progress' ? 'text-yellow-600 dark:text-yellow-400' : ''} />
+          )}
+          <span>{statusLabel[lang]}</span>
+        </div>
+
+        {/* Assignees */}
+        {task.assignments && task.assignments.length > 0 && (
+          <div className={`flex items-center gap-1 ${colors.textSecondary}`}>
+            <Users size={14} />
+            <span>{task.assignments.length}</span>
+          </div>
+        )}
+
+        {/* Comments */}
+        {task.comment_count > 0 && (
+          <div className={`flex items-center gap-1 ${colors.textSecondary}`}>
+            <MessageSquare size={14} />
+            <span>{task.comment_count}</span>
+          </div>
+        )}
+
+        {/* Due Date */}
+        {task.due_date && (
+          <div className={`flex items-center gap-1 ${
+            isCurrentlyOverdue ? 'text-red-600 dark:text-red-400 font-semibold' :
+            wasCompletedLate ? 'text-orange-600 dark:text-orange-400' :
+            colors.textSecondary
+          }`}>
+            {isCurrentlyOverdue && <AlertCircle size={14} />}
+            {wasCompletedLate && <Clock size={14} />}
+            <Calendar size={14} />
             <span>
-              {lang === 'ar' ? 'تم الإنجاز في' : 'Completed on'}{' '}
-              {new Date(task.completed_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
+              {new Date(task.due_date).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+                month: 'short',
+                day: 'numeric'
+              })}
             </span>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Index Tag */}
+        {task.index_name && (
+          <div className={`px-2 py-1 ${colors.bgTertiary} rounded text-xs`}>
+            {lang === 'ar' ? task.index_name : (task.index_name_en || task.index_name)}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

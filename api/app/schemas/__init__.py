@@ -8,3 +8,4 @@ from app.schemas.requirement import *
 from app.schemas.assignment import *
 from app.schemas.evidence import *
 from app.schemas.recommendation import *
+from app.schemas.task import *

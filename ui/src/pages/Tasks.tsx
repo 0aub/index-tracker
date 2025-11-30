@@ -1,131 +1,164 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Filter, Search, Loader2, AlertCircle, Layers } from 'lucide-react';
+import { Plus, Loader2, AlertCircle, X, Paperclip, Send, Trash2, Edit2 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useIndexStore } from '../stores/indexStore';
 import { useAuthStore } from '../stores/authStore';
-import { api, Assignment, Requirement } from '../services/api';
+import { fetchTasks, createTask, updateTask, deleteTask, addComment, uploadAttachment } from '../services/tasks';
+import { fetchIndices } from '../services/api';
+import { Task, TaskListResponse, TaskCreateRequest, TaskUpdateRequest, TaskComment, Index } from '../types';
+import TaskCard from '../components/tasks/TaskCard';
+import TaskForm from '../components/tasks/TaskForm';
 import { colors, patterns } from '../utils/darkMode';
 import toast from 'react-hot-toast';
 
-interface AssignmentWithRequirement extends Assignment {
-  requirement_code: string;
-  requirement_question_ar: string;
-  requirement_question_en: string | null;
-  user_name_ar: string;
-  user_name_en: string | null;
-}
-
 const Tasks = () => {
-  const navigate = useNavigate();
   const { language } = useUIStore();
-  const { currentIndex } = useIndexStore();
   const { user } = useAuthStore();
   const lang = language;
 
-  const [assignments, setAssignments] = useState<AssignmentWithRequirement[]>([]);
+  const [taskData, setTaskData] = useState<TaskListResponse | null>(null);
+  const [indices, setIndices] = useState<Index[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [indexFilter, setIndexFilter] = useState<string>('all');
+  const [assignedToMe, setAssignedToMe] = useState(false);
 
-  // Load assignments when index changes
+  // Modals
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showTaskDetail, setShowTaskDetail] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Comment form
+  const [commentText, setCommentText] = useState('');
+  const [commentFile, setCommentFile] = useState<File | null>(null);
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Load tasks and indices
   useEffect(() => {
-    if (currentIndex) {
-      loadAssignments();
-    } else {
-      setLoading(false);
-    }
-  }, [currentIndex?.id]);
+    loadData();
+  }, [statusFilter, priorityFilter, indexFilter, assignedToMe]);
 
-  const loadAssignments = async () => {
-    if (!currentIndex) {
-      setLoading(false);
-      return;
-    }
-
+  const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch assignments and requirements for current index
-      const [assignmentsData, requirementsData] = await Promise.all([
-        api.assignments.getByIndex(currentIndex.id),
-        api.requirements.getAll({ index_id: currentIndex.id }),
+      const filters: any = {};
+      if (statusFilter !== 'all') filters.status = statusFilter;
+      if (priorityFilter !== 'all') filters.priority = priorityFilter;
+      if (indexFilter !== 'all') filters.index_id = indexFilter;
+      if (assignedToMe) filters.assigned_to_me = true;
+
+      const [tasksResponse, indicesData] = await Promise.all([
+        fetchTasks(filters),
+        fetchIndices()
       ]);
 
-      // Create a map of requirements for quick lookup
-      const reqMap = new Map(requirementsData.map(r => [r.id, r]));
-
-      // Enrich assignments with requirement and user data
-      // Filter to show only assignments that need management attention (review status)
-      const enrichedAssignments: AssignmentWithRequirement[] = assignmentsData
-        .filter(assignment => assignment.status === 'review') // Only show review status for management
-        .map(assignment => {
-          const req = reqMap.get(assignment.requirement_id);
-          return {
-            ...assignment,
-            requirement_code: req?.code || assignment.requirement_id,
-            requirement_question_ar: req?.question_ar || '',
-            requirement_question_en: req?.question_en || null,
-            user_name_ar: '', // These will be populated if using AssignmentWithUser type
-            user_name_en: null,
-          };
-        });
-
-      setAssignments(enrichedAssignments);
+      setTaskData(tasksResponse);
+      setIndices(indicesData);
     } catch (err: any) {
-      console.error('Failed to load assignments:', err);
-      setError(err.message || 'Failed to load assignments');
+      console.error('Failed to load data:', err);
+      setError(err.message || 'Failed to load data');
       toast.error(lang === 'ar' ? 'فشل تحميل المهام' : 'Failed to load tasks');
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredAssignments = assignments.filter(assignment => {
-    const question = lang === 'ar' ? assignment.requirement_question_ar : assignment.requirement_question_en || assignment.requirement_question_ar;
-
-    const matchesSearch =
-      assignment.requirement_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      question.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' || assignment.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  // All tasks shown are review tasks (management oversight)
-  const statusCounts = {
-    review: assignments.length, // All shown tasks are in review status
+  const handleCreateTask = async (data: TaskCreateRequest) => {
+    try {
+      await createTask(data);
+      toast.success(lang === 'ar' ? 'تم إنشاء المهمة بنجاح' : 'Task created successfully');
+      setShowTaskForm(false);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || (lang === 'ar' ? 'فشل إنشاء المهمة' : 'Failed to create task'));
+      throw err;
+    }
   };
 
-  // No index selected
-  if (!currentIndex) {
-    return (
-      <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <Layers className={`w-16 h-16 ${colors.textSecondary} mx-auto mb-4`} />
-            <h3 className={`text-xl font-bold ${colors.textPrimary} mb-2`}>
-              {lang === 'ar' ? 'لم يتم اختيار مؤشر' : 'No Index Selected'}
-            </h3>
-            <p className={`${colors.textSecondary} mb-6`}>
-              {lang === 'ar'
-                ? 'يرجى اختيار مؤشر من القائمة أعلاه لعرض المهام'
-                : 'Please select an index from the selector above to view tasks'}
-            </p>
-            <button
-              onClick={() => navigate('/index')}
-              className={`px-6 py-3 ${patterns.button}`}
-            >
-              {lang === 'ar' ? 'إدارة المؤشرات' : 'Manage Index'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleUpdateTask = async (data: TaskUpdateRequest) => {
+    if (!selectedTask) return;
+
+    try {
+      await updateTask(selectedTask.id, data);
+      toast.success(lang === 'ar' ? 'تم تحديث المهمة بنجاح' : 'Task updated successfully');
+      setShowTaskForm(false);
+      setSelectedTask(null);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || (lang === 'ar' ? 'فشل تحديث المهمة' : 'Failed to update task'));
+      throw err;
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه المهمة؟' : 'Are you sure you want to delete this task?')) {
+      return;
+    }
+
+    try {
+      await deleteTask(taskId);
+      toast.success(lang === 'ar' ? 'تم حذف المهمة بنجاح' : 'Task deleted successfully');
+      setShowTaskDetail(false);
+      setSelectedTask(null);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || (lang === 'ar' ? 'فشل حذف المهمة' : 'Failed to delete task'));
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!selectedTask || !commentText.trim()) return;
+
+    try {
+      setSubmittingComment(true);
+
+      const comment = await addComment(selectedTask.id, {
+        comment: commentText.trim()
+      });
+
+      // Upload attachment if there is one
+      if (commentFile) {
+        await uploadAttachment(selectedTask.id, comment.id, commentFile);
+      }
+
+      toast.success(lang === 'ar' ? 'تم إضافة التعليق بنجاح' : 'Comment added successfully');
+      setCommentText('');
+      setCommentFile(null);
+
+      // Reload task detail
+      const updatedTasks = await fetchTasks();
+      const updatedTask = updatedTasks.tasks.find(t => t.id === selectedTask.id);
+      if (updatedTask) {
+        setSelectedTask(updatedTask);
+      }
+    } catch (err: any) {
+      toast.error(err.message || (lang === 'ar' ? 'فشل إضافة التعليق' : 'Failed to add comment'));
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const openTaskDetail = (task: Task) => {
+    setSelectedTask(task);
+    setShowTaskDetail(true);
+  };
+
+  const openEditForm = (task: Task) => {
+    setSelectedTask(task);
+    setShowTaskDetail(false);
+    setShowTaskForm(true);
+  };
+
+  // Group tasks by status
+  const todoTasks = taskData?.tasks.filter(t => t.status === 'todo') || [];
+  const inProgressTasks = taskData?.tasks.filter(t => t.status === 'in_progress') || [];
+  const completedTasks = taskData?.tasks.filter(t => t.status === 'completed') || [];
 
   // Loading state
   if (loading) {
@@ -155,7 +188,7 @@ const Tasks = () => {
             </h3>
             <p className={`${colors.textSecondary} mb-4`}>{error}</p>
             <button
-              onClick={loadAssignments}
+              onClick={loadData}
               className={`px-6 py-2 ${patterns.button}`}
             >
               {lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}
@@ -178,136 +211,422 @@ const Tasks = () => {
               </h1>
               <p className={`${colors.textSecondary} mt-2`}>
                 {lang === 'ar'
-                  ? 'عرض جميع المهام والتكليفات لمتطلبات المؤشر'
-                  : 'View all tasks and assignments for index requirements'}
+                  ? 'تنظيم وتتبع جميع المهام والتكليفات'
+                  : 'Organize and track all tasks and assignments'}
               </p>
             </div>
             <button
-              onClick={() => navigate('/requirements')}
-              className={`flex items-center gap-2 px-4 py-2 ${patterns.button}`}
+              onClick={() => {
+                setSelectedTask(null);
+                setShowTaskForm(true);
+              }}
+              className={`flex items-center gap-2 px-6 py-3 ${patterns.button}`}
             >
               <Plus size={20} />
-              <span>{lang === 'ar' ? 'إضافة تكليف' : 'Add Assignment'}</span>
+              <span>{lang === 'ar' ? 'إنشاء مهمة جديدة' : 'Create New Task'}</span>
             </button>
           </div>
-
-          {/* Info Banner */}
-          <div className={`${colors.primaryLight} border-l-4 ${colors.primary} px-4 py-3 rounded`}>
-            <p className={`text-sm ${colors.textPrimary}`}>
-              {lang === 'ar'
-                ? 'هذه الصفحة مخصصة لمهام المديرين والمشرفين - عرض المهام التي تحتاج إلى مراجعة أو اعتماد فقط.'
-                : 'This page is for managers and supervisors - showing only tasks that need review or approval.'}
-            </p>
-          </div>
         </div>
 
-        {/* Stats Card */}
-        <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mb-6">
-          <div className={`${colors.bgSecondary} rounded-lg shadow dark:shadow-gray-900/50 p-6`}>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className={`${colors.bgSecondary} rounded-lg shadow p-6`}>
             <p className={`text-sm ${colors.textSecondary} mb-1`}>
-              {lang === 'ar' ? 'المهام التي تحتاج إلى مراجعة' : 'Tasks Awaiting Review'}
+              {lang === 'ar' ? 'إجمالي المهام' : 'Total Tasks'}
             </p>
-            <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{statusCounts.review}</p>
-            <p className={`text-xs ${colors.textTertiary} mt-2`}>
-              {lang === 'ar' ? 'تتطلب اهتمام المدير أو المشرف' : 'Requires manager or supervisor attention'}
+            <p className={`text-3xl font-bold ${colors.textPrimary}`}>{taskData?.total || 0}</p>
+          </div>
+          <div className={`${colors.bgSecondary} rounded-lg shadow p-6`}>
+            <p className={`text-sm ${colors.textSecondary} mb-1`}>
+              {lang === 'ar' ? 'قيد الانتظار' : 'To Do'}
             </p>
+            <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{taskData?.todo_count || 0}</p>
+          </div>
+          <div className={`${colors.bgSecondary} rounded-lg shadow p-6`}>
+            <p className={`text-sm ${colors.textSecondary} mb-1`}>
+              {lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'}
+            </p>
+            <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">{taskData?.in_progress_count || 0}</p>
+          </div>
+          <div className={`${colors.bgSecondary} rounded-lg shadow p-6`}>
+            <p className={`text-sm ${colors.textSecondary} mb-1`}>
+              {lang === 'ar' ? 'مكتملة' : 'Completed'}
+            </p>
+            <p className="text-3xl font-bold text-green-600 dark:text-green-400">{taskData?.completed_count || 0}</p>
           </div>
         </div>
 
-        {/* Search Filter */}
-        <div className={`${colors.bgSecondary} rounded-xl shadow-lg dark:shadow-gray-900/50 p-6 mb-6`}>
-          <div className="relative">
-            <Search className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${colors.textSecondary}`} size={20} />
-            <input
-              type="text"
-              placeholder={lang === 'ar' ? 'بحث في المهام...' : 'Search tasks...'}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full pl-4 pr-10 py-2 ${patterns.input}`}
-            />
-          </div>
-        </div>
-
-        {/* Tasks List */}
-        <div className="space-y-4">
-          {filteredAssignments.length > 0 ? (
-            filteredAssignments.map(assignment => {
-              const question = lang === 'ar' ? assignment.requirement_question_ar : assignment.requirement_question_en || assignment.requirement_question_ar;
-
-              const statusColors = {
-                pending: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
-                in_progress: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300',
-                review: 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300',
-                completed: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
-              };
-
-              const statusLabels = {
-                pending: { ar: 'قيد الانتظار', en: 'Pending' },
-                in_progress: { ar: 'قيد التنفيذ', en: 'In Progress' },
-                review: { ar: 'قيد المراجعة', en: 'Review' },
-                completed: { ar: 'مكتمل', en: 'Completed' },
-              };
-
-              return (
-                <div
-                  key={assignment.id}
-                  onClick={() => navigate(`/requirements/${assignment.requirement_id}`)}
-                  className={`${colors.bgSecondary} rounded-xl shadow-lg dark:shadow-gray-900/50 p-6 cursor-pointer hover:shadow-xl transition`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className={`inline-block font-mono text-xs font-semibold px-2.5 py-1.5 rounded ${colors.primaryLight} ${colors.primaryText}`}>
-                          {assignment.requirement_code}
-                        </span>
-                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[assignment.status as keyof typeof statusColors]}`}>
-                          {statusLabels[assignment.status as keyof typeof statusLabels]?.[lang] || assignment.status}
-                        </span>
-                      </div>
-                      <h3 className={`text-lg font-semibold ${colors.textPrimary} mb-2`}>
-                        {question}
-                      </h3>
-                      {assignment.completion_percentage && (
-                        <div className="flex items-center gap-2 mt-3">
-                          <div className={`flex-1 h-2 ${colors.bgTertiary} rounded-full overflow-hidden`}>
-                            <div
-                              className={`h-full ${colors.primary} transition-all duration-300`}
-                              style={{ width: `${assignment.completion_percentage}%` }}
-                            />
-                          </div>
-                          <span className={`text-sm font-medium ${colors.textSecondary}`}>
-                            {assignment.completion_percentage}%
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className={`flex items-center gap-4 text-sm ${colors.textSecondary}`}>
-                    <span>
-                      {lang === 'ar' ? 'تاريخ الإنشاء:' : 'Created:'} {new Date(assignment.created_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
-                    </span>
-                    {assignment.completed_at && (
-                      <span>
-                        {lang === 'ar' ? 'تاريخ الإكمال:' : 'Completed:'} {new Date(assignment.completed_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className={`${colors.bgSecondary} rounded-xl shadow-lg dark:shadow-gray-900/50 p-12 text-center`}>
-              <Filter className={`mx-auto ${colors.textSecondary} mb-4`} size={48} />
-              <h3 className={`text-xl font-semibold ${colors.textPrimary} mb-2`}>
-                {lang === 'ar' ? 'لا توجد مهام' : 'No Tasks'}
-              </h3>
-              <p className={colors.textSecondary}>
-                {lang === 'ar' ? 'لم يتم العثور على مهام تطابق معايير البحث' : 'No tasks match your search criteria'}
-              </p>
+        {/* Filters */}
+        <div className={`${colors.bgSecondary} rounded-lg shadow p-6 mb-6`}>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'المؤشر' : 'Index'}
+              </label>
+              <select
+                value={indexFilter}
+                onChange={(e) => setIndexFilter(e.target.value)}
+                className={`w-full px-4 py-2 ${patterns.select}`}
+              >
+                <option value="all">{lang === 'ar' ? 'جميع المؤشرات' : 'All Indices'}</option>
+                {indices.map((index) => (
+                  <option key={index.id} value={index.id}>
+                    {lang === 'ar' ? index.name_ar : (index.name_en || index.name_ar)}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'الأولوية' : 'Priority'}
+              </label>
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className={`w-full px-4 py-2 ${patterns.select}`}
+              >
+                <option value="all">{lang === 'ar' ? 'جميع الأولويات' : 'All Priorities'}</option>
+                <option value="low">{lang === 'ar' ? 'منخفضة' : 'Low'}</option>
+                <option value="medium">{lang === 'ar' ? 'متوسطة' : 'Medium'}</option>
+                <option value="high">{lang === 'ar' ? 'عالية' : 'High'}</option>
+              </select>
+            </div>
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'الحالة' : 'Status'}
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className={`w-full px-4 py-2 ${patterns.select}`}
+              >
+                <option value="all">{lang === 'ar' ? 'جميع الحالات' : 'All Statuses'}</option>
+                <option value="todo">{lang === 'ar' ? 'قيد الانتظار' : 'To Do'}</option>
+                <option value="in_progress">{lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'}</option>
+                <option value="completed">{lang === 'ar' ? 'مكتملة' : 'Completed'}</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className={`flex items-center gap-2 cursor-pointer`}>
+                <input
+                  type="checkbox"
+                  checked={assignedToMe}
+                  onChange={(e) => setAssignedToMe(e.target.checked)}
+                  className="w-4 h-4 text-green-600 rounded focus:ring-green-400"
+                />
+                <span className={`text-sm ${colors.textPrimary}`}>
+                  {lang === 'ar' ? 'المهام المعينة لي فقط' : 'Assigned to me only'}
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Tasks Lists */}
+        <div className="space-y-8">
+          {/* To Do Section */}
+          <div>
+            <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4 flex items-center gap-2`}>
+              <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+              {lang === 'ar' ? 'قيد الانتظار' : 'To Do'}
+              <span className={`text-sm font-normal ${colors.textSecondary}`}>({todoTasks.length})</span>
+            </h2>
+            <div className="space-y-3">
+              {todoTasks.length > 0 ? (
+                todoTasks.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onClick={() => openTaskDetail(task)}
+                    lang={lang}
+                  />
+                ))
+              ) : (
+                <div className={`${colors.bgSecondary} rounded-lg p-6 text-center ${colors.textSecondary}`}>
+                  {lang === 'ar' ? 'لا توجد مهام قيد الانتظار' : 'No tasks to do'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* In Progress Section */}
+          <div>
+            <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4 flex items-center gap-2`}>
+              <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
+              {lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'}
+              <span className={`text-sm font-normal ${colors.textSecondary}`}>({inProgressTasks.length})</span>
+            </h2>
+            <div className="space-y-3">
+              {inProgressTasks.length > 0 ? (
+                inProgressTasks.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onClick={() => openTaskDetail(task)}
+                    lang={lang}
+                  />
+                ))
+              ) : (
+                <div className={`${colors.bgSecondary} rounded-lg p-6 text-center ${colors.textSecondary}`}>
+                  {lang === 'ar' ? 'لا توجد مهام قيد التنفيذ' : 'No tasks in progress'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Completed Section */}
+          <div>
+            <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4 flex items-center gap-2`}>
+              <div className="w-3 h-3 rounded-full bg-green-600"></div>
+              {lang === 'ar' ? 'مكتملة' : 'Completed'}
+              <span className={`text-sm font-normal ${colors.textSecondary}`}>({completedTasks.length})</span>
+            </h2>
+            <div className="space-y-3">
+              {completedTasks.length > 0 ? (
+                completedTasks.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onClick={() => openTaskDetail(task)}
+                    lang={lang}
+                  />
+                ))
+              ) : (
+                <div className={`${colors.bgSecondary} rounded-lg p-6 text-center ${colors.textSecondary}`}>
+                  {lang === 'ar' ? 'لا توجد مهام مكتملة' : 'No completed tasks'}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Task Form Modal */}
+      {showTaskForm && (
+        <TaskForm
+          task={selectedTask}
+          onSave={selectedTask ? handleUpdateTask : handleCreateTask}
+          onCancel={() => {
+            setShowTaskForm(false);
+            setSelectedTask(null);
+          }}
+          indices={indices}
+          lang={lang}
+        />
+      )}
+
+      {/* Task Detail Modal */}
+      {showTaskDetail && selectedTask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className={`${colors.bgSecondary} rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto`}>
+            {/* Header */}
+            <div className={`flex items-center justify-between p-6 border-b ${colors.border}`}>
+              <h2 className={`text-2xl font-bold ${colors.textPrimary}`}>
+                {selectedTask.title}
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openEditForm(selectedTask)}
+                  className={`p-2 ${colors.textSecondary} hover:${colors.textPrimary} ${colors.bgHover} rounded-lg transition`}
+                >
+                  <Edit2 size={20} />
+                </button>
+                <button
+                  onClick={() => handleDeleteTask(selectedTask.id)}
+                  className={`p-2 text-red-600 hover:text-red-700 ${colors.bgHover} rounded-lg transition`}
+                >
+                  <Trash2 size={20} />
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTaskDetail(false);
+                    setSelectedTask(null);
+                  }}
+                  className={`p-2 ${colors.textSecondary} hover:${colors.textPrimary} ${colors.bgHover} rounded-lg transition`}
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              {/* Description */}
+              {selectedTask.description && (
+                <div>
+                  <h3 className={`text-lg font-semibold ${colors.textPrimary} mb-2`}>
+                    {lang === 'ar' ? 'الوصف' : 'Description'}
+                  </h3>
+                  <p className={`${colors.textSecondary} whitespace-pre-wrap`}>
+                    {selectedTask.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Metadata */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className={`text-sm ${colors.textSecondary} mb-1`}>
+                    {lang === 'ar' ? 'الحالة' : 'Status'}
+                  </p>
+                  <p className={`font-medium ${colors.textPrimary}`}>
+                    {selectedTask.status === 'todo' ? (lang === 'ar' ? 'قيد الانتظار' : 'To Do') :
+                     selectedTask.status === 'in_progress' ? (lang === 'ar' ? 'قيد التنفيذ' : 'In Progress') :
+                     (lang === 'ar' ? 'مكتملة' : 'Completed')}
+                  </p>
+                </div>
+                <div>
+                  <p className={`text-sm ${colors.textSecondary} mb-1`}>
+                    {lang === 'ar' ? 'الأولوية' : 'Priority'}
+                  </p>
+                  <p className={`font-medium ${colors.textPrimary}`}>
+                    {selectedTask.priority === 'low' ? (lang === 'ar' ? 'منخفضة' : 'Low') :
+                     selectedTask.priority === 'medium' ? (lang === 'ar' ? 'متوسطة' : 'Medium') :
+                     (lang === 'ar' ? 'عالية' : 'High')}
+                  </p>
+                </div>
+                {selectedTask.due_date && (
+                  <div>
+                    <p className={`text-sm ${colors.textSecondary} mb-1`}>
+                      {lang === 'ar' ? 'الموعد النهائي' : 'Due Date'}
+                    </p>
+                    <p className={`font-medium ${colors.textPrimary}`}>
+                      {new Date(selectedTask.due_date).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
+                    </p>
+                  </div>
+                )}
+                {selectedTask.index_name && (
+                  <div>
+                    <p className={`text-sm ${colors.textSecondary} mb-1`}>
+                      {lang === 'ar' ? 'المؤشر' : 'Index'}
+                    </p>
+                    <p className={`font-medium ${colors.textPrimary}`}>
+                      {lang === 'ar' ? selectedTask.index_name : (selectedTask.index_name_en || selectedTask.index_name)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Assignees */}
+              {selectedTask.assignments && selectedTask.assignments.length > 0 && (
+                <div>
+                  <h3 className={`text-lg font-semibold ${colors.textPrimary} mb-3`}>
+                    {lang === 'ar' ? 'المكلفون' : 'Assignees'}
+                  </h3>
+                  <div className="space-y-2">
+                    {selectedTask.assignments.map((assignment) => (
+                      <div key={assignment.id} className={`flex items-center gap-3 p-3 ${colors.bgTertiary} rounded-lg`}>
+                        <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold">
+                          {(assignment.user_name || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className={`font-medium ${colors.textPrimary}`}>
+                            {lang === 'ar' ? assignment.user_name : (assignment.user_name_en || assignment.user_name)}
+                          </p>
+                          <p className={`text-sm ${colors.textSecondary}`}>
+                            {lang === 'ar' ? 'معين في' : 'Assigned on'} {new Date(assignment.assigned_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Comments */}
+              <div>
+                <h3 className={`text-lg font-semibold ${colors.textPrimary} mb-3`}>
+                  {lang === 'ar' ? 'التعليقات' : 'Comments'} ({selectedTask.comments?.length || 0})
+                </h3>
+
+                {/* Comment List */}
+                <div className="space-y-4 mb-4">
+                  {selectedTask.comments && selectedTask.comments.length > 0 ? (
+                    selectedTask.comments.map((comment) => (
+                      <div key={comment.id} className={`p-4 ${colors.bgTertiary} rounded-lg`}>
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold flex-shrink-0">
+                            {(comment.user_name || 'U').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className={`font-medium ${colors.textPrimary}`}>
+                                {lang === 'ar' ? comment.user_name : (comment.user_name_en || comment.user_name)}
+                              </p>
+                              <p className={`text-xs ${colors.textSecondary}`}>
+                                {new Date(comment.created_at).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US')}
+                              </p>
+                            </div>
+                            <p className={`${colors.textSecondary} whitespace-pre-wrap`}>
+                              {comment.comment}
+                            </p>
+                            {/* Attachments */}
+                            {comment.attachments && comment.attachments.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {comment.attachments.map((attachment) => (
+                                  <a
+                                    key={attachment.id}
+                                    href={attachment.file_path}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`flex items-center gap-2 text-sm ${colors.primary} hover:underline`}
+                                  >
+                                    <Paperclip size={14} />
+                                    {attachment.file_name}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className={`text-center ${colors.textSecondary} py-4`}>
+                      {lang === 'ar' ? 'لا توجد تعليقات بعد' : 'No comments yet'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Add Comment Form */}
+                <div className={`border-t ${colors.border} pt-4`}>
+                  <textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder={lang === 'ar' ? 'أضف تعليق...' : 'Add a comment...'}
+                    rows={3}
+                    className={`w-full px-4 py-2 ${patterns.input} resize-none mb-3`}
+                    dir={lang === 'ar' ? 'rtl' : 'ltr'}
+                  />
+                  <div className="flex items-center gap-3">
+                    <label className={`flex-1 cursor-pointer`}>
+                      <div className={`flex items-center gap-2 px-4 py-2 ${colors.bgTertiary} ${colors.textSecondary} rounded-lg ${colors.bgHover} transition`}>
+                        <Paperclip size={16} />
+                        <span className="text-sm">
+                          {commentFile ? commentFile.name : (lang === 'ar' ? 'إرفاق ملف' : 'Attach file')}
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        onChange={(e) => setCommentFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      onClick={handleAddComment}
+                      disabled={!commentText.trim() || submittingComment}
+                      className={`flex items-center gap-2 px-6 py-2 ${patterns.button} disabled:opacity-50`}
+                    >
+                      <Send size={16} />
+                      {submittingComment ? (lang === 'ar' ? 'جاري الإرسال...' : 'Sending...') : (lang === 'ar' ? 'إرسال' : 'Send')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

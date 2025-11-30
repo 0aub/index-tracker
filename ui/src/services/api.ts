@@ -1379,4 +1379,9 @@ export const api = {
   recommendations: recommendationsAPI,
 };
 
+// Convenience function for fetching indices (used by Tasks page)
+export const fetchIndices = (): Promise<Index[]> => {
+  return indicesAPI.getAll();
+};
+
 export default api;

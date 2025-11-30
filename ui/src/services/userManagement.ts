@@ -169,3 +169,18 @@ export const userManagementApi = {
     });
   }
 };
+
+// Convenience function for fetching users (used by TaskForm)
+export const fetchUsers = async (): Promise<any[]> => {
+  const users = await userManagementApi.getAllUsers();
+
+  // Transform to match the User type expected by TaskForm
+  return users.map(user => ({
+    id: user.id,
+    email: user.email,
+    name: user.full_name_ar,
+    name_en: user.full_name_en,
+    role: user.role,
+    active: user.is_active
+  }));
+};

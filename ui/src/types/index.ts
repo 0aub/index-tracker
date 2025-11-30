@@ -127,34 +127,100 @@ export enum CommentType {
   QUESTION = 'question'
 }
 
-// Task Types
+// Task Management Types
+export interface TaskAttachment {
+  id: string;
+  comment_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string;
+  uploaded_at: string;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  user_id: string;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  user_name?: string;
+  user_name_en?: string;
+  attachments: TaskAttachment[];
+}
+
+export interface TaskAssignment {
+  id: string;
+  task_id: string;
+  user_id: string;
+  assigned_by: string;
+  assigned_at: string;
+  user_name?: string;
+  user_name_en?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
   description?: string;
-  requirement_id?: string;
-  evidence_id?: string;
-  assigned_to: string;
-  assigned_by: string;
-  due_date: string;
   status: TaskStatus;
   priority: TaskPriority;
+  index_id?: string;
+  due_date?: string;
+  created_by: string;
   created_at: string;
+  updated_at: string;
   completed_at?: string;
+  creator_name?: string;
+  creator_name_en?: string;
+  index_name?: string;
+  index_name_en?: string;
+  assignments: TaskAssignment[];
+  comments: TaskComment[];
+  comment_count: number;
 }
 
 export enum TaskStatus {
-  ASSIGNED = 'assigned',
+  TODO = 'todo',
   IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  OVERDUE = 'overdue'
+  COMPLETED = 'completed'
 }
 
 export enum TaskPriority {
   LOW = 'low',
   MEDIUM = 'medium',
-  HIGH = 'high',
-  URGENT = 'urgent'
+  HIGH = 'high'
+}
+
+export interface TaskListResponse {
+  tasks: Task[];
+  total: number;
+  todo_count: number;
+  in_progress_count: number;
+  completed_count: number;
+}
+
+export interface TaskCreateRequest {
+  title: string;
+  description?: string;
+  priority?: string;
+  index_id?: string;
+  due_date?: string;
+  assignee_ids?: string[];
+}
+
+export interface TaskUpdateRequest {
+  title?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  index_id?: string;
+  due_date?: string;
+}
+
+export interface TaskCommentRequest {
+  comment: string;
 }
 
 // Audit Log Types
