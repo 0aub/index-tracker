@@ -567,18 +567,13 @@ const Tasks = () => {
                   </h3>
                   <div className="space-y-2">
                     {selectedTask.assignments.map((assignment) => (
-                      <div key={assignment.id} className={`flex items-center gap-3 p-3 ${colors.bgTertiary} rounded-lg`}>
-                        <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold">
-                          {(assignment.user_name || 'U').charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className={`font-medium ${colors.textPrimary}`}>
-                            {lang === 'ar' ? assignment.user_name : (assignment.user_name_en || assignment.user_name)}
-                          </p>
-                          <p className={`text-sm ${colors.textSecondary}`}>
-                            {lang === 'ar' ? 'معين في' : 'Assigned on'} {new Date(assignment.assigned_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
-                          </p>
-                        </div>
+                      <div key={assignment.id} className={`p-3 ${colors.bgTertiary} rounded-lg`}>
+                        <p className={`font-semibold text-base ${colors.textPrimary} mb-1`}>
+                          {lang === 'ar' ? assignment.user_name : (assignment.user_name_en || assignment.user_name)}
+                        </p>
+                        <p className={`text-sm ${colors.textTertiary}`}>
+                          {lang === 'ar' ? 'معين في' : 'Assigned on'} {new Date(assignment.assigned_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}
+                        </p>
                       </div>
                     ))}
                   </div>
