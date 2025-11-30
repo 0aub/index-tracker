@@ -124,15 +124,8 @@ function App() {
             {/* Requirements - Accessible to all authenticated users */}
             <Route path="requirements" element={<Requirements />} />
             <Route path="requirements/:id" element={<RequirementDetail />} />
-            {/* Tasks page - Only accessible to management team (index_manager, section_coordinator, admin) */}
-            <Route
-              path="tasks"
-              element={
-                <ManagementRoute>
-                  <Tasks />
-                </ManagementRoute>
-              }
-            />
+            {/* Tasks page - Accessible to all authenticated users (backend filters by role) */}
+            <Route path="tasks" element={<Tasks />} />
             {/* Users - Only accessible to management team */}
             <Route
               path="users"
