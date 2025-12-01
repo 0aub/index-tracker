@@ -1323,6 +1323,116 @@ export const evidenceAPI = {
 };
 
 // ============================================================================
+// Notifications Types & API
+// ============================================================================
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  task_id: string | null;
+  requirement_id: string | null;
+  evidence_id: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_name_en: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationListResponse {
+  notifications: Notification[];
+  total: number;
+  unread_count: number;
+}
+
+export interface NotificationUnreadCount {
+  count: number;
+}
+
+export const notificationsAPI = {
+  /**
+   * Get user notifications with optional filters
+   */
+  async getAll(params?: {
+    is_read?: boolean;
+    notification_type?: string;
+    skip?: number;
+    limit?: number;
+  }): Promise<NotificationListResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.is_read !== undefined) queryParams.append('is_read', params.is_read.toString());
+    if (params?.notification_type) queryParams.append('notification_type', params.notification_type);
+    if (params?.skip !== undefined) queryParams.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) queryParams.append('limit', params.limit.toString());
+
+    const response = await fetch(`${API_BASE_URL}/notifications?${queryParams}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<NotificationListResponse>(response);
+  },
+
+  /**
+   * Get unread notification count
+   */
+  async getUnreadCount(): Promise<NotificationUnreadCount> {
+    const response = await fetch(`${API_BASE_URL}/notifications/unread-count`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<NotificationUnreadCount>(response);
+  },
+
+  /**
+   * Mark specific notifications as read
+   */
+  async markAsRead(notificationIds: string[]): Promise<{ message: string; count: number }> {
+    const response = await fetch(`${API_BASE_URL}/notifications/mark-read`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ notification_ids: notificationIds }),
+    });
+    return handleResponse<{ message: string; count: number }>(response);
+  },
+
+  /**
+   * Mark all notifications as read
+   */
+  async markAllAsRead(): Promise<{ message: string; count: number }> {
+    const response = await fetch(`${API_BASE_URL}/notifications/mark-all-read`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ message: string; count: number }>(response);
+  },
+
+  /**
+   * Mark specific notifications as unread
+   */
+  async markAsUnread(notificationIds: string[]): Promise<{ message: string; count: number }> {
+    const response = await fetch(`${API_BASE_URL}/notifications/mark-unread`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ notification_ids: notificationIds }),
+    });
+    return handleResponse<{ message: string; count: number }>(response);
+  },
+
+  /**
+   * Delete a notification
+   */
+  async delete(notificationId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+};
+
+// ============================================================================
 // Recommendations API
 // ============================================================================
 
@@ -1377,6 +1487,7 @@ export const api = {
   indexUsers: indexUsersAPI,
   evidence: evidenceAPI,
   recommendations: recommendationsAPI,
+  notifications: notificationsAPI,
 };
 
 // Convenience function for fetching indices (used by Tasks page)

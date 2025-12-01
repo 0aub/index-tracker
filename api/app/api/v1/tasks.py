@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 
 from app.database import get_db
-from app.models import Task, TaskAssignment, TaskComment, TaskAttachment, TaskStatus, User, UserRole, IndexUser
+from app.models import Task, TaskAssignment, TaskComment, TaskAttachment, TaskStatus, User, UserRole, IndexUser, NotificationType
 from app.schemas.task import (
     TaskCreate,
     TaskUpdate,
@@ -21,6 +21,7 @@ from app.schemas.task import (
     TaskAssignmentResponse
 )
 from app.api.dependencies import get_current_active_user
+from app.api.v1.notifications import create_notification
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -81,6 +82,23 @@ def can_modify_task(task: Task, user: User, db: Session) -> bool:
         return True
 
     return False
+
+
+def can_update_status(task: Task, user: User, db: Session) -> bool:
+    """Check if user can update task status (more permissive than full modify)"""
+    # First check if user can fully modify (creators, admins, index owners)
+    if can_modify_task(task, user, db):
+        return True
+
+    # Additionally, assignees can update status
+    assignment = db.query(TaskAssignment).filter(
+        and_(
+            TaskAssignment.task_id == task.id,
+            TaskAssignment.user_id == user.id
+        )
+    ).first()
+
+    return assignment is not None
 
 
 def enrich_task_response(task: Task, db: Session) -> dict:
@@ -327,6 +345,19 @@ async def create_task(
     try:
         db.commit()
         db.refresh(task)
+
+        # Create notifications for assigned users
+        for user_id in task_data.assignee_ids:
+            create_notification(
+                db=db,
+                user_id=user_id,
+                notification_type=NotificationType.TASK_ASSIGNED,
+                title="تم تعيين مهمة جديدة لك" if user_id else "New task assigned to you",
+                message=f"تم تعيينك للمهمة: {task.title}",
+                actor_id=current_user.id,
+                task_id=task.id
+            )
+        db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -379,22 +410,40 @@ async def update_task(
             detail="Task not found"
         )
 
-    # Check permissions
-    if not can_modify_task(task, current_user, db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to modify this task"
-        )
+    # Get update fields
+    update_dict = task_data.model_dump(exclude_unset=True)
+
+    # Check permissions based on what's being updated
+    is_status_only_update = len(update_dict) == 1 and "status" in update_dict
+
+    if is_status_only_update:
+        # For status-only updates, assignees can also update
+        if not can_update_status(task, current_user, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to update this task's status"
+            )
+    else:
+        # For full edits, only creators/admins/index owners can modify
+        if not can_modify_task(task, current_user, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to modify this task"
+            )
 
     # Update fields
-    update_dict = task_data.model_dump(exclude_unset=True)
+    old_status = task.status
+    status_changed = False
 
     for field, value in update_dict.items():
         if field == "status":
             # Convert string to enum
-            if value == "completed" and task.status != TaskStatus.COMPLETED:
-                task.completed_at = datetime.utcnow()
-            setattr(task, field, TaskStatus(value))
+            new_status = TaskStatus(value)
+            if new_status != old_status:
+                status_changed = True
+                if value == "completed" and task.status != TaskStatus.COMPLETED:
+                    task.completed_at = datetime.utcnow()
+            setattr(task, field, new_status)
         else:
             setattr(task, field, value)
 
@@ -403,6 +452,41 @@ async def update_task(
     try:
         db.commit()
         db.refresh(task)
+
+        # Create notifications for status changes
+        if status_changed:
+            # Get all assignees
+            assignees = db.query(TaskAssignment).filter(TaskAssignment.task_id == task.id).all()
+
+            for assignment in assignees:
+                # Don't notify the user who made the change
+                if assignment.user_id != current_user.id:
+                    if task.status == TaskStatus.COMPLETED:
+                        create_notification(
+                            db=db,
+                            user_id=assignment.user_id,
+                            notification_type=NotificationType.TASK_COMPLETED,
+                            title="تم إكمال مهمة",
+                            message=f"تم إكمال المهمة: {task.title}",
+                            actor_id=current_user.id,
+                            task_id=task.id
+                        )
+                    else:
+                        status_labels = {
+                            TaskStatus.TODO: "معلقة / To Do",
+                            TaskStatus.IN_PROGRESS: "قيد التنفيذ / In Progress",
+                            TaskStatus.COMPLETED: "مكتملة / Completed"
+                        }
+                        create_notification(
+                            db=db,
+                            user_id=assignment.user_id,
+                            notification_type=NotificationType.TASK_STATUS_CHANGED,
+                            title="تغيرت حالة مهمة",
+                            message=f"تغيرت حالة المهمة '{task.title}' إلى: {status_labels.get(task.status, task.status.value)}",
+                            actor_id=current_user.id,
+                            task_id=task.id
+                        )
+        db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -487,6 +571,33 @@ async def add_comment(
     try:
         db.commit()
         db.refresh(comment)
+
+        # Create notifications for task participants (creator + assignees, except commenter)
+        participants = set()
+
+        # Add task creator
+        if task.created_by != current_user.id:
+            participants.add(task.created_by)
+
+        # Add all assignees
+        assignees = db.query(TaskAssignment).filter(TaskAssignment.task_id == task_id).all()
+        for assignment in assignees:
+            if assignment.user_id != current_user.id:
+                participants.add(assignment.user_id)
+
+        # Create notifications
+        for user_id in participants:
+            create_notification(
+                db=db,
+                user_id=user_id,
+                notification_type=NotificationType.TASK_COMMENT_ADDED,
+                title="تعليق جديد على مهمة",
+                message=f"أضاف {current_user.full_name_ar} تعليقًا على المهمة: {task.title}",
+                actor_id=current_user.id,
+                task_id=task.id
+            )
+
+        db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(

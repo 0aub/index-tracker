@@ -17,6 +17,7 @@ from app.models.index_user import IndexUser
 from app.models.requirement_activity import RequirementActivity
 from app.models.recommendation import Recommendation
 from app.models.task import Task, TaskAssignment, TaskComment, TaskAttachment, TaskStatus, TaskPriority
+from app.models.notification import Notification, NotificationType
 
 __all__ = [
     "User",
@@ -46,4 +47,6 @@ __all__ = [
     "TaskAttachment",
     "TaskStatus",
     "TaskPriority",
+    "Notification",
+    "NotificationType",
 ]

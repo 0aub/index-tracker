@@ -74,6 +74,7 @@ class User(Base):
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
     index_memberships = relationship("IndexUser", foreign_keys="[IndexUser.user_id]", back_populates="user", cascade="all, delete-orphan")
+    notifications = relationship("Notification", foreign_keys="[Notification.user_id]", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.username} ({self.role})>"

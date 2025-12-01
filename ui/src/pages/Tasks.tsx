@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Loader2, AlertCircle, X, Paperclip, Send, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Loader2, AlertCircle, X, Paperclip, Send, Trash2, Edit2, Clock } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useIndexStore } from '../stores/indexStore';
 import { useAuthStore } from '../stores/authStore';
@@ -523,6 +523,27 @@ const Tasks = () => {
                   </button>
                 </div>
               </div>
+              )}
+
+              {/* Late Completion Warning */}
+              {selectedTask.status === 'completed' &&
+               selectedTask.due_date &&
+               selectedTask.completed_at &&
+               new Date(selectedTask.completed_at) > new Date(selectedTask.due_date) && (
+                <div className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                  <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                    <Clock size={20} />
+                    <span className="font-semibold">
+                      {lang === 'ar' ? 'تم الإكمال بعد الموعد النهائي' : 'Completed after due date'}
+                    </span>
+                  </div>
+                  <p className={`text-sm mt-1 ${colors.textSecondary}`}>
+                    {lang === 'ar'
+                      ? `تم الإكمال في ${new Date(selectedTask.completed_at).toLocaleDateString('ar-SA')} (الموعد النهائي: ${new Date(selectedTask.due_date).toLocaleDateString('ar-SA')})`
+                      : `Completed on ${new Date(selectedTask.completed_at).toLocaleDateString('en-US')} (Due: ${new Date(selectedTask.due_date).toLocaleDateString('en-US')})`
+                    }
+                  </p>
+                </div>
               )}
 
               {/* Metadata */}

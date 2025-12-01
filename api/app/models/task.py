@@ -56,6 +56,7 @@ class Task(Base):
     index = relationship("Index", foreign_keys=[index_id], backref="tasks")
     assignments = relationship("TaskAssignment", back_populates="task", cascade="all, delete-orphan")
     comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan", order_by="TaskComment.created_at.desc()")
+    notifications = relationship("Notification", back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskAssignment(Base):

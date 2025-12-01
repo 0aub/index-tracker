@@ -22,7 +22,9 @@ from app.schemas.evidence import (
 )
 from app.models.evidence import Evidence, EvidenceVersion, EvidenceActivity
 from app.models.user import User
+from app.models import NotificationType, Requirement, Assignment
 from app.api.v1.requirements import log_requirement_activity
+from app.api.v1.notifications import create_notification
 
 router = APIRouter(prefix="/evidence", tags=["Evidence"])
 
@@ -149,6 +151,25 @@ async def upload_evidence(
         db.add(new_version)
         db.commit()
         db.refresh(new_evidence)
+
+        # Create notifications for assigned users (except uploader)
+        requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
+        if requirement:
+            assignments = db.query(Assignment).filter(Assignment.requirement_id == requirement_id).all()
+            for assignment in assignments:
+                # Don't notify the uploader
+                if assignment.user_id != uploaded_by:
+                    create_notification(
+                        db=db,
+                        user_id=assignment.user_id,
+                        notification_type=NotificationType.EVIDENCE_UPLOADED,
+                        title="تم رفع دليل جديد",
+                        message=f"تم رفع دليل جديد للمتطلب: {requirement.question_ar or requirement.code}",
+                        actor_id=uploaded_by,
+                        requirement_id=requirement_id,
+                        evidence_id=evidence_id
+                    )
+            db.commit()
 
         return new_evidence
 
@@ -363,6 +384,30 @@ async def evidence_action(
 
     db.commit()
     db.refresh(evidence)
+
+    # Create notifications for assigned users (except actor)
+    assignments = db.query(Assignment).filter(Assignment.requirement_id == evidence.requirement_id).all()
+    status_labels = {
+        "submitted": "قيد المراجعة / Submitted",
+        "confirmed": "مؤكد / Confirmed",
+        "approved": "معتمد / Approved",
+        "rejected": "مرفوض / Rejected"
+    }
+
+    for assignment in assignments:
+        # Don't notify the actor who performed the action
+        if assignment.user_id != actor_id:
+            create_notification(
+                db=db,
+                user_id=assignment.user_id,
+                notification_type=NotificationType.EVIDENCE_STATUS_CHANGED,
+                title="تغيرت حالة دليل",
+                message=f"تغيرت حالة الدليل '{evidence.document_name}' إلى: {status_labels.get(evidence.status, evidence.status)}",
+                actor_id=actor_id,
+                requirement_id=evidence.requirement_id,
+                evidence_id=evidence_id
+            )
+    db.commit()
 
     return evidence
 

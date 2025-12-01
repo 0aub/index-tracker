@@ -74,6 +74,7 @@ class Requirement(Base):
     comments = relationship("Comment", back_populates="requirement", cascade="all, delete-orphan")
     activities = relationship("RequirementActivity", back_populates="requirement", cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="requirement", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="requirement", cascade="all, delete-orphan")
 
     # Self-referencing relationship for versioning
     previous_requirement = relationship("Requirement", remote_side=[id], foreign_keys=[previous_requirement_id])

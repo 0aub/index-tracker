@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { BarChart3, FileText, CheckSquare, LogOut, User, ListTodo, Users, Settings, Layers, Moon, Sun, Building2, UserCog, Home } from 'lucide-react';
+import { BarChart3, FileText, CheckSquare, LogOut, User, ListTodo, Users, Settings, Layers, Moon, Sun, Building2, UserCog, Home, Bell } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { colors, patterns } from '../../utils/darkMode';
@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { IndexSelector } from '../index/IndexSelector';
 import { WaveAnimation } from '../WaveAnimation';
 import { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+import { api, notificationsAPI } from '../../services/api';
 
 const MainLayout = () => {
   const navigate = useNavigate();
@@ -26,6 +26,9 @@ const MainLayout = () => {
   const [hasIndices, setHasIndices] = useState<boolean | null>(null);
   const [loadingIndices, setLoadingIndices] = useState(true);
 
+  // Track unread notifications count
+  const [unreadCount, setUnreadCount] = useState(0);
+
   // Load indices to check if user has access
   useEffect(() => {
     const checkUserAccess = async () => {
@@ -41,6 +44,25 @@ const MainLayout = () => {
     };
 
     checkUserAccess();
+  }, []);
+
+  // Fetch unread notifications count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const result = await notificationsAPI.getUnreadCount();
+        setUnreadCount(result.count);
+      } catch (error) {
+        console.error('Failed to fetch unread notifications count:', error);
+      }
+    };
+
+    fetchUnreadCount();
+
+    // Poll for new notifications every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Menu items - Role-based access control
@@ -88,7 +110,7 @@ const MainLayout = () => {
   };
 
   // Pages that are accessible even without indices
-  const allowedPagesWithoutIndices = ['/', '/home', '/settings'];
+  const allowedPagesWithoutIndices = ['/', '/home', '/settings', '/notifications'];
   const isAllowedPage = allowedPagesWithoutIndices.includes(location.pathname);
   const isHomePage = location.pathname === '/' || location.pathname === '/home';
 
@@ -130,7 +152,7 @@ const MainLayout = () => {
                 <button
                   key={item.id}
                   onClick={() => navigate(item.path)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition relative ${
                     isActive
                       ? `${colors.primary} text-white shadow-md`
                       : `${colors.textSecondary} ${colors.bgHover}`
@@ -138,6 +160,11 @@ const MainLayout = () => {
                 >
                   <Icon size={20} />
                   <span className="font-medium">{item.label[lang]}</span>
+                  {item.badge && item.badge > 0 && (
+                    <span className={`${lang === 'ar' ? 'mr-auto' : 'ml-auto'} bg-red-600 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center`}>
+                      {item.badge > 9 ? '9+' : item.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -183,7 +210,22 @@ const MainLayout = () => {
                   {lang === 'ar' ? 'المؤشر الحالي' : 'Current Index'}
                 </h2>
               </div>
-              <IndexSelector />
+              <div className="flex items-center gap-4">
+                {/* Notification Bell */}
+                <button
+                  onClick={() => navigate('/notifications')}
+                  className={`relative p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${colors.textSecondary}`}
+                  title={lang === 'ar' ? 'الإشعارات' : 'Notifications'}
+                >
+                  <Bell size={20} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+                <IndexSelector />
+              </div>
             </div>
           </header>
         )}

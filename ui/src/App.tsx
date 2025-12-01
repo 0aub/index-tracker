@@ -15,6 +15,7 @@ import Reports from './pages/Reports';
 import Requirements from './pages/Requirements';
 import RequirementDetail from './pages/RequirementDetail';
 import Tasks from './pages/Tasks';
+import Notifications from './pages/Notifications';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
@@ -126,6 +127,8 @@ function App() {
             <Route path="requirements/:id" element={<RequirementDetail />} />
             {/* Tasks page - Accessible to all authenticated users (backend filters by role) */}
             <Route path="tasks" element={<Tasks />} />
+            {/* Notifications page - Accessible to all authenticated users */}
+            <Route path="notifications" element={<Notifications />} />
             {/* Users - Only accessible to management team */}
             <Route
               path="users"

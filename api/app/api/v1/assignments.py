@@ -17,6 +17,8 @@ from app.schemas.assignment import (
 )
 from app.models.assignment import Assignment
 from app.models.user import User
+from app.models import NotificationType, Requirement
+from app.api.v1.notifications import create_notification
 
 router = APIRouter(prefix="/assignments", tags=["Assignments"])
 
@@ -50,6 +52,20 @@ async def create_assignment(
         db.add(new_assignment)
         db.commit()
         db.refresh(new_assignment)
+
+        # Create notification for assigned user
+        requirement = db.query(Requirement).filter(Requirement.id == assignment.requirement_id).first()
+        if requirement:
+            create_notification(
+                db=db,
+                user_id=assignment.user_id,
+                notification_type=NotificationType.REQUIREMENT_ASSIGNED,
+                title="تم تعيين متطلب جديد لك",
+                message=f"تم تعيينك للمتطلب: {requirement.question_ar or requirement.code}",
+                actor_id=assignment.assigned_by,
+                requirement_id=assignment.requirement_id
+            )
+            db.commit()
 
         return new_assignment
 
@@ -109,6 +125,21 @@ async def create_assignments_batch(
         # Refresh all created assignments
         for assignment in created_assignments:
             db.refresh(assignment)
+
+        # Create notifications for assigned users
+        requirement = db.query(Requirement).filter(Requirement.id == batch.requirement_id).first()
+        if requirement:
+            for assignment in created_assignments:
+                create_notification(
+                    db=db,
+                    user_id=assignment.user_id,
+                    notification_type=NotificationType.REQUIREMENT_ASSIGNED,
+                    title="تم تعيين متطلب جديد لك",
+                    message=f"تم تعيينك للمتطلب: {requirement.question_ar or requirement.code}",
+                    actor_id=batch.assigned_by,
+                    requirement_id=batch.requirement_id
+                )
+            db.commit()
 
         return created_assignments
 

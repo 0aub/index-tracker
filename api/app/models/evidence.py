@@ -43,6 +43,7 @@ class Evidence(Base):
     uploader = relationship("User", foreign_keys=[uploaded_by])
     versions = relationship("EvidenceVersion", back_populates="evidence", cascade="all, delete-orphan")
     activities = relationship("EvidenceActivity", back_populates="evidence", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="evidence", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Evidence {self.document_name} - Level {self.maturity_level} ({self.status})>"
