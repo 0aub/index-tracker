@@ -135,29 +135,6 @@ def require_admin(
     return current_user
 
 
-def require_index_manager_or_admin(
-    current_user: User = Depends(get_current_active_user)
-) -> User:
-    """
-    Require that the current user has INDEX_MANAGER or ADMIN role
-
-    Args:
-        current_user: Current authenticated user
-
-    Returns:
-        User object with INDEX_MANAGER or ADMIN role
-
-    Raises:
-        HTTPException: If user is not an index manager or admin
-    """
-    if current_user.role not in [UserRole.ADMIN, UserRole.INDEX_MANAGER]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators or index managers can access this resource"
-        )
-    return current_user
-
-
 def optional_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)

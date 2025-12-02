@@ -26,19 +26,14 @@ class PermissionChecker:
         return self.user.role == UserRole.ADMIN
 
     @property
-    def is_index_manager(self) -> bool:
-        """Check if user is an index manager"""
-        return self.user.role == UserRole.INDEX_MANAGER
-
-    @property
-    def is_section_coordinator(self) -> bool:
-        """Check if user is a section coordinator (index supervisor)"""
-        return self.user.role == UserRole.SECTION_COORDINATOR
-
-    @property
     def is_contributor(self) -> bool:
-        """Check if user is a contributor"""
-        return self.user.role == UserRole.CONTRIBUTOR
+        """
+        Check if user is a contributor in ANY index
+        Note: This is deprecated - use get_index_role() to check per-index roles
+        """
+        # Check if user has CONTRIBUTOR role in any of their indices
+        user_indices = self.get_user_indices()
+        return any(idx.role == IndexUserRole.CONTRIBUTOR for idx in user_indices)
 
     def get_user_indices(self) -> List[IndexUser]:
         """Get all indices the user is assigned to"""
@@ -82,8 +77,8 @@ class PermissionChecker:
     def can_edit_index_metadata(self, index_id: str) -> bool:
         """
         Check if user can edit index metadata (name, description, dates, etc.)
-        Only ADMIN and INDEX_MANAGER with OWNER role can edit
-        SECTION_COORDINATOR (supervisor) cannot edit
+        Only ADMIN and users with OWNER role can edit
+        SUPERVISOR cannot edit index metadata
         """
         if self.is_admin:
             return True
@@ -91,44 +86,42 @@ class PermissionChecker:
         if not self.has_index_access(index_id):
             return False
 
-        # INDEX_MANAGER with OWNER role can edit
-        if self.is_index_manager:
-            index_role = self.get_index_role(index_id)
-            return index_role == IndexUserRole.OWNER
-
-        # SECTION_COORDINATOR cannot edit index metadata
-        return False
+        # Users with OWNER role can edit
+        index_role = self.get_index_role(index_id)
+        return index_role == IndexUserRole.OWNER
 
     def can_create_index(self, index_type: Optional[str] = None) -> bool:
         """
         Check if user can create a new index
         ADMIN: Can create any type
-        INDEX_MANAGER: Can create index of same type as their existing indices
-        SECTION_COORDINATOR: Cannot create indices
-        CONTRIBUTOR: Cannot create indices
+        Users with OWNER role in any index: Can create indices of same type
+        SUPERVISOR and CONTRIBUTOR: Cannot create indices
         """
         if self.is_admin:
             return True
 
-        if self.is_index_manager:
-            # If no specific type provided, they can create
-            if index_type is None:
-                return True
+        # Check if user has OWNER role in any index
+        user_indices = self.get_user_indices()
+        has_owner_role = any(idx.role == IndexUserRole.OWNER for idx in user_indices)
 
-            # Check if user has at least one index of this type
-            user_indices = self.get_user_indices()
-            for idx_user in user_indices:
+        if not has_owner_role:
+            return False
+
+        # If no specific type provided, they can create
+        if index_type is None:
+            return True
+
+        # Check if user has at least one index of this type
+        for idx_user in user_indices:
+            if idx_user.role == IndexUserRole.OWNER:
                 index = self.db.query(Index).filter(Index.id == idx_user.index_id).first()
                 if index and index.index_type == index_type:
                     return True
 
-            # If user has no indices yet, allow creation
-            if len(user_indices) == 0:
-                return True
+        # If user has no indices yet, allow creation
+        if len(user_indices) == 0:
+            return True
 
-            return False
-
-        # SECTION_COORDINATOR and CONTRIBUTOR cannot create indices
         return False
 
     def can_view_requirements(self, index_id: str) -> bool:
@@ -139,8 +132,8 @@ class PermissionChecker:
         """
         Check if user can edit a requirement
         ADMIN: Can edit any requirement
-        INDEX_MANAGER with OWNER role: Can edit requirements in their indices
-        SECTION_COORDINATOR with SUPERVISOR role: Can edit requirements in their indices
+        OWNER: Can edit requirements in their indices
+        SUPERVISOR: Can edit requirements in their indices
         CONTRIBUTOR: Cannot edit requirements
         """
         if self.is_admin:
@@ -154,11 +147,7 @@ class PermissionChecker:
         if not self.has_index_access(requirement.index_id):
             return False
 
-        # CONTRIBUTOR cannot edit requirements
-        if self.is_contributor:
-            return False
-
-        # INDEX_MANAGER and SECTION_COORDINATOR can edit if they have access
+        # Check per-index role
         index_role = self.get_index_role(requirement.index_id)
         return index_role in [IndexUserRole.OWNER, IndexUserRole.SUPERVISOR]
 
@@ -166,8 +155,8 @@ class PermissionChecker:
         """
         Check if user can create/edit/delete/reorder requirements for an index
         ADMIN: Can manage all requirements
-        INDEX_MANAGER: Can manage requirements in their indices
-        SECTION_COORDINATOR: Can manage requirements in their indices
+        OWNER: Can manage requirements in their indices
+        SUPERVISOR: Can manage requirements in their indices
         CONTRIBUTOR: Cannot manage requirements
         """
         if self.is_admin:
@@ -176,11 +165,7 @@ class PermissionChecker:
         if not self.has_index_access(index_id):
             return False
 
-        # CONTRIBUTOR cannot manage requirements
-        if self.is_contributor:
-            return False
-
-        # INDEX_MANAGER and SECTION_COORDINATOR can manage if they have access
+        # Check per-index role
         index_role = self.get_index_role(index_id)
         return index_role in [IndexUserRole.OWNER, IndexUserRole.SUPERVISOR]
 

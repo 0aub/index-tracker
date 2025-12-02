@@ -76,7 +76,7 @@ class UserWithIndexRoles(BaseModel):
     last_name_ar: Optional[str]
     first_name_en: Optional[str]
     last_name_en: Optional[str]
-    role: str  # System-wide role
+    role: Optional[str]  # System-wide role (nullable - only ADMIN has a system role)
     is_active: bool
     is_first_login: bool
     agency_id: Optional[str]

@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { useIndexStore } from '../../stores/indexStore';
 
 interface ManagementRouteProps {
   children: ReactNode;
@@ -8,19 +9,24 @@ interface ManagementRouteProps {
 
 /**
  * Route protection for management-only pages (Tasks page)
- * Only accessible to: index_manager, section_coordinator, and admin roles
- * Contributors are redirected to 403 Forbidden page
+ * Only accessible to:
+ * - System ADMIN (global role)
+ * - Users with OWNER or SUPERVISOR role in the current index (per-index roles)
+ * Regular contributors are redirected to 403 Forbidden page
  */
 const ManagementRoute = ({ children }: ManagementRouteProps) => {
   const { user } = useAuthStore();
+  const { currentIndex } = useIndexStore();
 
-  // Check if user has management access
-  const isManagement = user?.role === 'INDEX_MANAGER' ||
-                       user?.role === 'SECTION_COORDINATOR' ||
-                       user?.role === 'ADMIN';
+  // Check if user is system admin (global role)
+  const isAdmin = user?.role === 'ADMIN';
 
-  if (!isManagement) {
-    // Redirect to forbidden page for non-management users
+  // Check if user has owner/supervisor role in the current index (per-index roles)
+  const isIndexOwnerOrSupervisor = currentIndex?.user_role === 'OWNER' || currentIndex?.user_role === 'SUPERVISOR';
+
+  // Allow access if user is admin or has management role in current index
+  if (!isAdmin && !isIndexOwnerOrSupervisor) {
+    // Redirect to forbidden page for users without management access
     return <Navigate to="/403" replace />;
   }
 

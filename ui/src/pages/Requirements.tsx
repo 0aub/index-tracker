@@ -9,8 +9,10 @@ import AssigneeManager from '../components/requirements/AssigneeManager';
 import { RequirementFormModal, RequirementFormData } from '../components/requirements/RequirementFormModal';
 import { DeleteRequirementDialog } from '../components/requirements/DeleteRequirementDialog';
 import { colors, patterns } from '../utils/darkMode';
-import { api, Requirement, AssignmentWithUser } from '../services/api';
+import { api, Requirement, AssignmentWithUser, Recommendation } from '../services/api';
 import toast from 'react-hot-toast';
+import RecommendationModal from '../components/RecommendationModal';
+import GroupRecommendationModal from '../components/GroupRecommendationModal';
 
 interface RequirementWithAssignments extends Requirement {
   assignments: AssignmentWithUser[];
@@ -48,6 +50,12 @@ const Requirements = () => {
     sub_domains: Array<{ ar: string; en: string }>;
     elements: Array<{ ar: string; en: string }>;
   } | null>(null);
+
+  // Recommendation modal states
+  const [showRecommendationModal, setShowRecommendationModal] = useState(false);
+  const [selectedRequirementForRec, setSelectedRequirementForRec] = useState<Requirement | null>(null);
+  const [currentRecommendation, setCurrentRecommendation] = useState<Recommendation | null>(null);
+  const [showGroupRecommendationModal, setShowGroupRecommendationModal] = useState(false);
 
   // Load requirements when index changes
   useEffect(() => {
@@ -229,6 +237,29 @@ const Requirements = () => {
     }
   };
 
+  // Recommendation handlers
+  const handleOpenRecommendationModal = async (e: React.MouseEvent, requirement: Requirement) => {
+    e.stopPropagation(); // Prevent row click navigation
+
+    setSelectedRequirementForRec(requirement);
+
+    // Try to load existing recommendation
+    try {
+      const recommendation = await api.recommendations.getByRequirement(requirement.id);
+      setCurrentRecommendation(recommendation);
+    } catch (err) {
+      // No existing recommendation, that's okay
+      setCurrentRecommendation(null);
+    }
+
+    setShowRecommendationModal(true);
+  };
+
+  const handleRecommendationSuccess = async () => {
+    // Reload requirements to update recommendation counts
+    await loadRequirements();
+  };
+
   // No index selected
   if (!currentIndex) {
     return (
@@ -308,13 +339,22 @@ const Requirements = () => {
             </p>
           </div>
           {canManageRequirements && (
-            <button
-              onClick={handleCreateRequirement}
-              className={`flex items-center gap-2 px-4 py-2 ${patterns.button}`}
-            >
-              <Plus size={20} />
-              {lang === 'ar' ? 'إضافة متطلب' : 'Add Requirement'}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCreateRequirement}
+                className={`flex items-center gap-2 px-4 py-2 ${patterns.button}`}
+              >
+                <Plus size={20} />
+                {lang === 'ar' ? 'إضافة متطلب' : 'Add Requirement'}
+              </button>
+              <button
+                onClick={() => setShowGroupRecommendationModal(true)}
+                className={`flex items-center gap-2 px-4 py-2 ${patterns.button}`}
+              >
+                <Lightbulb size={20} />
+                {lang === 'ar' ? 'إضافة توصية' : 'Add Recommendation'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -377,11 +417,11 @@ const Requirements = () => {
                   if (sectionReqs.length === 0 && selectedSection !== 'all' && selectedSection !== section) return null;
                   if (sectionReqs.length === 0 && selectedSection === 'all') return null;
 
-                  // Get unique criteria (المعيار/element_ar) within this section, preserving display order
+                  // Get unique criteria (المعيار/sub_domain_ar) within this section, preserving display order
                   const criteria: string[] = [];
                   sectionReqs.forEach(r => {
-                    if (r.element_ar && !criteria.includes(r.element_ar)) {
-                      criteria.push(r.element_ar);
+                    if (r.sub_domain_ar && !criteria.includes(r.sub_domain_ar)) {
+                      criteria.push(r.sub_domain_ar);
                     }
                   });
 
@@ -400,7 +440,7 @@ const Requirements = () => {
 
                       {/* Criteria groups (المعيار) */}
                       {criteria.map(criterion => {
-                        const criterionReqs = sectionReqs.filter(r => r.element_ar === criterion);
+                        const criterionReqs = sectionReqs.filter(r => r.sub_domain_ar === criterion);
 
                         return (
                           <>
@@ -480,13 +520,15 @@ const Requirements = () => {
                                   // Show single dot status indicator for ETARI - 5 colors for 5 statuses
                                   <div
                                     className={`w-4 h-4 rounded-full transition-all shadow-sm ${
-                                      req.answer_status === 'approved' ? 'bg-blue-500' :
+                                      req.answer_status === 'confirmed' ? 'bg-blue-500' :
+                                      req.answer_status === 'approved' ? 'bg-green-500' :
                                       req.answer_status === 'rejected' ? 'bg-orange-500' :
-                                      req.answer_status === 'pending_review' ? 'bg-green-500' :
-                                      req.answer_status === 'draft' ? 'bg-yellow-500' :
+                                      req.answer_status === 'pending_review' ? 'bg-yellow-500' :
+                                      req.answer_status === 'draft' ? 'bg-gray-400' :
                                       'bg-red-500'
                                     }`}
                                     title={
+                                      req.answer_status === 'confirmed' ? (lang === 'ar' ? 'مُؤكدة' : 'Confirmed') :
                                       req.answer_status === 'approved' ? (lang === 'ar' ? 'مُوافق عليها' : 'Approved') :
                                       req.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
                                       req.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Under Review') :
@@ -668,6 +710,34 @@ const Requirements = () => {
             : null
         }
       />
+
+      {/* Recommendation Modal */}
+      {selectedRequirementForRec && (
+        <RecommendationModal
+          isOpen={showRecommendationModal}
+          onClose={() => {
+            setShowRecommendationModal(false);
+            setSelectedRequirementForRec(null);
+            setCurrentRecommendation(null);
+          }}
+          requirementId={selectedRequirementForRec.id}
+          existingRecommendation={currentRecommendation}
+          onSuccess={handleRecommendationSuccess}
+        />
+      )}
+
+      {/* Group Recommendation Modal */}
+      {currentIndex && (
+        <GroupRecommendationModal
+          isOpen={showGroupRecommendationModal}
+          onClose={() => setShowGroupRecommendationModal(false)}
+          indexId={currentIndex.id}
+          mainAreas={mainAreas.map(ar => ({ ar }))}
+          elements={Array.from(new Set(requirements.map(r => r.element_ar).filter(Boolean))).map(ar => ({ ar }))}
+          subDomains={Array.from(new Set(requirements.map(r => r.sub_domain_ar).filter(Boolean))).map(ar => ({ ar }))}
+          onSuccess={loadRequirements}
+        />
+      )}
     </div>
   );
 };

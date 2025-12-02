@@ -2,15 +2,16 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Users, Calendar, CheckCircle2, CheckCircle, Circle, Upload, FileText, File,
-  Clock, MessageSquare, ChevronDown, ChevronUp, CheckSquare, Trash2, X, History, Loader2, AlertCircle, Lightbulb, Info, Download
+  Clock, MessageSquare, ChevronDown, ChevronUp, CheckSquare, Trash2, X, History, Loader2, AlertCircle, Lightbulb, Info, Download, Edit, Plus
 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore} from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
 import toast from 'react-hot-toast';
-import { api, Requirement, AssignmentWithUser, PreviousYearContextResponse } from '../services/api';
+import { api, Requirement, AssignmentWithUser, PreviousYearContextResponse, Recommendation } from '../services/api';
 import { colors, patterns } from '../utils/darkMode';
 import { getIndexConfig, getLevelName, getLevelDescription } from '../config/indexConfigs';
+import RecommendationModal from '../components/RecommendationModal';
 
 // Document status type
 type DocumentStatus = 'draft' | 'submitted' | 'confirmed' | 'approved';
@@ -328,6 +329,8 @@ const RequirementDetail = () => {
   const [copyingEvidenceId, setCopyingEvidenceId] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [currentRecommendation, setCurrentRecommendation] = useState<Recommendation | null>(null);
+  const [showRecommendationModal, setShowRecommendationModal] = useState(false);
 
   // Handler for copying evidence from previous year
   const handleCopyEvidence = async (evidenceId: string, documentName: string) => {
@@ -396,6 +399,43 @@ const RequirementDetail = () => {
       );
     } finally {
       setCopyingEvidenceId(null);
+    }
+  };
+
+  // Recommendation handlers
+  const handleOpenRecommendationModal = () => {
+    setShowRecommendationModal(true);
+  };
+
+  const handleRecommendationSuccess = async () => {
+    if (!id) return;
+
+    // Reload recommendation
+    try {
+      const recommendation = await api.recommendations.getByRequirement(id);
+      setCurrentRecommendation(recommendation);
+      setRecommendations([recommendation]);
+      toast.success(lang === 'ar' ? 'تم تحديث التوصية بنجاح' : 'Recommendation updated successfully');
+    } catch (err) {
+      console.error('Failed to reload recommendation:', err);
+    }
+  };
+
+  const handleDeleteRecommendation = async () => {
+    if (!currentRecommendation) return;
+
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه التوصية؟' : 'Are you sure you want to delete this recommendation?')) {
+      return;
+    }
+
+    try {
+      await api.recommendations.delete(currentRecommendation.id);
+      setCurrentRecommendation(null);
+      setRecommendations([]);
+      toast.success(lang === 'ar' ? 'تم حذف التوصية بنجاح' : 'Recommendation deleted successfully');
+    } catch (err: any) {
+      console.error('Failed to delete recommendation:', err);
+      toast.error(err.message || (lang === 'ar' ? 'فشل في حذف التوصية' : 'Failed to delete recommendation'));
     }
   };
 
@@ -546,13 +586,15 @@ const RequirementDetail = () => {
           setPreviousData(null);
         }
 
-        // Load recommendations
+        // Load recommendation for this requirement
         try {
           setLoadingRecommendations(true);
-          const recommendationsData = await api.requirements.getRecommendations(id);
-          setRecommendations(recommendationsData);
+          const recommendation = await api.recommendations.getByRequirement(id);
+          setCurrentRecommendation(recommendation);
+          setRecommendations([recommendation]); // Keep as array for backward compatibility
         } catch (err) {
-          console.error('Failed to load recommendations:', err);
+          console.error('Failed to load recommendation:', err);
+          setCurrentRecommendation(null);
           setRecommendations([]);
         } finally {
           setLoadingRecommendations(false);
@@ -1676,10 +1718,29 @@ const RequirementDetail = () => {
                           <AlertCircle className="text-amber-600 dark:text-amber-400" size={20} />
                           {lang === 'ar' ? 'التوصيات السابقة' : 'Previous Recommendation'}
                         </h3>
-                        <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}>
-                          <p className={`${colors.textPrimary} whitespace-pre-wrap mb-3`}>
-                            {lang === 'ar' ? previousData.matched_recommendation.recommendation_ar : previousData.matched_recommendation.recommendation_en || previousData.matched_recommendation.recommendation_ar}
-                          </p>
+                        <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500 space-y-3`}>
+                          {/* Current Status (الوضع الراهن) */}
+                          {previousData.matched_recommendation.current_status_ar && (
+                            <div>
+                              <h4 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                                {lang === 'ar' ? 'الوضع الراهن' : 'Current Status'}
+                              </h4>
+                              <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
+                                {previousData.matched_recommendation.current_status_ar}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Recommendation (التوصية) */}
+                          <div>
+                            <h4 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                              {lang === 'ar' ? 'التوصية' : 'Recommendation'}
+                            </h4>
+                            <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
+                              {lang === 'ar' ? previousData.matched_recommendation.recommendation_ar : previousData.matched_recommendation.recommendation_en || previousData.matched_recommendation.recommendation_ar}
+                            </p>
+                          </div>
+
                           <div className="flex items-center gap-3">
                             <span className={`text-xs px-2 py-1 rounded-full ${
                               previousData.matched_recommendation.status === 'addressed' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
@@ -1748,8 +1809,8 @@ const RequirementDetail = () => {
                           {previousData.matched_requirement.answer_status && (
                             <div className="mt-3 flex items-center gap-2">
                               <span className={`text-xs px-2 py-1 rounded-full ${
-                                previousData.matched_requirement.answer_status === 'approved' ? 'bg-blue-600 text-white dark:bg-blue-700' :
-                                previousData.matched_requirement.answer_status === 'confirmed' ? 'bg-green-700 text-white dark:bg-green-600' :
+                                previousData.matched_requirement.answer_status === 'approved' ? 'bg-green-700 text-white dark:bg-green-600' :
+                                previousData.matched_requirement.answer_status === 'confirmed' ? 'bg-blue-600 text-white dark:bg-blue-700' :
                                 previousData.matched_requirement.answer_status === 'pending_review' ? 'bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300' :
                                 previousData.matched_requirement.answer_status === 'changes_requested' ? 'bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-300' :
                                 previousData.matched_requirement.answer_status === 'rejected' ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' :
@@ -1910,8 +1971,8 @@ const RequirementDetail = () => {
                               </span>
                               {req.answer_status && (
                                 <span className={`text-xs px-2 py-1 rounded-full ${
-                                  req.answer_status === 'approved' ? 'bg-blue-600 text-white dark:bg-blue-700' :
-                                  req.answer_status === 'confirmed' ? 'bg-green-700 text-white dark:bg-green-600' :
+                                  req.answer_status === 'approved' ? 'bg-green-700 text-white dark:bg-green-600' :
+                                  req.answer_status === 'confirmed' ? 'bg-blue-600 text-white dark:bg-blue-700' :
                                   req.answer_status === 'pending_review' ? 'bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300' :
                                   req.answer_status === 'changes_requested' ? 'bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-300' :
                                   req.answer_status === 'rejected' ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' :
@@ -2012,50 +2073,80 @@ const RequirementDetail = () => {
           </>
         )}
 
-        {/* Recommendations Section - Only show if recommendations exist */}
-        {recommendations.length > 0 && (
-          <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6 mb-6`}>
-            <div className="flex items-center gap-3 mb-4">
+        {/* Recommendations Section - Only show if recommendation exists OR user is admin */}
+        {(currentRecommendation || user?.role === 'admin') && (
+        <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6 mb-6`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
               <Lightbulb className="text-amber-600 dark:text-amber-400" size={24} />
               <h2 className={`text-xl font-bold ${colors.textPrimary}`}>
                 {lang === 'ar' ? 'التوصيات' : 'Recommendations'}
               </h2>
             </div>
 
-            {loadingRecommendations ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className={`${colors.textSecondary} animate-spin`} size={32} />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recommendations.map((recommendation, index) => (
-                  <div
-                    key={recommendation.id || index}
-                    className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}
-                  >
-                    <div className="space-y-3">
-                      <div>
-                        <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
-                          {lang === 'ar' ? 'الوضع الراهن' : 'Current Status'}
-                        </h3>
-                        <p className={`${colors.textPrimary}`}>
-                          {lang === 'ar' ? recommendation.current_status_ar : recommendation.current_status_en || recommendation.current_status_ar}
-                        </p>
-                      </div>
-                      <div>
-                        <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
-                          {lang === 'ar' ? 'التوصية' : 'Recommendation'}
-                        </h3>
-                        <p className={`${colors.textPrimary}`}>
-                          {lang === 'ar' ? recommendation.recommendation_ar : recommendation.recommendation_en || recommendation.recommendation_ar}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {/* Show Add button if no recommendation exists and user is admin */}
+            {!currentRecommendation && user?.role === 'admin' && (
+              <button
+                onClick={handleOpenRecommendationModal}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                <Plus size={18} />
+                <span>{lang === 'ar' ? 'إضافة توصية' : 'Add Recommendation'}</span>
+              </button>
             )}
           </div>
+
+          {loadingRecommendations ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className={`${colors.textSecondary} animate-spin`} size={32} />
+            </div>
+          ) : currentRecommendation ? (
+            <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}>
+              <div className="space-y-3">
+                <div>
+                  <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                    {lang === 'ar' ? 'الوضع الراهن' : 'Current Status'}
+                  </h3>
+                  <p className={`${colors.textPrimary}`}>
+                    {lang === 'ar' ? currentRecommendation.current_status_ar : currentRecommendation.current_status_ar}
+                  </p>
+                </div>
+                <div>
+                  <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                    {lang === 'ar' ? 'التوصية' : 'Recommendation'}
+                  </h3>
+                  <p className={`${colors.textPrimary}`}>
+                    {lang === 'ar' ? currentRecommendation.recommendation_ar : currentRecommendation.recommendation_ar}
+                  </p>
+                </div>
+
+                {/* Action buttons for admin */}
+                {user?.role === 'admin' && (
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <button
+                      onClick={handleOpenRecommendationModal}
+                      className={`flex items-center gap-2 px-3 py-1.5 ${colors.primaryLight} ${colors.primaryText} rounded-lg hover:opacity-80 transition text-sm`}
+                    >
+                      <Edit size={16} />
+                      <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                    </button>
+                    <button
+                      onClick={handleDeleteRecommendation}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:opacity-80 transition text-sm"
+                    >
+                      <Trash2 size={16} />
+                      <span>{lang === 'ar' ? 'حذف' : 'Delete'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className={`text-center py-8 ${colors.textSecondary}`}>
+              {lang === 'ar' ? 'لا توجد توصيات لهذا المتطلب' : 'No recommendations for this requirement'}
+            </p>
+          )}
+        </div>
         )}
 
         {/* Activity Timeline Toggle */}
@@ -2183,8 +2274,8 @@ const RequirementDetail = () => {
                     !requirement.answer_status || requirement.answer_status === 'draft' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
                     requirement.answer_status === 'pending_review' ? 'bg-yellow-200 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
                     requirement.answer_status === 'changes_requested' ? 'bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-300' :
-                    requirement.answer_status === 'approved' ? 'bg-blue-600 text-white dark:bg-blue-700' :
-                    requirement.answer_status === 'confirmed' ? 'bg-green-700 text-white dark:bg-green-600' :
+                    requirement.answer_status === 'approved' ? 'bg-green-700 text-white dark:bg-green-600' :
+                    requirement.answer_status === 'confirmed' ? 'bg-blue-600 text-white dark:bg-blue-700' :
                     'bg-red-200 text-red-700 dark:bg-red-900 dark:text-red-300'
                   }`}>
                     {!requirement.answer_status && (lang === 'ar' ? 'لم يبدأ' : 'Not Started')}
@@ -2304,12 +2395,11 @@ const RequirementDetail = () => {
               )}
             </div>
 
-            {/* Evidence Upload Section - Always show for ETARI, or if evidence_description exists OR documents are uploaded */}
+            {/* Evidence Upload Section - Only show if evidence_description exists OR documents are uploaded */}
             {(() => {
-              const isETARI = currentIndex?.index_type === 'ETARI';
               const hasEvidenceDesc = requirement.evidence_description && requirement.evidence_description.trim().length > 0;
               const hasDocs = documents[0] && documents[0].length > 0;
-              return isETARI || hasEvidenceDesc || hasDocs;
+              return hasEvidenceDesc || hasDocs;
             })() && (
             <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6`}>
               <h2 className={`text-xl font-bold ${colors.textPrimary} mb-4 flex items-center gap-2`}>
@@ -3269,6 +3359,15 @@ const RequirementDetail = () => {
           </div>
         );
       })()}
+
+      {/* Recommendation Modal */}
+      <RecommendationModal
+        isOpen={showRecommendationModal}
+        onClose={() => setShowRecommendationModal(false)}
+        requirementId={id || ''}
+        existingRecommendation={currentRecommendation}
+        onSuccess={handleRecommendationSuccess}
+      />
     </div>
   );
 };

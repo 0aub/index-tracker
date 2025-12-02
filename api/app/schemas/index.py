@@ -82,6 +82,8 @@ class IndexMinimal(BaseModel):
     is_completed: bool = False
     completed_at: Optional[datetime] = None
     previous_index_id: Optional[str] = None
+    # User's role in this specific index
+    user_role: Optional[str] = None  # OWNER, SUPERVISOR, CONTRIBUTOR (from index_users table)
 
     class Config:
         from_attributes = True

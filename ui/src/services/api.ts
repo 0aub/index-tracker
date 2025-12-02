@@ -35,12 +35,15 @@ export interface Index {
   is_completed: boolean;
   completed_at: string | null;
   previous_index_id: string | null;
+  // User's role in this specific index (from index_users table)
+  user_role?: string | null;  // 'OWNER', 'SUPERVISOR', 'CONTRIBUTOR'
 }
 
 export interface Recommendation {
   id: string;
   requirement_id: string;
   index_id: string;
+  current_status_ar: string;
   recommendation_ar: string;
   recommendation_en: string | null;
   status: 'pending' | 'addressed' | 'in_progress';
@@ -1453,6 +1456,68 @@ export const recommendationsAPI = {
   },
 
   /**
+   * Create recommendation manually for a requirement
+   */
+  async create(data: {
+    requirement_id: string;
+    current_status_ar: string;
+    recommendation_ar: string;
+  }): Promise<Recommendation> {
+    const formData = new FormData();
+    formData.append('requirement_id', data.requirement_id);
+    formData.append('current_status_ar', data.current_status_ar);
+    formData.append('recommendation_ar', data.recommendation_ar);
+
+    const response = await fetch(`${API_BASE_URL}/recommendations`, {
+      method: 'POST',
+      headers: getAuthHeadersForUpload(),
+      body: formData,
+    });
+    return handleResponse<Recommendation>(response);
+  },
+
+  /**
+   * Create recommendation for a group (all requirements matching main_area, element, and sub_domain)
+   */
+  async createForGroup(data: {
+    index_id: string;
+    main_area_ar: string;
+    element_ar: string;
+    sub_domain_ar: string;
+    current_status_ar: string;
+    recommendation_ar: string;
+  }): Promise<{ requirements_count: number; created: number; updated: number }> {
+    const response = await fetch(`${API_BASE_URL}/recommendations/group`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{ requirements_count: number; created: number; updated: number }>(response);
+  },
+
+  /**
+   * Get recommendation for a specific requirement
+   */
+  async getByRequirement(requirementId: string): Promise<Recommendation> {
+    const response = await fetch(`${API_BASE_URL}/recommendations/requirement/${requirementId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<Recommendation>(response);
+  },
+
+  /**
+   * Get all recommendations for an index
+   */
+  async getByIndex(indexId: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/recommendations/index/${indexId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<any>(response);
+  },
+
+  /**
    * Get recommendations template download URL
    */
   getTemplateUrl(): string {
@@ -1465,6 +1530,8 @@ export const recommendationsAPI = {
   async update(id: string, data: {
     status?: 'pending' | 'addressed' | 'in_progress';
     addressed_comment?: string;
+    current_status_ar?: string;
+    recommendation_ar?: string;
   }): Promise<Recommendation> {
     const response = await fetch(`${API_BASE_URL}/recommendations/${id}`, {
       method: 'PATCH',
@@ -1472,6 +1539,17 @@ export const recommendationsAPI = {
       body: JSON.stringify(data),
     });
     return handleResponse<Recommendation>(response);
+  },
+
+  /**
+   * Delete recommendation
+   */
+  async delete(id: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/recommendations/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ message: string }>(response);
   },
 };
 

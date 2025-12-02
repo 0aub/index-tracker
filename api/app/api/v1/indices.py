@@ -243,7 +243,18 @@ async def list_indices(
             Requirement, Evidence.requirement_id == Requirement.id
         ).filter(Requirement.index_id == index.id).scalar() or 0
 
-        # Create response with evidence count
+        # Get the user's role in this index from index_users table
+        user_role = None
+        if not permissions.is_admin:
+            # For non-admin users, get their specific role in this index
+            index_user = db.query(IndexUser).filter(
+                IndexUser.index_id == index.id,
+                IndexUser.user_id == permissions.user.id
+            ).first()
+            if index_user:
+                user_role = index_user.role.value.upper()  # Convert enum to uppercase string
+
+        # Create response with evidence count and user role
         index_dict = {
             'id': index.id,
             'code': index.code,
@@ -259,7 +270,8 @@ async def list_indices(
             'end_date': index.end_date,
             'is_completed': index.is_completed,
             'completed_at': index.completed_at,
-            'previous_index_id': index.previous_index_id
+            'previous_index_id': index.previous_index_id,
+            'user_role': user_role
         }
         result.append(index_dict)
 

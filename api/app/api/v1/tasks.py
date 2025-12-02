@@ -32,17 +32,16 @@ def can_view_task(task: Task, user: User, db: Session) -> bool:
     if user.role == UserRole.ADMIN:
         return True
 
-    # Index owners (INDEX_MANAGER role with ownership via IndexUser) can see tasks for their indices
-    if user.role == UserRole.INDEX_MANAGER:
-        # Check if user owns this task's index
-        index_ownership = db.query(IndexUser).filter(
-            and_(
-                IndexUser.user_id == user.id,
-                IndexUser.index_id == task.index_id
-            )
-        ).first()
-        if index_ownership:
-            return True
+    # Index owners/supervisors (per-index roles) can see tasks for their indices
+    index_role = db.query(IndexUser).filter(
+        and_(
+            IndexUser.user_id == user.id,
+            IndexUser.index_id == task.index_id,
+            IndexUser.role.in_(['OWNER', 'SUPERVISOR'])
+        )
+    ).first()
+    if index_role:
+        return True
 
     # Task creator can see their tasks
     if task.created_by == user.id:
@@ -65,17 +64,16 @@ def can_modify_task(task: Task, user: User, db: Session) -> bool:
     if user.role == UserRole.ADMIN:
         return True
 
-    # Index owners (INDEX_MANAGER role with ownership via IndexUser) can modify tasks for their indices
-    if user.role == UserRole.INDEX_MANAGER:
-        # Check if user owns this task's index
-        index_ownership = db.query(IndexUser).filter(
-            and_(
-                IndexUser.user_id == user.id,
-                IndexUser.index_id == task.index_id
-            )
-        ).first()
-        if index_ownership:
-            return True
+    # Index owners/supervisors (per-index roles) can modify tasks for their indices
+    index_role = db.query(IndexUser).filter(
+        and_(
+            IndexUser.user_id == user.id,
+            IndexUser.index_id == task.index_id,
+            IndexUser.role.in_(['OWNER', 'SUPERVISOR'])
+        )
+    ).first()
+    if index_role:
+        return True
 
     # Task creator can modify their tasks
     if task.created_by == user.id:
@@ -189,21 +187,22 @@ async def list_tasks(
     List tasks with optional filters
 
     - Admins: see all tasks
-    - Index Owners (INDEX_MANAGER with index ownership): see tasks for their indices + tasks assigned to them
-    - Contributors/Supervisors: see only tasks assigned to them or created by them
+    - Index Owners/Supervisors (per-index roles): see tasks for their indices + tasks assigned to them
+    - Contributors: see only tasks assigned to them or created by them
     """
     # Build base query
     query = db.query(Task)
 
-    # Apply permission filter
+    # Apply permission filter based on system role and per-index roles
     if current_user.role == UserRole.ADMIN:
-        # Admins see all tasks - no filter needed
+        # System admins see all tasks - no filter needed
         pass
-    elif current_user.role == UserRole.INDEX_MANAGER:
-        # Index owners see tasks for their owned indices + tasks assigned to them
-        # Get indices owned by this user
-        owned_index_ids = db.query(IndexUser.index_id).filter(
-            IndexUser.user_id == current_user.id
+    else:
+        # For non-admin users, check their per-index roles
+        # Get indices where user is OWNER or SUPERVISOR
+        management_index_ids = db.query(IndexUser.index_id).filter(
+            IndexUser.user_id == current_user.id,
+            IndexUser.role.in_(['OWNER', 'SUPERVISOR'])
         ).subquery()
 
         # Get tasks assigned to this user
@@ -211,21 +210,13 @@ async def list_tasks(
             TaskAssignment.user_id == current_user.id
         ).subquery()
 
+        # Users can see:
+        # 1. Tasks for indices they own/supervise
+        # 2. Tasks they created
+        # 3. Tasks assigned to them
         query = query.filter(
             or_(
-                Task.index_id.in_(owned_index_ids),
-                Task.id.in_(assigned_task_ids),
-                Task.created_by == current_user.id
-            )
-        )
-    else:
-        # Contributors/Supervisors can only see tasks they created or are assigned to
-        assigned_task_ids = db.query(TaskAssignment.task_id).filter(
-            TaskAssignment.user_id == current_user.id
-        ).subquery()
-
-        query = query.filter(
-            or_(
+                Task.index_id.in_(management_index_ids),
                 Task.created_by == current_user.id,
                 Task.id.in_(assigned_task_ids)
             )
@@ -258,30 +249,26 @@ async def list_tasks(
     if current_user.role == UserRole.ADMIN:
         # Admins see all tasks - no filter needed
         pass
-    elif current_user.role == UserRole.INDEX_MANAGER:
-        # Index owners see tasks for their owned indices + tasks assigned to them
-        owned_index_ids = db.query(IndexUser.index_id).filter(
-            IndexUser.user_id == current_user.id
-        ).subquery()
-
-        assigned_task_ids = db.query(TaskAssignment.task_id).filter(
-            TaskAssignment.user_id == current_user.id
-        ).subquery()
-
-        all_tasks = all_tasks.filter(
-            or_(
-                Task.index_id.in_(owned_index_ids),
-                Task.id.in_(assigned_task_ids),
-                Task.created_by == current_user.id
-            )
-        )
     else:
-        # Contributors/Supervisors
+        # For non-admin users, check their per-index roles
+        # Get indices where user is OWNER or SUPERVISOR
+        management_index_ids = db.query(IndexUser.index_id).filter(
+            IndexUser.user_id == current_user.id,
+            IndexUser.role.in_(['OWNER', 'SUPERVISOR'])
+        ).subquery()
+
+        # Get tasks assigned to this user
         assigned_task_ids = db.query(TaskAssignment.task_id).filter(
             TaskAssignment.user_id == current_user.id
         ).subquery()
+
+        # Users can see:
+        # 1. Tasks for indices they own/supervise
+        # 2. Tasks they created
+        # 3. Tasks assigned to them
         all_tasks = all_tasks.filter(
             or_(
+                Task.index_id.in_(management_index_ids),
                 Task.created_by == current_user.id,
                 Task.id.in_(assigned_task_ids)
             )

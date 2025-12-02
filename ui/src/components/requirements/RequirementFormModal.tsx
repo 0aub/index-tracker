@@ -200,11 +200,11 @@ export const RequirementFormModal = ({
         : 'Main area is required - Select an area from the list';
     }
 
-    // Sub-domain validation
+    // Criteria validation
     if (!formData.sub_domain_ar.trim()) {
       newErrors.sub_domain_ar = lang === 'ar'
-        ? 'العنصر مطلوب - اختر عنصراً من القائمة'
-        : 'Sub-domain is required - Select a sub-domain from the list';
+        ? 'المعيار مطلوب - اختر معياراً من القائمة'
+        : 'Criteria is required - Select a criteria from the list';
     }
 
     // Question validation
@@ -438,11 +438,11 @@ export const RequirementFormModal = ({
             </div>
           </div>
 
-          {/* Standard (Element) - Arabic & English */}
+          {/* Element (العنصر) - Arabic & English */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
-                {lang === 'ar' ? 'المعيار (عربي)' : 'Standard (Arabic)'}
+                {lang === 'ar' ? 'العنصر (عربي)' : 'Element (Arabic)'}
               </label>
               <div className="flex gap-2">
                 {!creatingNewElement ? (
@@ -453,7 +453,7 @@ export const RequirementFormModal = ({
                       disabled={!formData.main_area_ar}
                       className={`flex-1 px-4 py-2 ${patterns.select} ${!formData.main_area_ar ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      <option value="">{lang === 'ar' ? 'اختر المعيار' : 'Select standard'}</option>
+                      <option value="">{lang === 'ar' ? 'اختر العنصر' : 'Select element'}</option>
                       {filteredElements.map((element, idx) => (
                         <option key={idx} value={element.ar}>{element.ar}</option>
                       ))}
@@ -467,7 +467,7 @@ export const RequirementFormModal = ({
                       }}
                       disabled={!formData.main_area_ar}
                       className={`px-3 py-2 ${colors.primary} text-white rounded-lg hover:opacity-90 transition ${!formData.main_area_ar ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      title={lang === 'ar' ? 'إنشاء معيار جديد' : 'Create new standard'}
+                      title={lang === 'ar' ? 'إنشاء عنصر جديد' : 'Create new element'}
                     >
                       +
                     </button>
@@ -479,7 +479,7 @@ export const RequirementFormModal = ({
                       value={formData.element_ar}
                       onChange={(e) => handleChange('element_ar', e.target.value)}
                       className={`flex-1 px-4 py-2 ${patterns.input}`}
-                      placeholder={lang === 'ar' ? 'أدخل اسم المعيار الجديد' : 'Enter new standard name'}
+                      placeholder={lang === 'ar' ? 'أدخل اسم العنصر الجديد' : 'Enter new element name'}
                       autoFocus
                       dir="rtl"
                     />
@@ -501,14 +501,14 @@ export const RequirementFormModal = ({
               )}
               {creatingNewElement && (
                 <p className={`mt-1 text-xs ${colors.primaryText}`}>
-                  {lang === 'ar' ? '✓ سيتم إنشاء معيار جديد' : '✓ Will create a new standard'}
+                  {lang === 'ar' ? '✓ سيتم إنشاء عنصر جديد' : '✓ Will create a new element'}
                 </p>
               )}
             </div>
 
             <div>
               <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
-                {lang === 'ar' ? 'المعيار (إنجليزي)' : 'Standard (English)'}
+                {lang === 'ar' ? 'العنصر (إنجليزي)' : 'Element (English)'}
               </label>
               <input
                 type="text"
@@ -521,11 +521,11 @@ export const RequirementFormModal = ({
             </div>
           </div>
 
-          {/* Sub-domain (العنصر) - Arabic & English */}
+          {/* Criteria (المعيار) - Arabic & English */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
-                {lang === 'ar' ? 'العنصر (عربي)' : 'Sub-domain (Arabic)'} *
+                {lang === 'ar' ? 'المعيار (عربي)' : 'Criteria (Arabic)'} *
               </label>
               <div className="flex gap-2">
                 {!creatingNewSubDomain ? (
@@ -536,7 +536,7 @@ export const RequirementFormModal = ({
                       disabled={!formData.element_ar}
                       className={`flex-1 px-4 py-2 ${patterns.select} ${errors.sub_domain_ar ? 'border-red-500' : ''} ${!formData.element_ar ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      <option value="">{lang === 'ar' ? 'اختر العنصر' : 'Select sub-domain'}</option>
+                      <option value="">{lang === 'ar' ? 'اختر المعيار' : 'Select criteria'}</option>
                       {filteredSubDomains.map((subdomain, idx) => (
                         <option key={idx} value={subdomain.ar}>{subdomain.ar}</option>
                       ))}
@@ -550,7 +550,7 @@ export const RequirementFormModal = ({
                       }}
                       disabled={!formData.element_ar}
                       className={`px-3 py-2 ${colors.primary} text-white rounded-lg hover:opacity-90 transition ${!formData.element_ar ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      title={lang === 'ar' ? 'إنشاء عنصر جديد' : 'Create new sub-domain'}
+                      title={lang === 'ar' ? 'إنشاء معيار جديد' : 'Create new criteria'}
                     >
                       +
                     </button>
@@ -562,7 +562,7 @@ export const RequirementFormModal = ({
                       value={formData.sub_domain_ar}
                       onChange={(e) => handleChange('sub_domain_ar', e.target.value)}
                       className={`flex-1 px-4 py-2 ${patterns.input} ${errors.sub_domain_ar ? 'border-red-500' : ''}`}
-                      placeholder={lang === 'ar' ? 'أدخل اسم العنصر الجديد' : 'Enter new sub-domain name'}
+                      placeholder={lang === 'ar' ? 'أدخل اسم المعيار الجديد' : 'Enter new criteria name'}
                       autoFocus
                       dir="rtl"
                     />
@@ -580,19 +580,19 @@ export const RequirementFormModal = ({
               {errors.sub_domain_ar && <p className="mt-1 text-sm text-red-600">{errors.sub_domain_ar}</p>}
               {!formData.element_ar && !creatingNewSubDomain && (
                 <p className={`mt-1 text-xs ${colors.textSecondary}`}>
-                  {lang === 'ar' ? 'اختر المعيار أولاً' : 'Select standard first'}
+                  {lang === 'ar' ? 'اختر العنصر أولاً' : 'Select element first'}
                 </p>
               )}
               {creatingNewSubDomain && (
                 <p className={`mt-1 text-xs ${colors.primaryText}`}>
-                  {lang === 'ar' ? '✓ سيتم إنشاء عنصر جديد' : '✓ Will create a new sub-domain'}
+                  {lang === 'ar' ? '✓ سيتم إنشاء معيار جديد' : '✓ Will create a new criteria'}
                 </p>
               )}
             </div>
 
             <div>
               <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
-                {lang === 'ar' ? 'العنصر (إنجليزي)' : 'Sub-domain (English)'}
+                {lang === 'ar' ? 'المعيار (إنجليزي)' : 'Criteria (English)'}
               </label>
               <input
                 type="text"

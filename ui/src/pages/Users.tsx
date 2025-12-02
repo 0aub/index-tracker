@@ -33,7 +33,6 @@ const Users = () => {
   const [systemUsers, setSystemUsers] = useState<UserWithRoles[]>([]);
   const [systemLoading, setSystemLoading] = useState(false);
   const [systemSearchTerm, setSystemSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState('');
   const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
   const [showAddSystemUserModal, setShowAddSystemUserModal] = useState(false);
   const [showUserDetailsModal, setShowUserDetailsModal] = useState(false);
@@ -144,7 +143,6 @@ const Users = () => {
     try {
       setSystemLoading(true);
       const params: any = {};
-      if (filterRole) params.role = filterRole;
       if (filterActive !== undefined) params.is_active = filterActive;
       if (systemSearchTerm) params.search = systemSearchTerm;
 
@@ -237,29 +235,31 @@ const Users = () => {
   };
 
   const roleLabels = {
+    // Index roles (per-index, not system-wide)
     owner: { ar: 'مالك', en: 'Owner' },
     supervisor: { ar: 'مشرف', en: 'Supervisor' },
     contributor: { ar: 'مساهم', en: 'Contributor' },
+    // System role (only ADMIN exists as global role)
     admin: { ar: 'مدير المنصة', en: 'Admin' },
-    index_manager: { ar: 'مدير مؤشر', en: 'Index Manager' },
-    section_coordinator: { ar: 'منسق قسم', en: 'Section Coordinator' },
-    unassigned: { ar: 'غير معين', en: 'Unassigned' },
+    // For users with no system role (most users)
+    '': { ar: 'لا يوجد دور نظام', en: 'No System Role' },
+    null: { ar: 'لا يوجد دور نظام', en: 'No System Role' },
   };
 
-  const getRoleLabel = (role: string) => {
+  const getRoleLabel = (role: string | null | undefined) => {
+    if (!role) return roleLabels[null][lang];
     const roleKey = role.toLowerCase();
     return roleLabels[roleKey as keyof typeof roleLabels]?.[lang] || role;
   };
 
-  const getRoleBadgeColor = (role: string) => {
+  const getRoleBadgeColor = (role: string | null | undefined) => {
+    if (!role) return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
     const roleKey = role.toLowerCase();
     switch (roleKey) {
       case 'admin':
         return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'index_manager':
       case 'owner':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
-      case 'section_coordinator':
       case 'supervisor':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
       case 'contributor':
@@ -548,7 +548,7 @@ const Users = () => {
 
         {/* Filters */}
         <div className={`${colors.bgSecondary} rounded-lg p-4 mb-6 ${colors.border} border`}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
               <Search className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${colors.textTertiary}`} size={20} />
               <input
@@ -559,18 +559,6 @@ const Users = () => {
                 className={`w-full pl-4 pr-10 py-2 ${patterns.input}`}
               />
             </div>
-
-            <select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              className={`px-4 py-2 ${patterns.input}`}
-            >
-              <option value="">{lang === 'ar' ? 'جميع الأدوار' : 'All Roles'}</option>
-              <option value="admin">{lang === 'ar' ? 'مدير' : 'Admin'}</option>
-              <option value="index_manager">{lang === 'ar' ? 'مدير مؤشر' : 'Index Manager'}</option>
-              <option value="section_coordinator">{lang === 'ar' ? 'منسق قسم' : 'Section Coordinator'}</option>
-              <option value="contributor">{lang === 'ar' ? 'مساهم' : 'Contributor'}</option>
-            </select>
 
             <button
               onClick={loadSystemUsers}
@@ -718,8 +706,6 @@ const Users = () => {
                   onClick={() => {
                     setShowAddSystemUserModal(false);
                     setNewUserEmail('');
-                    setNewUserRole('contributor');
-                    setNewUserIndexId('');
                   }}
                   className={`flex-1 px-4 py-2 ${patterns.secondaryButton}`}
                 >

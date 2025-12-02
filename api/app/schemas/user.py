@@ -13,7 +13,7 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name_ar: str = Field(..., min_length=2, max_length=200)
     full_name_en: Optional[str] = Field(None, max_length=200)
-    role: UserRole
+    role: Optional[UserRole]  # Nullable - only ADMIN has a system role
     organization_id: str
     department_ar: Optional[str] = Field(None, max_length=200)
     department_en: Optional[str] = Field(None, max_length=200)
@@ -72,7 +72,7 @@ class UserMinimal(BaseModel):
     username: str
     full_name_ar: str
     full_name_en: Optional[str] = None
-    role: UserRole
+    role: Optional[UserRole]  # Nullable - only ADMIN has a system role
     department_ar: Optional[str] = None
 
     class Config:

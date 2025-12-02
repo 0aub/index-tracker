@@ -276,7 +276,7 @@ def list_all_users(
             last_name_ar=user.last_name_ar,
             first_name_en=user.first_name_en,
             last_name_en=user.last_name_en,
-            role=user.role.value,
+            role=user.role.value if user.role else None,
             is_active=user.is_active,
             is_first_login=user.is_first_login,
             agency_id=user.agency_id,

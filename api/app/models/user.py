@@ -10,12 +10,13 @@ from app.database import Base
 
 
 class UserRole(str, enum.Enum):
-    """User roles in the system"""
+    """
+    System-level roles (minimal - most roles are per-index)
+
+    ADMIN: Platform administrator (can manage everything)
+    All other users: No system role - roles are defined per-index in index_users table
+    """
     ADMIN = "ADMIN"
-    INDEX_MANAGER = "INDEX_MANAGER"
-    SECTION_COORDINATOR = "SECTION_COORDINATOR"
-    CONTRIBUTOR = "CONTRIBUTOR"
-    UNASSIGNED = "UNASSIGNED"  # User not yet assigned to any index
 
 
 class User(Base):
@@ -46,7 +47,8 @@ class User(Base):
     password_changed_at = Column(DateTime, nullable=True)
 
     # Role & Organization
-    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.CONTRIBUTOR)
+    # Role is nullable - only ADMIN has a system role, all others get roles per-index
+    role = Column(SQLEnum(UserRole), nullable=True, default=None)
     organization_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
 
     # Organizational Hierarchy

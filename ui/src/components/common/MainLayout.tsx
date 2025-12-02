@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { BarChart3, FileText, CheckSquare, LogOut, User, ListTodo, Users, Settings, Layers, Moon, Sun, Building2, UserCog, Home, Bell } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useIndexStore } from '../../stores/indexStore';
 import { colors, patterns } from '../../utils/darkMode';
 import toast from 'react-hot-toast';
 import { IndexSelector } from '../index/IndexSelector';
@@ -14,13 +15,16 @@ const MainLayout = () => {
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const { language, theme, setTheme } = useUIStore();
+  const { currentIndex } = useIndexStore();
   const lang = language;
   const isDark = theme === 'dark';
 
-  // Check if user has management access (index_manager or section_coordinator)
-  const isManagement = user?.role === 'INDEX_MANAGER' || user?.role === 'SECTION_COORDINATOR' || user?.role === 'ADMIN';
+  // Check if user is system admin (only global role that exists)
   const isAdmin = user?.role === 'ADMIN';
-  const isContributor = user?.role === 'CONTRIBUTOR';
+
+  // Check if user has owner/supervisor role in the CURRENT index
+  // All functional roles are per-index, not global
+  const isIndexOwnerOrSupervisor = currentIndex?.user_role === 'OWNER' || currentIndex?.user_role === 'SUPERVISOR';
 
   // Track whether user has access to any indices
   const [hasIndices, setHasIndices] = useState<boolean | null>(null);
@@ -66,36 +70,38 @@ const MainLayout = () => {
   }, []);
 
   // Menu items - Role-based access control
-  const menuItems = isContributor
+  // Only ADMIN has a global role; all other roles are per-index
+  const menuItems = hasIndices === false
     ? [
-        // Contributors see Home, Requirements, Tasks, and Settings (backend filters tasks by assignment)
-        { id: 'home', path: '/home', icon: Home, label: { ar: 'الرئيسية', en: 'Home' } },
-        { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
-        { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
-        { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
-      ]
-    : hasIndices === false
-    ? [
-        // Management/Admin with no indices: show Home, Org Hierarchy (for admin), and Settings
+        // Users with no indices: show Home, Org Hierarchy (for admin), and Settings
         { id: 'home', path: '/home', icon: Home, label: { ar: 'الرئيسية', en: 'Home' } },
         ...(isAdmin ? [
           { id: 'organization-hierarchy', path: '/organization-hierarchy', icon: Building2, label: { ar: 'الهيكل التنظيمي', en: 'Organization' } }
         ] : []),
         { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
       ]
-    : [
-        // Full menu for management/admin with indices
+    : isAdmin || isIndexOwnerOrSupervisor
+    ? [
+        // Full menu for:
+        // 1. System admins (global ADMIN role)
+        // 2. Users who are OWNER/SUPERVISOR of the current index
         { id: 'home', path: '/home', icon: Home, label: { ar: 'الرئيسية', en: 'Home' } },
         { id: 'index', path: '/index', icon: Layers, label: { ar: 'إدارة المؤشرات', en: 'Index Management' } },
         { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
         { id: 'reports', path: '/reports', icon: BarChart3, label: { ar: 'التقارير', en: 'Reports' } },
-        // Tasks page visible to all users (backend filters based on role and assignments)
         { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
         { id: 'users', path: '/users', icon: Users, label: { ar: 'المستخدمين', en: 'Users' } },
         // Admin-only pages
         ...(isAdmin ? [
           { id: 'organization-hierarchy', path: '/organization-hierarchy', icon: Building2, label: { ar: 'الهيكل التنظيمي', en: 'Organization' } }
         ] : []),
+        { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
+      ]
+    : [
+        // Limited menu for regular contributors (not owners/supervisors of current index)
+        { id: 'home', path: '/home', icon: Home, label: { ar: 'الرئيسية', en: 'Home' } },
+        { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
+        { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
         { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
       ];
 

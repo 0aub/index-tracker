@@ -124,15 +124,19 @@ const Reports = () => {
           requirement_db_id: req.id, // Store original DB ID for evidence mapping
           question: req.question_ar,
           question_en: req.question_en,
-          section: req.main_area_ar, // Use main_area_ar as section
-          sub_domain: req.sub_domain_ar, // Use sub_domain_ar for domains grouping
-          criterion: req.element_ar, // Use element_ar (المعيار) for grouping
+          section: req.main_area_ar, // القدرة (Main Area)
+          element: req.element_ar, // العنصر (Element)
+          criterion: req.sub_domain_ar, // المعيار (Criteria) - THIS is what we group by
           current_level: assignment?.current_level || 0,
           evidence_description_ar: req.evidence_description_ar,
           evidence_description_en: req.evidence_description_en,
           answer_status: req.answer_status, // Add answer_status for completion tracking
         };
       });
+
+      console.log('Total evidence loaded:', indexEvidence.length);
+      console.log('Evidence sample:', indexEvidence.slice(0, 3));
+      console.log('Requirements sample with db_id:', transformedRequirements.slice(0, 3).map(r => ({ id: r.id, requirement_db_id: r.requirement_db_id })));
 
       setRequirements(transformedRequirements);
       setEvidence(indexEvidence);
@@ -365,10 +369,10 @@ const Reports = () => {
     // For NAII: Use maturity-based completion
     let completion;
     if (currentIndex?.index_type === 'ETARI') {
-      // Count requirements with approved answers
-      const approvedReqs = sectionReqs.filter(r => r.answer_status === 'approved');
+      // Count requirements with confirmed answers
+      const confirmedReqs = sectionReqs.filter(r => r.answer_status === 'confirmed');
       completion = sectionReqs.length > 0
-        ? Math.round((approvedReqs.length / sectionReqs.length) * 100)
+        ? Math.round((confirmedReqs.length / sectionReqs.length) * 100)
         : 0;
     } else {
       // NAII: Use maturity-based completion
@@ -389,7 +393,7 @@ const Reports = () => {
   });
 
   // Create domain-level data for enhanced bar chart
-  // Group requirements by section and criterion (element_ar/المعيار)
+  // Group requirements by section and criterion (sub_domain_ar/المعيار)
   const domainData: any[] = [];
   sections.forEach(section => {
     const sectionReqs = requirements.filter(r => r.section === section);
@@ -408,9 +412,9 @@ const Reports = () => {
       // Calculate completion for this domain
       let domainCompletion;
       if (currentIndex?.index_type === 'ETARI') {
-        const approvedReqs = domainReqs.filter(r => r.answer_status === 'approved');
+        const confirmedReqs = domainReqs.filter(r => r.answer_status === 'confirmed');
         domainCompletion = domainReqs.length > 0
-          ? Math.round((approvedReqs.length / domainReqs.length) * 100)
+          ? Math.round((confirmedReqs.length / domainReqs.length) * 100)
           : 0;
       } else {
         // NAII: Use maturity-based completion
@@ -420,7 +424,7 @@ const Reports = () => {
         domainCompletion = calculateSectionCompletion(domainReqs, domainEvidence, section);
       }
 
-      const approvedCount = domainReqs.filter(r => r.answer_status === 'approved').length;
+      const confirmedCount = domainReqs.filter(r => r.answer_status === 'confirmed').length;
 
       // Count evidence for this domain
       const domainEvidence = evidence.filter(e =>
@@ -432,7 +436,7 @@ const Reports = () => {
         domain: criterion,
         completion: Number(domainCompletion.toFixed(1)),
         totalRequirements: domainReqs.length,
-        approvedRequirements: approvedCount,
+        confirmedRequirements: confirmedCount,
         evidenceCount: domainEvidence.length,
         // Use section+criterion as unique key for grouping
         sectionDomainKey: `${section} - ${criterion}`
@@ -442,6 +446,14 @@ const Reports = () => {
 
   console.log('Total domainData entries:', domainData.length);
   console.log('Domain data sample:', domainData.slice(0, 3));
+
+  // Sort domainData by section and then by domain
+  domainData.sort((a, b) => {
+    if (a.section !== b.section) {
+      return a.section.localeCompare(b.section, 'ar');
+    }
+    return a.domain.localeCompare(b.domain, 'ar');
+  });
 
   // Generate dynamic colors for sections
   const generateSectionColors = (sections: string[]) => {
@@ -959,10 +971,10 @@ const Reports = () => {
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <p className={colors.textSecondary}>
-                                {lang === 'ar' ? 'الإجابات المعتمدة:' : 'Approved:'}
+                                {lang === 'ar' ? 'الإجابات المؤكدة:' : 'Confirmed:'}
                               </p>
-                              <span className="font-semibold text-green-600 dark:text-green-400">
-                                {data.approvedRequirements} / {data.totalRequirements}
+                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                {data.confirmedRequirements} / {data.totalRequirements}
                               </span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
@@ -1157,7 +1169,7 @@ const Reports = () => {
               const isExpanded = expandedSections.includes(section);
 
               // Group requirements by criterion (element_ar - المعيار) within this section
-              const criteria = Array.from(new Set(sectionReqs.map(r => r.criterion || ''))).filter(d => d).sort();
+              const criteria = Array.from(new Set(sectionReqs.map(r => r.criterion || ''))).filter(d => d).sort((a, b) => a.localeCompare(b, 'ar'));
 
               return (
                 <div key={section} className={`border ${colors.border} rounded-lg overflow-hidden`}>
@@ -1180,9 +1192,9 @@ const Reports = () => {
                       <div className="space-y-6">
                         {criteria.map(criterion => {
                           const criterionReqs = sectionReqs.filter(r => r.criterion === criterion);
-                          const approvedCriterionReqs = criterionReqs.filter(r => r.answer_status === 'approved');
+                          const confirmedCriterionReqs = criterionReqs.filter(r => r.answer_status === 'confirmed');
                           const completionRate = criterionReqs.length > 0
-                            ? Math.round((approvedCriterionReqs.length / criterionReqs.length) * 100)
+                            ? Math.round((confirmedCriterionReqs.length / criterionReqs.length) * 100)
                             : 0;
 
                           return (
@@ -1193,7 +1205,7 @@ const Reports = () => {
                                 </h4>
                                 <div className="flex items-center gap-3">
                                   <span className={`text-sm ${colors.textSecondary}`}>
-                                    {approvedCriterionReqs.length} / {criterionReqs.length} {lang === 'ar' ? 'مكتملة' : 'completed'}
+                                    {confirmedCriterionReqs.length} / {criterionReqs.length} {lang === 'ar' ? 'مكتملة' : 'completed'}
                                   </span>
                                   <span className={`text-sm font-bold ${
                                     completionRate >= 75 ? 'text-green-600 dark:text-green-400' :
@@ -1207,6 +1219,9 @@ const Reports = () => {
                               <div className="space-y-2">
                                 {criterionReqs.map(req => {
                                   const reqEvidence = evidence.filter(e => e.requirement_id === req.requirement_db_id);
+                                  if (reqEvidence.length > 0) {
+                                    console.log('Evidence found for req:', req.id, 'db_id:', req.requirement_db_id, 'evidence count:', reqEvidence.length);
+                                  }
                                   const approvedCount = reqEvidence.filter(e => e.status === 'approved').length;
                                   const rejectedCount = reqEvidence.filter(e => e.status === 'rejected').length;
                                   const underRevisionCount = reqEvidence.filter(e => e.status === 'submitted' || e.status === 'confirmed').length;
@@ -1219,41 +1234,48 @@ const Reports = () => {
                                         <div className={`text-sm ${colors.textSecondary} mt-1`}>
                                           {lang === 'ar' ? req.question : req.question_en || req.question}
                                         </div>
-                                        <div className="flex gap-3 mt-2 text-xs">
-                                          <span className="text-green-600 dark:text-green-400">
-                                            {lang === 'ar' ? 'معتمد' : 'Approved'}: {approvedCount}
-                                          </span>
-                                          <span className="text-yellow-600 dark:text-yellow-400">
-                                            {lang === 'ar' ? 'قيد المراجعة' : 'Under Revision'}: {underRevisionCount}
-                                          </span>
-                                          <span className="text-red-600 dark:text-red-400">
-                                            {lang === 'ar' ? 'مرفوض' : 'Rejected'}: {rejectedCount}
-                                          </span>
-                                          <span className={colors.textTertiary}>
-                                            {lang === 'ar' ? 'الإجمالي' : 'Total'}: {totalCount}
-                                          </span>
-                                        </div>
+                                        {/* Only show evidence counts if requirement requires evidence */}
+                                        {(req.evidence_description_ar || req.evidence_description_en) && (
+                                          <div className="flex gap-3 mt-2 text-xs">
+                                            <span className="text-green-600 dark:text-green-400">
+                                              {lang === 'ar' ? 'معتمد' : 'Approved'}: {approvedCount}
+                                            </span>
+                                            <span className="text-yellow-600 dark:text-yellow-400">
+                                              {lang === 'ar' ? 'قيد المراجعة' : 'Under Revision'}: {underRevisionCount}
+                                            </span>
+                                            <span className="text-red-600 dark:text-red-400">
+                                              {lang === 'ar' ? 'مرفوض' : 'Rejected'}: {rejectedCount}
+                                            </span>
+                                            <span className={colors.textTertiary}>
+                                              {lang === 'ar' ? 'الإجمالي' : 'Total'}: {totalCount}
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
                                       {/* Show answer status badge for ETARI, LevelIndicator for NAII */}
                                       {currentIndex?.index_type === 'ETARI' ? (
                                         <div className="flex items-center gap-2">
                                           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                            req.answer_status === 'approved'
+                                            req.answer_status === 'confirmed'
+                                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                              : req.answer_status === 'approved'
                                               ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                               : req.answer_status === 'pending_review'
                                               ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
                                               : req.answer_status === 'rejected'
-                                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                              ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
                                               : req.answer_status === 'draft'
-                                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                              ? 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
                                               : 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
                                           }`}>
-                                            {req.answer_status === 'approved'
-                                              ? (lang === 'ar' ? 'معتمد' : 'Approved')
+                                            {req.answer_status === 'confirmed'
+                                              ? (lang === 'ar' ? 'مُؤكدة' : 'Confirmed')
+                                              : req.answer_status === 'approved'
+                                              ? (lang === 'ar' ? 'مُوافق عليها' : 'Approved')
                                               : req.answer_status === 'pending_review'
                                               ? (lang === 'ar' ? 'قيد المراجعة' : 'Pending Review')
                                               : req.answer_status === 'rejected'
-                                              ? (lang === 'ar' ? 'مرفوض' : 'Rejected')
+                                              ? (lang === 'ar' ? 'مرفوضة' : 'Rejected')
                                               : req.answer_status === 'draft'
                                               ? (lang === 'ar' ? 'مسودة' : 'Draft')
                                               : (lang === 'ar' ? 'غير محدد' : 'Not Set')

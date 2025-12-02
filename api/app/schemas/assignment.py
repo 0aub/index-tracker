@@ -57,7 +57,7 @@ class AssignmentWithUser(BaseModel):
     user_id: str
     user_name_ar: str
     user_name_en: Optional[str] = None
-    user_role: str
+    user_role: Optional[str] = None  # Nullable - only ADMIN has a system role
     user_department_ar: Optional[str] = None
     status: AssignmentStatus
     current_level: Optional[str] = None
