@@ -10,13 +10,16 @@ import PptxGenJS from 'pptxgenjs';
 import { Requirement } from './calculations';
 
 // ============================================================================
-// PDF Export
+// Types and Interfaces
 // ============================================================================
 
 export interface PDFExportData {
   indexName: string;
   indexCode: string;
   overallMaturity: number;
+  indexType?: string;
+  startDate?: string;
+  endDate?: string;
   sections: Array<{
     name: string;
     maturity: number;
@@ -26,13 +29,25 @@ export interface PDFExportData {
   userEngagement: Array<{
     username: string;
     fullName: string;
+    role?: string;
     assignedRequirements: number;
     approvedDocuments: number;
     totalUploads: number;
     rejectedDocuments: number;
     totalComments: number;
+    draftDocuments?: number;
+    submittedDocuments?: number;
+    documentsReviewed?: number;
+    checklistItemsCompleted?: number;
   }>;
   requirements: Requirement[];
+  evidenceStats?: {
+    approved: number;
+    rejected: number;
+    underRevision: number;
+    draft: number;
+    total: number;
+  };
   lang: 'ar' | 'en';
   chartImages?: {
     radarChart?: string;
@@ -42,6 +57,28 @@ export interface PDFExportData {
   };
 }
 
+// Color palette
+const COLORS = {
+  primary: '#3B82F6',
+  primaryDark: '#1E40AF',
+  primaryLight: '#DBEAFE',
+  success: '#10B981',
+  successLight: '#D1FAE5',
+  warning: '#F59E0B',
+  warningLight: '#FEF3C7',
+  danger: '#EF4444',
+  dangerLight: '#FEE2E2',
+  gray: '#6B7280',
+  grayLight: '#F3F4F6',
+  grayDark: '#374151',
+  white: '#FFFFFF',
+  black: '#000000',
+};
+
+// ============================================================================
+// PDF Export - Completely Rewritten
+// ============================================================================
+
 export async function exportToPDF(data: PDFExportData) {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -50,158 +87,414 @@ export async function exportToPDF(data: PDFExportData) {
   });
 
   const isArabic = data.lang === 'ar';
-  let yPosition = 20;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  let yPos = 0;
 
+  // Helper function to add a new page if needed
+  const checkNewPage = (requiredSpace: number) => {
+    if (yPos + requiredSpace > pageHeight - 20) {
+      doc.addPage();
+      yPos = 20;
+      return true;
+    }
+    return false;
+  };
+
+  // Helper to draw a section header
+  const drawSectionHeader = (title: string, icon?: string) => {
+    checkNewPage(15);
+    doc.setFillColor(59, 130, 246);
+    doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 10, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(255, 255, 255);
+    doc.text(title, margin + 5, yPos + 7);
+    yPos += 15;
+    doc.setTextColor(0, 0, 0);
+  };
+
+  // ========== PAGE 1: Cover Page ==========
   // Header Banner
   doc.setFillColor(59, 130, 246);
-  doc.rect(0, 0, 210, 35, 'F');
+  doc.rect(0, 0, pageWidth, 50, 'F');
 
   // Title
-  doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  const title = isArabic ? 'تقرير نضج المؤشر' : 'Index Maturity Report';
-  doc.text(title, 105, 15, { align: 'center' });
-
-  // Subtitle
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${data.indexName}`, 105, 23, { align: 'center' });
-  doc.setFontSize(11);
-  doc.text(`${data.indexCode} • ${new Date().toLocaleDateString(isArabic ? 'ar-SA' : 'en-US')}`, 105, 30, { align: 'center' });
-
-  yPosition = 45;
-  doc.setTextColor(0, 0, 0);
-
-  // Overall Maturity Section - Highlighted Box
-  doc.setFillColor(239, 246, 255);
-  doc.roundedRect(15, yPosition, 180, 25, 3, 3, 'F');
-  doc.setDrawColor(59, 130, 246);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(15, yPosition, 180, 25, 3, 3, 'S');
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 58, 138);
-  doc.text(isArabic ? 'مستوى النضج الإجمالي' : 'Overall Maturity Level', 105, yPosition + 8, { align: 'center' });
-
   doc.setFontSize(28);
-  doc.setTextColor(59, 130, 246);
-  doc.text(`${data.overallMaturity.toFixed(2)} / 5.00`, 105, yPosition + 20, { align: 'center' });
+  doc.setTextColor(255, 255, 255);
+  const mainTitle = isArabic ? 'Index Maturity Report' : 'Index Maturity Report';
+  doc.text(mainTitle, pageWidth / 2, 20, { align: 'center' });
 
-  yPosition += 35;
+  // Index Name
+  doc.setFontSize(18);
+  doc.text(data.indexName, pageWidth / 2, 32, { align: 'center' });
+
+  // Index Code and Date
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  const reportDate = new Date().toLocaleDateString(isArabic ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  doc.text(`${data.indexCode} | ${reportDate}`, pageWidth / 2, 44, { align: 'center' });
+
+  yPos = 60;
   doc.setTextColor(0, 0, 0);
 
-  // Summary Statistics
-  const totalRequirements = data.sections.reduce((sum, s) => sum + s.requirementCount, 0);
-  const avgCompletion = data.sections.length > 0
-    ? (data.sections.reduce((sum, s) => sum + s.completion, 0) / data.sections.length).toFixed(1)
-    : 0;
+  // Overall Maturity Score Box
+  doc.setFillColor(239, 246, 255);
+  doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 35, 3, 3, 'F');
+  doc.setDrawColor(59, 130, 246);
+  doc.setLineWidth(1);
+  doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 35, 3, 3, 'S');
 
-  doc.setFillColor(248, 250, 252);
-  doc.rect(15, yPosition, 180, 18, 'F');
-
-  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text(isArabic ? 'إحصائيات سريعة' : 'Quick Statistics', 20, yPosition + 6);
+  doc.setFontSize(14);
+  doc.setTextColor(30, 64, 175);
+  doc.text(isArabic ? 'Overall Maturity Level' : 'Overall Maturity Level', pageWidth / 2, yPos + 10, { align: 'center' });
 
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${isArabic ? 'عدد الأقسام:' : 'Sections:'} ${data.sections.length}`, 20, yPosition + 12);
-  doc.text(`${isArabic ? 'إجمالي المتطلبات:' : 'Total Requirements:'} ${totalRequirements}`, 75, yPosition + 12);
-  doc.text(`${isArabic ? 'متوسط الإنجاز:' : 'Avg Completion:'} ${avgCompletion}%`, 140, yPosition + 12);
+  doc.setFontSize(36);
+  doc.setTextColor(59, 130, 246);
+  doc.text(`${data.overallMaturity.toFixed(2)}`, pageWidth / 2 - 15, yPos + 28, { align: 'center' });
 
-  yPosition += 25;
+  doc.setFontSize(16);
+  doc.setTextColor(107, 114, 128);
+  doc.text('/ 5.00', pageWidth / 2 + 20, yPos + 28, { align: 'center' });
 
-  // Charts Section
-  if (data.chartImages) {
-    // Radar Chart (Section Maturity)
-    if (data.chartImages.radarChart) {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(30, 58, 138);
-      doc.text(isArabic ? 'نضج الأقسام' : 'Section Maturity', 105, yPosition, { align: 'center' });
-      yPosition += 8;
-      doc.setTextColor(0, 0, 0);
+  // Progress bar
+  const progressWidth = pageWidth - 2 * margin - 20;
+  const progressX = margin + 10;
+  const progressY = yPos + 32;
+  doc.setFillColor(229, 231, 235);
+  doc.roundedRect(progressX, progressY, progressWidth, 4, 2, 2, 'F');
+  doc.setFillColor(59, 130, 246);
+  doc.roundedRect(progressX, progressY, progressWidth * (data.overallMaturity / 5), 4, 2, 2, 'F');
 
-      const imgWidth = 170;
-      const imgHeight = 100;
-      doc.addImage(data.chartImages.radarChart, 'PNG', 20, yPosition, imgWidth, imgHeight);
-      yPosition += imgHeight + 15;
+  yPos += 45;
+
+  // Quick Statistics Grid
+  const stats = [
+    {
+      label: isArabic ? 'Sections' : 'Sections',
+      value: data.sections.length.toString(),
+      color: COLORS.primary
+    },
+    {
+      label: isArabic ? 'Requirements' : 'Requirements',
+      value: data.sections.reduce((sum, s) => sum + s.requirementCount, 0).toString(),
+      color: COLORS.success
+    },
+    {
+      label: isArabic ? 'Avg Completion' : 'Avg Completion',
+      value: `${(data.sections.reduce((sum, s) => sum + s.completion, 0) / Math.max(data.sections.length, 1)).toFixed(1)}%`,
+      color: COLORS.warning
+    },
+    {
+      label: isArabic ? 'Team Members' : 'Team Members',
+      value: data.userEngagement.length.toString(),
+      color: COLORS.primaryDark
     }
+  ];
 
-    // Check if we need a new page
-    if (yPosition > 200) {
-      doc.addPage();
-      yPosition = 20;
-    }
+  const boxWidth = (pageWidth - 2 * margin - 15) / 4;
+  stats.forEach((stat, i) => {
+    const x = margin + i * (boxWidth + 5);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(x, yPos, boxWidth, 25, 2, 2, 'F');
 
-    // Pie and Progress Charts side by side
-    if (data.chartImages.pieChart || data.chartImages.progressChart) {
-      const chartWidth = 85;
-      const chartHeight = 80;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(stat.color);
+    doc.text(stat.value, x + boxWidth / 2, yPos + 12, { align: 'center' });
 
-      if (data.chartImages.pieChart) {
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(30, 58, 138);
-        doc.text(isArabic ? 'توزيع الأقسام' : 'Section Distribution', 62, yPosition, { align: 'center' });
-        doc.addImage(data.chartImages.pieChart, 'PNG', 20, yPosition + 5, chartWidth, chartHeight);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(107, 114, 128);
+    doc.text(stat.label, x + boxWidth / 2, yPos + 20, { align: 'center' });
+  });
+
+  yPos += 35;
+
+  // ========== Sections Table ==========
+  drawSectionHeader(isArabic ? 'Section Analysis' : 'Section Analysis');
+
+  const sectionTableData = data.sections.map((section, index) => [
+    (index + 1).toString(),
+    section.name,
+    section.maturity.toFixed(2),
+    `${section.completion}%`,
+    section.requirementCount.toString()
+  ]);
+
+  autoTable(doc, {
+    startY: yPos,
+    head: [[
+      '#',
+      isArabic ? 'Section' : 'Section',
+      isArabic ? 'Maturity' : 'Maturity',
+      isArabic ? 'Completion' : 'Completion',
+      isArabic ? 'Requirements' : 'Requirements'
+    ]],
+    body: sectionTableData,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [59, 130, 246],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      halign: 'center',
+      fontSize: 10
+    },
+    bodyStyles: {
+      fontSize: 9,
+      halign: 'center'
+    },
+    columnStyles: {
+      0: { cellWidth: 10 },
+      1: { cellWidth: 70, halign: 'left' },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 30 },
+      4: { cellWidth: 30 }
+    },
+    margin: { left: margin, right: margin },
+    didDrawCell: (hookData) => {
+      // Color code completion column
+      if (hookData.column.index === 3 && hookData.section === 'body') {
+        const completion = parseFloat(hookData.cell.text[0]);
+        if (completion >= 75) {
+          hookData.cell.styles.textColor = [16, 185, 129];
+        } else if (completion >= 50) {
+          hookData.cell.styles.textColor = [245, 158, 11];
+        } else {
+          hookData.cell.styles.textColor = [239, 68, 68];
+        }
       }
-
-      if (data.chartImages.progressChart) {
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(30, 58, 138);
-        doc.text(isArabic ? 'تقدم المشروع' : 'Project Progress', 150, yPosition, { align: 'center' });
-        doc.addImage(data.chartImages.progressChart, 'PNG', 105, yPosition + 5, chartWidth, chartHeight);
-      }
-
-      yPosition += chartHeight + 20;
     }
+  });
 
-    // User Engagement Table Image
-    if (data.chartImages.userEngagementTable) {
-      if (yPosition > 150) {
-        doc.addPage();
-        yPosition = 20;
-      }
+  yPos = (doc as any).lastAutoTable.finalY + 10;
 
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(30, 58, 138);
-      doc.text(isArabic ? 'مساهمة المستخدمين' : 'User Engagement', 105, yPosition, { align: 'center' });
-      yPosition += 8;
-      doc.setTextColor(0, 0, 0);
+  // ========== Evidence Statistics ==========
+  if (data.evidenceStats && data.evidenceStats.total > 0) {
+    checkNewPage(50);
+    drawSectionHeader(isArabic ? 'Evidence Statistics' : 'Evidence Statistics');
 
-      const tableWidth = 170;
-      const tableHeight = 120;
-      doc.addImage(data.chartImages.userEngagementTable, 'PNG', 20, yPosition, tableWidth, tableHeight);
-      yPosition += tableHeight + 10;
-    }
+    const evidenceData = [
+      [isArabic ? 'Approved' : 'Approved', data.evidenceStats.approved.toString(), `${((data.evidenceStats.approved / data.evidenceStats.total) * 100).toFixed(1)}%`],
+      [isArabic ? 'Under Revision' : 'Under Revision', data.evidenceStats.underRevision.toString(), `${((data.evidenceStats.underRevision / data.evidenceStats.total) * 100).toFixed(1)}%`],
+      [isArabic ? 'Draft' : 'Draft', data.evidenceStats.draft.toString(), `${((data.evidenceStats.draft / data.evidenceStats.total) * 100).toFixed(1)}%`],
+      [isArabic ? 'Rejected' : 'Rejected', data.evidenceStats.rejected.toString(), `${((data.evidenceStats.rejected / data.evidenceStats.total) * 100).toFixed(1)}%`],
+      [isArabic ? 'Total' : 'Total', data.evidenceStats.total.toString(), '100%']
+    ];
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [[
+        isArabic ? 'Status' : 'Status',
+        isArabic ? 'Count' : 'Count',
+        isArabic ? 'Percentage' : 'Percentage'
+      ]],
+      body: evidenceData,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [16, 185, 129],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      bodyStyles: {
+        halign: 'center',
+        fontSize: 10
+      },
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { cellWidth: 40 },
+        2: { cellWidth: 40 }
+      },
+      margin: { left: margin + 25, right: margin + 25 }
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 10;
   }
 
-  // Footer with page numbers and branding
+  // ========== NEW PAGE: User Engagement ==========
+  doc.addPage();
+  yPos = 20;
+
+  drawSectionHeader(isArabic ? 'User Engagement' : 'User Engagement');
+
+  // Group users by role
+  const owners = data.userEngagement.filter(u => u.role?.toUpperCase() === 'OWNER');
+  const supervisors = data.userEngagement.filter(u => u.role?.toUpperCase() === 'SUPERVISOR');
+  const contributors = data.userEngagement.filter(u => u.role?.toUpperCase() === 'CONTRIBUTOR');
+
+  const renderUserTable = (users: typeof data.userEngagement, roleTitle: string, color: number[]) => {
+    if (users.length === 0) return;
+
+    checkNewPage(40);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(color[0], color[1], color[2]);
+    doc.text(`${roleTitle} (${users.length})`, margin, yPos);
+    yPos += 5;
+
+    const userData = users.map((user, index) => [
+      (index + 1).toString(),
+      user.fullName || user.username,
+      user.assignedRequirements.toString(),
+      user.totalUploads.toString(),
+      user.approvedDocuments.toString(),
+      user.rejectedDocuments.toString(),
+      user.totalComments.toString()
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['#', 'Name', 'Assigned', 'Uploads', 'Approved', 'Rejected', 'Comments']],
+      body: userData,
+      theme: 'striped',
+      headStyles: {
+        fillColor: color as [number, number, number],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        halign: 'center',
+        fontSize: 8
+      },
+      bodyStyles: {
+        fontSize: 8,
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { cellWidth: 8 },
+        1: { cellWidth: 45, halign: 'left' },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 20 },
+        6: { cellWidth: 22 }
+      },
+      margin: { left: margin, right: margin }
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 8;
+  };
+
+  renderUserTable(owners, isArabic ? 'Owners' : 'Owners', [139, 92, 246]);
+  renderUserTable(supervisors, isArabic ? 'Supervisors' : 'Supervisors', [59, 130, 246]);
+  renderUserTable(contributors, isArabic ? 'Contributors' : 'Contributors', [16, 185, 129]);
+
+  // ========== NEW PAGE: Top Performers Summary ==========
+  doc.addPage();
+  yPos = 20;
+
+  drawSectionHeader(isArabic ? 'Performance Summary' : 'Performance Summary');
+
+  // Top uploaders
+  const topUploaders = [...data.userEngagement]
+    .sort((a, b) => b.totalUploads - a.totalUploads)
+    .slice(0, 5);
+
+  if (topUploaders.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(59, 130, 246);
+    doc.text(isArabic ? 'Top Contributors by Uploads' : 'Top Contributors by Uploads', margin, yPos);
+    yPos += 5;
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Rank', 'Name', 'Uploads', 'Approved', 'Success Rate']],
+      body: topUploaders.map((u, i) => [
+        `#${i + 1}`,
+        u.fullName || u.username,
+        u.totalUploads.toString(),
+        u.approvedDocuments.toString(),
+        `${u.totalUploads > 0 ? ((u.approvedDocuments / u.totalUploads) * 100).toFixed(1) : 0}%`
+      ]),
+      theme: 'grid',
+      headStyles: {
+        fillColor: [59, 130, 246],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        halign: 'center',
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 9,
+        halign: 'center'
+      },
+      margin: { left: margin, right: margin }
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+  }
+
+  // Section performance ranking
+  const sortedSections = [...data.sections].sort((a, b) => b.completion - a.completion);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(16, 185, 129);
+  doc.text(isArabic ? 'Section Ranking by Completion' : 'Section Ranking by Completion', margin, yPos);
+  yPos += 5;
+
+  autoTable(doc, {
+    startY: yPos,
+    head: [['Rank', 'Section', 'Completion', 'Maturity', 'Status']],
+    body: sortedSections.map((s, i) => [
+      `#${i + 1}`,
+      s.name,
+      `${s.completion}%`,
+      s.maturity.toFixed(2),
+      s.completion >= 75 ? 'On Track' : s.completion >= 50 ? 'In Progress' : 'Needs Attention'
+    ]),
+    theme: 'grid',
+    headStyles: {
+      fillColor: [16, 185, 129],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      halign: 'center',
+      fontSize: 9
+    },
+    bodyStyles: {
+      fontSize: 9,
+      halign: 'center'
+    },
+    didDrawCell: (hookData) => {
+      if (hookData.column.index === 4 && hookData.section === 'body') {
+        const status = hookData.cell.text[0];
+        if (status === 'On Track') {
+          hookData.cell.styles.textColor = [16, 185, 129];
+        } else if (status === 'In Progress') {
+          hookData.cell.styles.textColor = [245, 158, 11];
+        } else {
+          hookData.cell.styles.textColor = [239, 68, 68];
+        }
+      }
+    },
+    margin: { left: margin, right: margin }
+  });
+
+  // ========== Footer on all pages ==========
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
+
+    // Footer line
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.3);
-    doc.line(20, 285, 190, 285);
+    doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
 
-    doc.setFontSize(8);
+    // Footer text
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
-    doc.text(
-      `${isArabic ? 'صفحة' : 'Page'} ${i} ${isArabic ? 'من' : 'of'} ${pageCount}`,
-      105,
-      290,
-      { align: 'center' }
-    );
-    doc.text(
-      isArabic ? 'نظام تتبع المؤشرات' : 'Index Tracking System',
-      20,
-      290
-    );
+    doc.setFontSize(8);
+    doc.setTextColor(128, 128, 128);
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+    doc.text('Index Tracking System', margin, pageHeight - 10);
+    doc.text(reportDate, pageWidth - margin, pageHeight - 10, { align: 'right' });
   }
 
   // Save
@@ -209,447 +502,524 @@ export async function exportToPDF(data: PDFExportData) {
 }
 
 // ============================================================================
-// Excel Export
+// Excel Export - Enhanced
 // ============================================================================
 
 export async function exportToExcel(data: PDFExportData) {
   const workbook = XLSX.utils.book_new();
   const isArabic = data.lang === 'ar';
 
-  // Overview Sheet - Enhanced Design
+  // ========== Sheet 1: Executive Summary ==========
   const totalReqs = data.sections.reduce((sum, s) => sum + s.requirementCount, 0);
   const avgCompletion = data.sections.length > 0
-    ? (data.sections.reduce((sum, s) => sum + s.completion, 0) / data.sections.length).toFixed(1)
+    ? (data.sections.reduce((sum, s) => sum + s.completion, 0) / data.sections.length)
     : 0;
-  const totalUsers = data.userEngagement.length;
+  const avgMaturity = data.sections.length > 0
+    ? (data.sections.reduce((sum, s) => sum + s.maturity, 0) / data.sections.length)
+    : 0;
   const totalUploads = data.userEngagement.reduce((sum, u) => sum + u.totalUploads, 0);
   const totalApproved = data.userEngagement.reduce((sum, u) => sum + u.approvedDocuments, 0);
+  const totalRejected = data.userEngagement.reduce((sum, u) => sum + u.rejectedDocuments, 0);
   const totalComments = data.userEngagement.reduce((sum, u) => sum + u.totalComments, 0);
 
-  const overviewData = [
-    ['', '', '', '', '', ''],
-    ['', isArabic ? 'تقرير نضج المؤشر' : 'INDEX MATURITY REPORT', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', isArabic ? 'معلومات المؤشر' : 'INDEX INFORMATION', '', '', '', ''],
-    ['', isArabic ? 'اسم المؤشر:' : 'Index Name:', data.indexName, '', '', ''],
-    ['', isArabic ? 'رمز المؤشر:' : 'Index Code:', data.indexCode, '', '', ''],
-    ['', isArabic ? 'تاريخ التقرير:' : 'Report Date:', new Date().toLocaleDateString(isArabic ? 'ar-SA' : 'en-US'), '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', isArabic ? 'مقاييس النضج' : 'MATURITY METRICS', '', '', '', ''],
-    ['', isArabic ? 'مستوى النضج الإجمالي' : 'Overall Maturity Level', data.overallMaturity.toFixed(2) + ' / 5.00', '', isArabic ? 'النسبة المئوية' : 'Percentage', ((data.overallMaturity / 5) * 100).toFixed(1) + '%'],
-    ['', isArabic ? 'عدد الأقسام' : 'Number of Sections', data.sections.length, '', isArabic ? 'متوسط نضج الأقسام' : 'Avg Section Maturity', (data.sections.reduce((sum, s) => sum + s.maturity, 0) / data.sections.length).toFixed(2)],
-    ['', isArabic ? 'إجمالي المتطلبات' : 'Total Requirements', totalReqs, '', isArabic ? 'متوسط الإنجاز' : 'Avg Completion', avgCompletion + '%'],
-    ['', '', '', '', '', ''],
-    ['', isArabic ? 'مقاييس التفاعل' : 'ENGAGEMENT METRICS', '', '', '', ''],
-    ['', isArabic ? 'عدد المستخدمين' : 'Total Users', totalUsers, '', isArabic ? 'إجمالي الرفوعات' : 'Total Uploads', totalUploads],
-    ['', isArabic ? 'المستندات المعتمدة' : 'Approved Documents', totalApproved, '', isArabic ? 'إجمالي التعليقات' : 'Total Comments', totalComments],
-    ['', isArabic ? 'معدل القبول' : 'Approval Rate', totalUploads > 0 ? ((totalApproved / totalUploads) * 100).toFixed(1) + '%' : '0%', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', isArabic ? 'أعلى الأقسام أداءً' : 'TOP PERFORMING SECTIONS', '', '', '', ''],
+  const summaryData = [
+    ['INDEX MATURITY REPORT'],
+    [''],
+    ['Report Generated:', new Date().toLocaleDateString()],
+    ['Index Name:', data.indexName],
+    ['Index Code:', data.indexCode],
+    ['Index Type:', data.indexType || 'N/A'],
+    [''],
+    ['MATURITY METRICS'],
+    ['Overall Maturity Level:', data.overallMaturity.toFixed(2), '/ 5.00', `${((data.overallMaturity / 5) * 100).toFixed(1)}%`],
+    ['Average Section Maturity:', avgMaturity.toFixed(2)],
+    ['Average Completion:', `${avgCompletion.toFixed(1)}%`],
+    [''],
+    ['SCOPE METRICS'],
+    ['Total Sections:', data.sections.length],
+    ['Total Requirements:', totalReqs],
+    ['Team Members:', data.userEngagement.length],
+    [''],
+    ['ENGAGEMENT METRICS'],
+    ['Total Documents Uploaded:', totalUploads],
+    ['Documents Approved:', totalApproved],
+    ['Documents Rejected:', totalRejected],
+    ['Approval Rate:', totalUploads > 0 ? `${((totalApproved / totalUploads) * 100).toFixed(1)}%` : '0%'],
+    ['Total Comments:', totalComments],
+    [''],
+    ['TOP 5 SECTIONS BY COMPLETION'],
+    ['Section', 'Completion %', 'Maturity', 'Requirements'],
     ...data.sections
-      .sort((a, b) => b.maturity - a.maturity)
+      .sort((a, b) => b.completion - a.completion)
       .slice(0, 5)
-      .map((s, i) => ['', `${i + 1}. ${s.name}`, isArabic ? 'النضج:' : 'Maturity:', s.maturity.toFixed(2), isArabic ? 'الإنجاز:' : 'Completion:', s.completion + '%']),
-    ['', '', '', '', '', ''],
-    ['', isArabic ? 'أنشط المستخدمين' : 'MOST ACTIVE USERS', '', '', '', ''],
+      .map(s => [s.name, `${s.completion}%`, s.maturity.toFixed(2), s.requirementCount]),
+    [''],
+    ['TOP 5 CONTRIBUTORS BY UPLOADS'],
+    ['Name', 'Uploads', 'Approved', 'Success Rate'],
     ...data.userEngagement
       .sort((a, b) => b.totalUploads - a.totalUploads)
       .slice(0, 5)
-      .map((u, i) => ['', `${i + 1}. ${u.fullName || u.username}`, isArabic ? 'الرفوعات:' : 'Uploads:', u.totalUploads, isArabic ? 'المعتمدة:' : 'Approved:', u.approvedDocuments]),
+      .map(u => [
+        u.fullName || u.username,
+        u.totalUploads,
+        u.approvedDocuments,
+        u.totalUploads > 0 ? `${((u.approvedDocuments / u.totalUploads) * 100).toFixed(1)}%` : '0%'
+      ])
   ];
 
-  const overviewSheet = XLSX.utils.aoa_to_sheet(overviewData);
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+  summarySheet['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 15 }];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Executive Summary');
 
-  // Set column widths
-  overviewSheet['!cols'] = [
-    { wch: 3 },
-    { wch: 35 },
-    { wch: 25 },
-    { wch: 5 },
-    { wch: 25 },
-    { wch: 20 }
-  ];
-
-  // Set row heights
-  if (!overviewSheet['!rows']) overviewSheet['!rows'] = [];
-  overviewSheet['!rows'][1] = { hpt: 35 }; // Title row
-
-  // Merge cells for titles
-  if (!overviewSheet['!merges']) overviewSheet['!merges'] = [];
-  overviewSheet['!merges'].push(
-    { s: { r: 1, c: 1 }, e: { r: 1, c: 5 } }, // Main title
-    { s: { r: 3, c: 1 }, e: { r: 3, c: 5 } }, // Index info header
-    { s: { r: 8, c: 1 }, e: { r: 8, c: 5 } }, // Maturity metrics header
-    { s: { r: 13, c: 1 }, e: { r: 13, c: 5 } }, // Engagement metrics header
-    { s: { r: 18, c: 1 }, e: { r: 18, c: 5 } }, // Top sections header
-    { s: { r: 18 + data.sections.slice(0, 5).length + 2, c: 1 }, e: { r: 18 + data.sections.slice(0, 5).length + 2, c: 5 } } // Top users header
-  );
-
-  XLSX.utils.book_append_sheet(workbook, overviewSheet, isArabic ? 'نظرة عامة' : 'Overview');
-
-  // Sections Sheet
+  // ========== Sheet 2: Sections Detail ==========
   const sectionsData = [
-    [
-      isArabic ? 'القسم' : 'Section',
-      isArabic ? 'النضج' : 'Maturity',
-      isArabic ? 'الإنجاز %' : 'Completion %',
-      isArabic ? 'المتطلبات' : 'Requirements'
-    ],
-    ...data.sections.map(s => [
+    ['SECTION ANALYSIS'],
+    [''],
+    ['#', 'Section Name', 'Maturity Level', 'Maturity %', 'Completion %', 'Requirements', 'Status'],
+    ...data.sections.map((s, i) => [
+      i + 1,
       s.name,
-      parseFloat(s.maturity.toFixed(2)),
-      s.completion,
-      s.requirementCount
-    ])
+      s.maturity.toFixed(2),
+      `${((s.maturity / 5) * 100).toFixed(1)}%`,
+      `${s.completion}%`,
+      s.requirementCount,
+      s.completion >= 75 ? 'On Track' : s.completion >= 50 ? 'In Progress' : 'Needs Attention'
+    ]),
+    [''],
+    ['Summary Statistics'],
+    ['Total Sections:', data.sections.length],
+    ['Average Maturity:', avgMaturity.toFixed(2)],
+    ['Average Completion:', `${avgCompletion.toFixed(1)}%`],
+    ['Total Requirements:', totalReqs]
   ];
+
   const sectionsSheet = XLSX.utils.aoa_to_sheet(sectionsData);
+  sectionsSheet['!cols'] = [{ wch: 5 }, { wch: 40 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(workbook, sectionsSheet, 'Sections');
 
-  // Set column widths for sections
-  sectionsSheet['!cols'] = [
-    { wch: 50 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 15 }
-  ];
+  // ========== Sheet 3: User Engagement - Owners ==========
+  const owners = data.userEngagement.filter(u => u.role?.toUpperCase() === 'OWNER');
+  if (owners.length > 0) {
+    const ownersData = [
+      ['OWNERS ENGAGEMENT'],
+      [''],
+      ['#', 'Username', 'Full Name', 'Assigned', 'Uploads', 'Approved', 'Rejected', 'Reviewed', 'Comments', 'Success Rate'],
+      ...owners.map((u, i) => [
+        i + 1,
+        u.username,
+        u.fullName,
+        u.assignedRequirements,
+        u.totalUploads,
+        u.approvedDocuments,
+        u.rejectedDocuments,
+        u.documentsReviewed || 0,
+        u.totalComments,
+        u.totalUploads > 0 ? `${((u.approvedDocuments / u.totalUploads) * 100).toFixed(1)}%` : '0%'
+      ])
+    ];
+    const ownersSheet = XLSX.utils.aoa_to_sheet(ownersData);
+    ownersSheet['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(workbook, ownersSheet, 'Owners');
+  }
 
-  XLSX.utils.book_append_sheet(workbook, sectionsSheet, isArabic ? 'الأقسام' : 'Sections');
+  // ========== Sheet 4: User Engagement - Supervisors ==========
+  const supervisors = data.userEngagement.filter(u => u.role?.toUpperCase() === 'SUPERVISOR');
+  if (supervisors.length > 0) {
+    const supervisorsData = [
+      ['SUPERVISORS ENGAGEMENT'],
+      [''],
+      ['#', 'Username', 'Full Name', 'Assigned', 'Uploads', 'Approved', 'Rejected', 'Reviewed', 'Comments', 'Success Rate'],
+      ...supervisors.map((u, i) => [
+        i + 1,
+        u.username,
+        u.fullName,
+        u.assignedRequirements,
+        u.totalUploads,
+        u.approvedDocuments,
+        u.rejectedDocuments,
+        u.documentsReviewed || 0,
+        u.totalComments,
+        u.totalUploads > 0 ? `${((u.approvedDocuments / u.totalUploads) * 100).toFixed(1)}%` : '0%'
+      ])
+    ];
+    const supervisorsSheet = XLSX.utils.aoa_to_sheet(supervisorsData);
+    supervisorsSheet['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(workbook, supervisorsSheet, 'Supervisors');
+  }
 
-  // User Engagement Sheet
-  const userEngagementData = [
-    [
-      isArabic ? 'المستخدم' : 'Username',
-      isArabic ? 'الاسم الكامل' : 'Full Name',
-      isArabic ? 'المتطلبات المسندة' : 'Assigned Req.',
-      isArabic ? 'المستندات المعتمدة' : 'Approved Docs',
-      isArabic ? 'إجمالي الرفوعات' : 'Total Uploads',
-      isArabic ? 'المستندات المرفوضة' : 'Rejected Docs',
-      isArabic ? 'التعليقات' : 'Comments',
-      isArabic ? 'معدل النجاح %' : 'Success Rate %'
-    ],
-    ...data.userEngagement.map(u => [
-      u.username,
-      u.fullName,
-      u.assignedRequirements,
-      u.approvedDocuments,
-      u.totalUploads,
-      u.rejectedDocuments,
-      u.totalComments,
-      u.totalUploads > 0 ? parseFloat(((u.approvedDocuments / u.totalUploads) * 100).toFixed(1)) : 0
-    ])
-  ];
-  const userEngagementSheet = XLSX.utils.aoa_to_sheet(userEngagementData);
+  // ========== Sheet 5: User Engagement - Contributors ==========
+  const contributors = data.userEngagement.filter(u => u.role?.toUpperCase() === 'CONTRIBUTOR');
+  if (contributors.length > 0) {
+    const contributorsData = [
+      ['CONTRIBUTORS ENGAGEMENT'],
+      [''],
+      ['#', 'Username', 'Full Name', 'Assigned', 'Uploads', 'Drafts', 'Submitted', 'Approved', 'Comments', 'Tasks Done'],
+      ...contributors.map((u, i) => [
+        i + 1,
+        u.username,
+        u.fullName,
+        u.assignedRequirements,
+        u.totalUploads,
+        u.draftDocuments || 0,
+        u.submittedDocuments || 0,
+        u.approvedDocuments,
+        u.totalComments,
+        u.checklistItemsCompleted || 0
+      ])
+    ];
+    const contributorsSheet = XLSX.utils.aoa_to_sheet(contributorsData);
+    contributorsSheet['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(workbook, contributorsSheet, 'Contributors');
+  }
 
-  // Set column widths for user engagement
-  userEngagementSheet['!cols'] = [
-    { wch: 15 },
-    { wch: 25 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 15 }
-  ];
-
-  XLSX.utils.book_append_sheet(workbook, userEngagementSheet, isArabic ? 'مساهمة المستخدمين' : 'User Engagement');
-
-  // Requirements Sheet
+  // ========== Sheet 6: All Requirements ==========
   const requirementsData = [
-    [
-      isArabic ? 'رمز المتطلب' : 'Requirement Code',
-      isArabic ? 'السؤال' : 'Question',
-      isArabic ? 'القسم' : 'Section',
-      isArabic ? 'مستوى النضج' : 'Maturity Level'
-    ],
-    ...data.requirements.map(r => [
+    ['REQUIREMENTS LIST'],
+    [''],
+    ['#', 'Code', 'Section', 'Question', 'Maturity Level', 'Status'],
+    ...data.requirements.map((r, i) => [
+      i + 1,
       r.id,
-      isArabic ? r.question : r.question_en || r.question,
       r.section,
-      r.current_level
+      isArabic ? r.question : (r.question_en || r.question),
+      r.current_level,
+      r.answer_status || 'Not Set'
     ])
   ];
+
   const requirementsSheet = XLSX.utils.aoa_to_sheet(requirementsData);
+  requirementsSheet['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 60 }, { wch: 15 }, { wch: 15 }];
+  XLSX.utils.book_append_sheet(workbook, requirementsSheet, 'Requirements');
 
-  // Set column widths for requirements
-  requirementsSheet['!cols'] = [
-    { wch: 20 },
-    { wch: 60 },
-    { wch: 30 },
-    { wch: 15 }
-  ];
+  // ========== Sheet 7: Evidence Statistics ==========
+  if (data.evidenceStats) {
+    const evidenceData = [
+      ['EVIDENCE STATISTICS'],
+      [''],
+      ['Status', 'Count', 'Percentage'],
+      ['Approved', data.evidenceStats.approved, data.evidenceStats.total > 0 ? `${((data.evidenceStats.approved / data.evidenceStats.total) * 100).toFixed(1)}%` : '0%'],
+      ['Under Revision', data.evidenceStats.underRevision, data.evidenceStats.total > 0 ? `${((data.evidenceStats.underRevision / data.evidenceStats.total) * 100).toFixed(1)}%` : '0%'],
+      ['Draft', data.evidenceStats.draft, data.evidenceStats.total > 0 ? `${((data.evidenceStats.draft / data.evidenceStats.total) * 100).toFixed(1)}%` : '0%'],
+      ['Rejected', data.evidenceStats.rejected, data.evidenceStats.total > 0 ? `${((data.evidenceStats.rejected / data.evidenceStats.total) * 100).toFixed(1)}%` : '0%'],
+      [''],
+      ['Total Evidence Files', data.evidenceStats.total]
+    ];
 
-  XLSX.utils.book_append_sheet(workbook, requirementsSheet, isArabic ? 'المتطلبات' : 'Requirements');
+    const evidenceSheet = XLSX.utils.aoa_to_sheet(evidenceData);
+    evidenceSheet['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(workbook, evidenceSheet, 'Evidence Stats');
+  }
 
   // Save
   XLSX.writeFile(workbook, `${data.indexCode}_report_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
 // ============================================================================
-// PowerPoint Export
+// PowerPoint Export - Enhanced
 // ============================================================================
 
 export async function exportToPowerPoint(data: PDFExportData) {
   const pptx = new PptxGenJS();
   const isArabic = data.lang === 'ar';
 
-  // Set presentation properties
+  // Presentation settings
   pptx.author = 'Index Tracking System';
   pptx.company = data.indexName;
-  pptx.title = isArabic ? 'تقرير نضج المؤشر' : 'Index Maturity Report';
+  pptx.title = 'Index Maturity Report';
+  pptx.subject = `Report for ${data.indexCode}`;
 
-  // Slide 1: Title Slide
+  const totalReqs = data.sections.reduce((sum, s) => sum + s.requirementCount, 0);
+  const avgCompletion = data.sections.length > 0
+    ? (data.sections.reduce((sum, s) => sum + s.completion, 0) / data.sections.length)
+    : 0;
+
+  // ========== Slide 1: Title Slide ==========
   const slide1 = pptx.addSlide();
   slide1.background = { color: '3B82F6' };
-  slide1.addText(isArabic ? 'تقرير نضج المؤشر' : 'Index Maturity Report', {
-    x: 0.5,
-    y: 1.5,
-    w: 9,
-    h: 1.5,
-    fontSize: 48,
-    bold: true,
-    color: 'FFFFFF',
-    align: 'center',
-  });
-  slide1.addText(`${data.indexName}`, {
-    x: 0.5,
-    y: 3.2,
-    w: 9,
-    h: 0.6,
-    fontSize: 28,
-    color: 'FFFFFF',
-    align: 'center',
-  });
-  slide1.addText(`${data.indexCode}`, {
-    x: 0.5,
-    y: 3.9,
-    w: 9,
-    h: 0.4,
-    fontSize: 20,
-    color: 'E0E7FF',
-    align: 'center',
-  });
-  slide1.addText(new Date().toLocaleDateString(isArabic ? 'ar-SA' : 'en-US'), {
-    x: 0.5,
-    y: 4.5,
-    w: 9,
-    h: 0.3,
-    fontSize: 16,
-    color: 'DBEAFE',
-    align: 'center',
+
+  slide1.addText('Index Maturity Report', {
+    x: 0.5, y: 1.8, w: 9, h: 1,
+    fontSize: 44, bold: true, color: 'FFFFFF', align: 'center'
   });
 
-  // Slide 2: Overall Maturity with Summary
+  slide1.addText(data.indexName, {
+    x: 0.5, y: 3.0, w: 9, h: 0.6,
+    fontSize: 24, color: 'FFFFFF', align: 'center'
+  });
+
+  slide1.addText(data.indexCode, {
+    x: 0.5, y: 3.7, w: 9, h: 0.4,
+    fontSize: 18, color: 'DBEAFE', align: 'center'
+  });
+
+  slide1.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), {
+    x: 0.5, y: 4.3, w: 9, h: 0.3,
+    fontSize: 14, color: 'BFDBFE', align: 'center'
+  });
+
+  // ========== Slide 2: Executive Summary ==========
   const slide2 = pptx.addSlide();
-  slide2.addText(isArabic ? 'النظرة العامة' : 'Overview', {
-    x: 0.5,
-    y: 0.4,
-    w: 9,
-    h: 0.6,
-    fontSize: 36,
-    bold: true,
-    color: '1E3A8A',
+
+  slide2.addText('Executive Summary', {
+    x: 0.5, y: 0.3, w: 9, h: 0.5,
+    fontSize: 28, bold: true, color: '1E40AF'
   });
 
-  // Maturity Score Box
+  // Maturity Score Card
   slide2.addShape(pptx.ShapeType.roundRect, {
-    x: 1.0,
-    y: 1.5,
-    w: 3.5,
-    h: 2.5,
+    x: 0.5, y: 1.0, w: 3.0, h: 2.0,
     fill: { color: 'EFF6FF' },
     line: { color: '3B82F6', width: 2 }
   });
-  slide2.addText(isArabic ? 'مستوى النضج الإجمالي' : 'Overall Maturity', {
-    x: 1.0,
-    y: 1.7,
-    w: 3.5,
-    h: 0.4,
-    fontSize: 16,
-    bold: true,
-    color: '1E40AF',
-    align: 'center',
-  });
-  slide2.addText(data.overallMaturity.toFixed(2), {
-    x: 1.0,
-    y: 2.3,
-    w: 3.5,
-    h: 1.0,
-    fontSize: 72,
-    bold: true,
-    color: '3B82F6',
-    align: 'center',
-  });
-  slide2.addText('/ 5.00', {
-    x: 1.0,
-    y: 3.3,
-    w: 3.5,
-    h: 0.4,
-    fontSize: 20,
-    color: '6B7280',
-    align: 'center',
+
+  slide2.addText('Overall Maturity', {
+    x: 0.5, y: 1.2, w: 3.0, h: 0.4,
+    fontSize: 12, bold: true, color: '1E40AF', align: 'center'
   });
 
-  // Statistics Table
-  const statsData = [
-    [
-      { text: isArabic ? 'الإحصائية' : 'Metric', options: { bold: true, color: 'FFFFFF', fill: '10B981', fontSize: 14 } },
-      { text: isArabic ? 'القيمة' : 'Value', options: { bold: true, color: 'FFFFFF', fill: '10B981', fontSize: 14 } }
-    ],
-    [
-      { text: isArabic ? 'عدد الأقسام' : 'Number of Sections', options: { fontSize: 13 } },
-      { text: data.sections.length.toString(), options: { bold: true, fontSize: 13 } }
-    ],
-    [
-      { text: isArabic ? 'إجمالي المتطلبات' : 'Total Requirements', options: { fontSize: 13 } },
-      { text: data.sections.reduce((sum, s) => sum + s.requirementCount, 0).toString(), options: { bold: true, fontSize: 13 } }
-    ],
-    [
-      { text: isArabic ? 'متوسط الإنجاز' : 'Average Completion', options: { fontSize: 13 } },
-      {
-        text: (data.sections.length > 0
-          ? (data.sections.reduce((sum, s) => sum + s.completion, 0) / data.sections.length).toFixed(1)
-          : 0) + '%',
-        options: { bold: true, fontSize: 13 }
-      }
-    ]
+  slide2.addText(data.overallMaturity.toFixed(2), {
+    x: 0.5, y: 1.6, w: 3.0, h: 0.8,
+    fontSize: 48, bold: true, color: '3B82F6', align: 'center'
+  });
+
+  slide2.addText('/ 5.00', {
+    x: 0.5, y: 2.5, w: 3.0, h: 0.3,
+    fontSize: 14, color: '6B7280', align: 'center'
+  });
+
+  // Stats boxes
+  const statsBoxes = [
+    { label: 'Sections', value: data.sections.length.toString(), color: '10B981' },
+    { label: 'Requirements', value: totalReqs.toString(), color: 'F59E0B' },
+    { label: 'Avg Completion', value: `${avgCompletion.toFixed(1)}%`, color: '8B5CF6' },
+    { label: 'Team Members', value: data.userEngagement.length.toString(), color: 'EC4899' }
   ];
 
-  slide2.addTable(statsData, {
-    x: 5.0,
-    y: 1.5,
-    w: 4.5,
-    h: 2.5,
-    border: { pt: 1, color: 'E5E7EB' },
+  statsBoxes.forEach((stat, i) => {
+    const x = 4.0 + (i % 2) * 2.8;
+    const y = 1.0 + Math.floor(i / 2) * 1.1;
+
+    slide2.addShape(pptx.ShapeType.roundRect, {
+      x, y, w: 2.5, h: 0.9,
+      fill: { color: 'F9FAFB' },
+      line: { color: stat.color, width: 1.5 }
+    });
+
+    slide2.addText(stat.value, {
+      x, y: y + 0.1, w: 2.5, h: 0.4,
+      fontSize: 22, bold: true, color: stat.color, align: 'center'
+    });
+
+    slide2.addText(stat.label, {
+      x, y: y + 0.55, w: 2.5, h: 0.25,
+      fontSize: 10, color: '6B7280', align: 'center'
+    });
   });
 
-  // Slide 3: Section Maturity Chart
+  // Key Insights
+  slide2.addText('Key Insights', {
+    x: 0.5, y: 3.3, w: 9, h: 0.4,
+    fontSize: 14, bold: true, color: '1E40AF'
+  });
+
+  const insights = [
+    `${data.sections.filter(s => s.completion >= 75).length} sections are on track (75%+ completion)`,
+    `${data.sections.filter(s => s.completion < 50).length} sections need attention (<50% completion)`,
+    `Team has uploaded ${data.userEngagement.reduce((sum, u) => sum + u.totalUploads, 0)} documents total`,
+    `Overall approval rate: ${data.userEngagement.reduce((sum, u) => sum + u.totalUploads, 0) > 0 ? ((data.userEngagement.reduce((sum, u) => sum + u.approvedDocuments, 0) / data.userEngagement.reduce((sum, u) => sum + u.totalUploads, 0)) * 100).toFixed(1) : 0}%`
+  ];
+
+  insights.forEach((insight, i) => {
+    slide2.addText(`• ${insight}`, {
+      x: 0.7, y: 3.7 + i * 0.35, w: 8.5, h: 0.3,
+      fontSize: 11, color: '374151'
+    });
+  });
+
+  // ========== Slide 3: Section Performance Chart ==========
   const slide3 = pptx.addSlide();
-  slide3.addText(isArabic ? 'نضج الأقسام' : 'Section Maturity Analysis', {
-    x: 0.5,
-    y: 0.4,
-    w: 9,
-    h: 0.6,
-    fontSize: 32,
-    bold: true,
-    color: '1E3A8A',
+
+  slide3.addText('Section Performance', {
+    x: 0.5, y: 0.3, w: 9, h: 0.5,
+    fontSize: 28, bold: true, color: '1E40AF'
   });
 
-  // Prepare chart data - limit to top 10 sections for readability
-  const topSections = data.sections.slice(0, 10);
   const chartData = [
     {
-      name: isArabic ? 'النضج' : 'Maturity',
-      labels: topSections.map(s => s.name.length > 20 ? s.name.substring(0, 20) + '...' : s.name),
-      values: topSections.map(s => s.maturity)
+      name: 'Completion %',
+      labels: data.sections.map(s => s.name.length > 25 ? s.name.substring(0, 25) + '...' : s.name),
+      values: data.sections.map(s => s.completion)
     },
     {
-      name: isArabic ? 'الإنجاز %' : 'Completion %',
-      labels: topSections.map(s => s.name.length > 20 ? s.name.substring(0, 20) + '...' : s.name),
-      values: topSections.map(s => s.completion)
+      name: 'Maturity (scaled)',
+      labels: data.sections.map(s => s.name.length > 25 ? s.name.substring(0, 25) + '...' : s.name),
+      values: data.sections.map(s => s.maturity * 20) // Scale to 0-100 for comparison
     }
   ];
 
   slide3.addChart(pptx.ChartType.bar, chartData, {
-    x: 0.5,
-    y: 1.3,
-    w: 9,
-    h: 4.0,
+    x: 0.3, y: 1.0, w: 9.4, h: 4.2,
     barDir: 'bar',
     barGrouping: 'clustered',
-    chartColors: ['3B82F6', '10B981'],
+    chartColors: ['10B981', '3B82F6'],
     showLegend: true,
     legendPos: 'b',
-    showTitle: false,
     valAxisMaxVal: 100,
     catAxisLabelFontSize: 9,
     valAxisLabelFontSize: 10,
+    showValue: false,
+    valGridLine: { style: 'dash', color: 'E5E7EB' }
   });
 
-  // Slide 4: User Engagement Chart
+  // ========== Slide 4: Section Details Table ==========
   const slide4 = pptx.addSlide();
-  slide4.addText(isArabic ? 'مساهمة المستخدمين' : 'User Engagement', {
-    x: 0.5,
-    y: 0.4,
-    w: 9,
-    h: 0.6,
-    fontSize: 32,
-    bold: true,
-    color: '1E3A8A',
+
+  slide4.addText('Section Analysis', {
+    x: 0.5, y: 0.3, w: 9, h: 0.5,
+    fontSize: 28, bold: true, color: '1E40AF'
   });
 
-  // Top users chart
-  const topUsers = data.userEngagement.slice(0, 8);
+  const sectionTableRows: PptxGenJS.TableRow[] = [
+    [
+      { text: 'Section', options: { bold: true, fill: '3B82F6', color: 'FFFFFF', align: 'center' } },
+      { text: 'Maturity', options: { bold: true, fill: '3B82F6', color: 'FFFFFF', align: 'center' } },
+      { text: 'Completion', options: { bold: true, fill: '3B82F6', color: 'FFFFFF', align: 'center' } },
+      { text: 'Requirements', options: { bold: true, fill: '3B82F6', color: 'FFFFFF', align: 'center' } },
+      { text: 'Status', options: { bold: true, fill: '3B82F6', color: 'FFFFFF', align: 'center' } }
+    ],
+    ...data.sections.slice(0, 10).map(s => {
+      const status = s.completion >= 75 ? 'On Track' : s.completion >= 50 ? 'In Progress' : 'Needs Attention';
+      const statusColor = s.completion >= 75 ? '10B981' : s.completion >= 50 ? 'F59E0B' : 'EF4444';
+      return [
+        { text: s.name, options: { align: 'left' } },
+        { text: s.maturity.toFixed(2), options: { align: 'center' } },
+        { text: `${s.completion}%`, options: { align: 'center', color: statusColor } },
+        { text: s.requirementCount.toString(), options: { align: 'center' } },
+        { text: status, options: { align: 'center', color: statusColor, bold: true } }
+      ];
+    })
+  ];
+
+  slide4.addTable(sectionTableRows, {
+    x: 0.3, y: 1.0, w: 9.4, h: 4.0,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'E5E7EB' },
+    colW: [3.5, 1.2, 1.3, 1.4, 1.5]
+  });
+
+  // ========== Slide 5: Team Performance ==========
+  const slide5 = pptx.addSlide();
+
+  slide5.addText('Team Engagement', {
+    x: 0.5, y: 0.3, w: 9, h: 0.5,
+    fontSize: 28, bold: true, color: '1E40AF'
+  });
+
+  const topUsers = [...data.userEngagement]
+    .sort((a, b) => b.totalUploads - a.totalUploads)
+    .slice(0, 8);
+
   const userChartData = [
     {
-      name: isArabic ? 'المتطلبات المسندة' : 'Assigned',
-      labels: topUsers.map(u => u.fullName?.split(' ')[0] || u.username),
-      values: topUsers.map(u => u.assignedRequirements)
-    },
-    {
-      name: isArabic ? 'المعتمدة' : 'Approved',
-      labels: topUsers.map(u => u.fullName?.split(' ')[0] || u.username),
-      values: topUsers.map(u => u.approvedDocuments)
-    },
-    {
-      name: isArabic ? 'الرفوعات' : 'Uploads',
-      labels: topUsers.map(u => u.fullName?.split(' ')[0] || u.username),
+      name: 'Uploads',
+      labels: topUsers.map(u => (u.fullName || u.username).split(' ')[0]),
       values: topUsers.map(u => u.totalUploads)
+    },
+    {
+      name: 'Approved',
+      labels: topUsers.map(u => (u.fullName || u.username).split(' ')[0]),
+      values: topUsers.map(u => u.approvedDocuments)
     }
   ];
 
-  slide4.addChart(pptx.ChartType.bar, userChartData, {
-    x: 0.5,
-    y: 1.3,
-    w: 9,
-    h: 4.0,
+  slide5.addChart(pptx.ChartType.bar, userChartData, {
+    x: 0.3, y: 1.0, w: 9.4, h: 4.2,
     barDir: 'col',
     barGrouping: 'clustered',
-    chartColors: ['3B82F6', '10B981', '8B5CF6'],
+    chartColors: ['8B5CF6', '10B981'],
     showLegend: true,
     legendPos: 'b',
-    showTitle: false,
     catAxisLabelFontSize: 10,
     valAxisLabelFontSize: 10,
+    showValue: false,
+    valGridLine: { style: 'dash', color: 'E5E7EB' }
   });
 
-  // Slide 5: Document Success Rate Chart
-  const slide5 = pptx.addSlide();
-  slide5.addText(isArabic ? 'معدل نجاح المستندات' : 'Document Success Rate', {
-    x: 0.5,
-    y: 0.4,
-    w: 9,
-    h: 0.6,
-    fontSize: 32,
-    bold: true,
-    color: '1E3A8A',
+  // ========== Slide 6: Evidence Statistics ==========
+  if (data.evidenceStats && data.evidenceStats.total > 0) {
+    const slide6 = pptx.addSlide();
+
+    slide6.addText('Evidence Overview', {
+      x: 0.5, y: 0.3, w: 9, h: 0.5,
+      fontSize: 28, bold: true, color: '1E40AF'
+    });
+
+    const pieData = [
+      {
+        name: 'Status',
+        labels: ['Approved', 'Under Revision', 'Draft', 'Rejected'],
+        values: [
+          data.evidenceStats.approved,
+          data.evidenceStats.underRevision,
+          data.evidenceStats.draft,
+          data.evidenceStats.rejected
+        ]
+      }
+    ];
+
+    slide6.addChart(pptx.ChartType.pie, pieData, {
+      x: 0.5, y: 1.0, w: 4.5, h: 4.0,
+      chartColors: ['10B981', 'F59E0B', '9CA3AF', 'EF4444'],
+      showLegend: true,
+      legendPos: 'r',
+      showPercent: true,
+      showValue: false
+    });
+
+    // Stats summary
+    const evidenceStats = [
+      { label: 'Total Files', value: data.evidenceStats.total.toString(), color: '3B82F6' },
+      { label: 'Approved', value: data.evidenceStats.approved.toString(), color: '10B981' },
+      { label: 'Pending', value: data.evidenceStats.underRevision.toString(), color: 'F59E0B' },
+      { label: 'Rejected', value: data.evidenceStats.rejected.toString(), color: 'EF4444' }
+    ];
+
+    evidenceStats.forEach((stat, i) => {
+      slide6.addShape(pptx.ShapeType.roundRect, {
+        x: 5.5, y: 1.0 + i * 1.0, w: 4.0, h: 0.8,
+        fill: { color: 'F9FAFB' },
+        line: { color: stat.color, width: 1 }
+      });
+
+      slide6.addText(stat.label, {
+        x: 5.7, y: 1.1 + i * 1.0, w: 2.0, h: 0.6,
+        fontSize: 12, color: '6B7280', valign: 'middle'
+      });
+
+      slide6.addText(stat.value, {
+        x: 7.5, y: 1.1 + i * 1.0, w: 1.8, h: 0.6,
+        fontSize: 20, bold: true, color: stat.color, align: 'right', valign: 'middle'
+      });
+    });
+  }
+
+  // ========== Slide 7: Thank You ==========
+  const slideEnd = pptx.addSlide();
+  slideEnd.background = { color: '1E40AF' };
+
+  slideEnd.addText('Thank You', {
+    x: 0.5, y: 2.0, w: 9, h: 1,
+    fontSize: 48, bold: true, color: 'FFFFFF', align: 'center'
   });
 
-  const docChartData = [
-    {
-      name: isArabic ? 'معتمدة' : 'Approved',
-      labels: topUsers.map(u => u.fullName?.split(' ')[0] || u.username),
-      values: topUsers.map(u => u.approvedDocuments)
-    },
-    {
-      name: isArabic ? 'مرفوضة' : 'Rejected',
-      labels: topUsers.map(u => u.fullName?.split(' ')[0] || u.username),
-      values: topUsers.map(u => u.rejectedDocuments)
-    }
-  ];
+  slideEnd.addText('Questions & Discussion', {
+    x: 0.5, y: 3.2, w: 9, h: 0.5,
+    fontSize: 20, color: 'BFDBFE', align: 'center'
+  });
 
-  slide5.addChart(pptx.ChartType.bar, docChartData, {
-    x: 0.5,
-    y: 1.3,
-    w: 9,
-    h: 4.0,
-    barDir: 'col',
-    barGrouping: 'stacked',
-    chartColors: ['10B981', 'EF4444'],
-    showLegend: true,
-    legendPos: 'b',
-    showTitle: false,
-    catAxisLabelFontSize: 10,
-    valAxisLabelFontSize: 10,
+  slideEnd.addText(`${data.indexName} | ${data.indexCode}`, {
+    x: 0.5, y: 4.5, w: 9, h: 0.3,
+    fontSize: 12, color: 'DBEAFE', align: 'center'
   });
 
   // Save
