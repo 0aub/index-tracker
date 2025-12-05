@@ -15,7 +15,8 @@ import {
   Loader2,
   AlertCircle,
   Play,
-  Layers
+  Layers,
+  Eye
 } from 'lucide-react';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { api, KnowledgeItem } from '../services/api';
@@ -160,6 +161,12 @@ const KnowledgeCenter = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null);
 
+  // PDF Preview state
+  const [previewItem, setPreviewItem] = useState<KnowledgeItem | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   // Check if user can manage (add/edit/delete) - admin or owner
   const isAdmin = user?.role === 'ADMIN';
   const isOwner = currentIndex?.user_role?.toLowerCase() === 'owner';
@@ -267,6 +274,45 @@ const KnowledgeCenter = () => {
           toast.error(lang === 'ar' ? 'فشل تحميل الملف' : 'Failed to download file');
         });
     }
+  };
+
+  // Handle PDF preview
+  const handlePreviewPdf = async (item: KnowledgeItem) => {
+    setPreviewItem(item);
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const downloadUrl = `${apiUrl}/api/v1/knowledge/${item.id}/download`;
+      const token = getAuthToken();
+
+      const response = await fetch(downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch PDF');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+    } catch (err: any) {
+      console.error('Failed to load PDF preview:', err);
+      setPreviewError(lang === 'ar' ? 'فشل تحميل المعاينة' : 'Failed to load preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewItem(null);
+    setPreviewUrl(null);
+    setPreviewError(null);
   };
 
   // No index selected
@@ -413,11 +459,12 @@ const KnowledgeCenter = () => {
               const config = contentTypeConfig[item.content_type];
               const Icon = config.icon;
               const thumbnail = getThumbnailUrl(item);
+              const videoId = item.content_type === 'youtube' ? extractYouTubeVideoId(item.content_url) : null;
 
               return (
                 <div
                   key={item.id}
-                  className={`${patterns.section} overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group`}
+                  className={`${patterns.section} overflow-hidden transition-all duration-300 hover:shadow-lg group`}
                 >
                   {/* Title Header */}
                   <div className={`px-4 sm:px-6 py-4 border-b ${colors.border} ${config.bgColor}`}>
@@ -436,99 +483,71 @@ const KnowledgeCenter = () => {
                           </span>
                         </div>
                       </div>
-                      {canManage && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingItem(item);
-                              setShowAddModal(true);
-                            }}
-                            className={`p-2 rounded-lg ${colors.bgPrimary} ${colors.hover} transition`}
-                            title={lang === 'ar' ? 'تعديل' : 'Edit'}
-                          >
-                            <Edit size={18} className={colors.textSecondary} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(item);
-                            }}
-                            className={`p-2 rounded-lg ${colors.bgPrimary} hover:bg-red-100 dark:hover:bg-red-900/30 transition`}
-                            title={lang === 'ar' ? 'حذف' : 'Delete'}
-                          >
-                            <Trash2 size={18} className="text-red-500" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {/* Action buttons for PDF/PPTX */}
+                        {item.content_type !== 'youtube' && (
+                          <>
+                            {/* Preview button - only for PDF */}
+                            {item.content_type === 'pdf' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePreviewPdf(item);
+                                }}
+                                className={`p-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition`}
+                                title={lang === 'ar' ? 'معاينة' : 'Preview'}
+                              >
+                                <Eye size={18} className="text-blue-600 dark:text-blue-400" />
+                              </button>
+                            )}
+                            {/* Download button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleItemClick(item);
+                              }}
+                              className={`p-2.5 rounded-lg ${config.bgColor} hover:opacity-80 transition border ${config.borderColor}`}
+                              title={lang === 'ar' ? 'تحميل' : 'Download'}
+                            >
+                              <Download size={18} className={config.color} />
+                            </button>
+                          </>
+                        )}
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingItem(item);
+                                setShowAddModal(true);
+                              }}
+                              className={`p-2 rounded-lg ${colors.bgPrimary} ${colors.hover} transition`}
+                              title={lang === 'ar' ? 'تعديل' : 'Edit'}
+                            >
+                              <Edit size={18} className={colors.textSecondary} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(item);
+                              }}
+                              className={`p-2 rounded-lg ${colors.bgPrimary} hover:bg-red-100 dark:hover:bg-red-900/30 transition`}
+                              title={lang === 'ar' ? 'حذف' : 'Delete'}
+                            >
+                              <Trash2 size={18} className="text-red-500" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Content Body */}
-                  <div
-                    className="flex flex-col md:flex-row cursor-pointer"
-                    onClick={() => handleItemClick(item)}
-                  >
-                    {/* Thumbnail/Preview - Left Side */}
-                    <div className="md:w-80 lg:w-96 flex-shrink-0 relative overflow-hidden">
-                      {thumbnail ? (
-                        <div className="relative aspect-video md:h-full">
-                          {item.content_type === 'youtube' ? (
-                            <img
-                              src={thumbnail}
-                              alt={item.title}
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                              onError={(e) => {
-                                // Fallback to lower quality thumbnail
-                                const target = e.target as HTMLImageElement;
-                                if (target.src.includes('maxresdefault')) {
-                                  target.src = target.src.replace('maxresdefault', 'hqdefault');
-                                }
-                              }}
-                            />
-                          ) : (
-                            <ThumbnailImage
-                              src={thumbnail}
-                              alt={item.title}
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                              token={getAuthToken()}
-                            />
-                          )}
-                          {/* Play button overlay for YouTube */}
-                          {item.content_type === 'youtube' && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
-                              <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
-                                <Play className="text-white ml-1" size={28} fill="white" />
-                              </div>
-                            </div>
-                          )}
-                          {/* File type badge for PDF/PPTX */}
-                          {item.content_type !== 'youtube' && (
-                            <div className="absolute top-3 left-3">
-                              <div className={`px-2 py-1 rounded-md ${config.bgColor} border ${config.borderColor} flex items-center gap-1`}>
-                                <Icon className={config.color} size={16} />
-                                <span className={`text-xs font-medium ${config.color}`}>
-                                  {item.content_type.toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className={`aspect-video md:h-full flex items-center justify-center ${config.bgColor}`}>
-                          <div className="text-center p-6">
-                            <Icon className={`${config.color} mx-auto mb-3`} size={64} />
-                            <p className={`text-sm font-medium ${colors.textSecondary}`}>
-                              {item.file_name}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Description - Right Side */}
-                    <div className="flex-1 p-4 sm:p-6 flex flex-col justify-between">
-                      <div>
+                  {/* Content Body - Different layout for YouTube vs PDF/PPTX */}
+                  {item.content_type === 'youtube' ? (
+                    /* YouTube: Description then Embedded Video */
+                    <div className="p-4 sm:p-6">
+                      {/* Description */}
+                      <div className="mb-4">
                         {item.description ? (
                           <p className={`${colors.textSecondary} text-base leading-relaxed`}>
                             {item.description}
@@ -538,30 +557,85 @@ const KnowledgeCenter = () => {
                             {lang === 'ar' ? 'لا يوجد وصف' : 'No description'}
                           </p>
                         )}
+                        <div className="mt-2">
+                          <span className={`text-sm ${colors.textTertiary}`}>
+                            {lang === 'ar' ? 'بواسطة: ' : 'By: '}
+                            {lang === 'ar' ? item.creator_name : item.creator_name_en || item.creator_name}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Action Button */}
-                      <div className="mt-4 flex items-center justify-between">
-                        <span className={`text-sm ${colors.textTertiary}`}>
-                          {lang === 'ar' ? 'بواسطة: ' : 'By: '}
-                          {lang === 'ar' ? item.creator_name : item.creator_name_en || item.creator_name}
-                        </span>
-                        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${config.bgColor} border ${config.borderColor} ${config.color} font-medium transition-all group-hover:shadow-md`}>
-                          {item.content_type === 'youtube' ? (
-                            <>
-                              <ExternalLink size={18} />
-                              {lang === 'ar' ? 'مشاهدة' : 'Watch'}
-                            </>
+                      {/* Embedded YouTube Video */}
+                      {videoId && (
+                        <div className="relative w-full aspect-video rounded-lg overflow-hidden shadow-lg">
+                          <iframe
+                            src={`https://www.youtube.com/embed/${videoId}`}
+                            title={item.title}
+                            className="absolute inset-0 w-full h-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* PDF/PPTX: Thumbnail and Description side by side */
+                    <div className="flex flex-col md:flex-row">
+                      {/* Thumbnail/Preview - Left Side */}
+                      <div className="md:w-80 lg:w-96 flex-shrink-0 relative overflow-hidden">
+                        {thumbnail ? (
+                          <div className="relative aspect-video md:h-full">
+                            <ThumbnailImage
+                              src={thumbnail}
+                              alt={item.title}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              token={getAuthToken()}
+                            />
+                            {/* File type badge */}
+                            <div className="absolute top-3 left-3">
+                              <div className={`px-2 py-1 rounded-md ${config.bgColor} border ${config.borderColor} flex items-center gap-1`}>
+                                <Icon className={config.color} size={16} />
+                                <span className={`text-xs font-medium ${config.color}`}>
+                                  {item.content_type.toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`aspect-video md:h-full flex items-center justify-center ${config.bgColor}`}>
+                            <div className="text-center p-6">
+                              <Icon className={`${config.color} mx-auto mb-3`} size={64} />
+                              <p className={`text-sm font-medium ${colors.textSecondary}`}>
+                                {item.file_name}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Description - Right Side */}
+                      <div className="flex-1 p-4 sm:p-6 flex flex-col justify-between">
+                        <div>
+                          {item.description ? (
+                            <p className={`${colors.textSecondary} text-base leading-relaxed`}>
+                              {item.description}
+                            </p>
                           ) : (
-                            <>
-                              <Download size={18} />
-                              {lang === 'ar' ? 'تحميل' : 'Download'}
-                            </>
+                            <p className={`${colors.textTertiary} italic`}>
+                              {lang === 'ar' ? 'لا يوجد وصف' : 'No description'}
+                            </p>
                           )}
+                        </div>
+
+                        <div className="mt-4">
+                          <span className={`text-sm ${colors.textTertiary}`}>
+                            {lang === 'ar' ? 'بواسطة: ' : 'By: '}
+                            {lang === 'ar' ? item.creator_name : item.creator_name_en || item.creator_name}
+                          </span>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -584,6 +658,78 @@ const KnowledgeCenter = () => {
               loadItems();
             }}
           />
+        )}
+
+        {/* PDF Preview Modal */}
+        {previewItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closePreview}>
+            <div
+              className={`${colors.bgSecondary} rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] max-h-[700px] flex flex-col overflow-hidden`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className={`flex items-center justify-between p-4 border-b ${colors.border}`}>
+                <div className="flex items-center gap-3">
+                  <FileText className={colors.textSecondary} size={20} />
+                  <div>
+                    <h3 className={`font-semibold ${colors.textPrimary}`}>{previewItem.title}</h3>
+                    <p className={`text-xs ${colors.textSecondary}`}>
+                      {previewItem.file_name}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleItemClick(previewItem)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${colors.hover} border ${colors.border} text-sm`}
+                  >
+                    <Download size={16} />
+                    {lang === 'ar' ? 'تحميل' : 'Download'}
+                  </button>
+                  <button
+                    onClick={closePreview}
+                    className={`p-2 rounded-lg ${colors.hover}`}
+                  >
+                    <X size={20} className={colors.textSecondary} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-auto p-4 bg-gray-100 dark:bg-gray-900">
+                {previewLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <Loader2 className="animate-spin text-blue-500 mx-auto mb-3" size={40} />
+                      <p className={colors.textSecondary}>
+                        {lang === 'ar' ? 'جاري تحميل المعاينة...' : 'Loading preview...'}
+                      </p>
+                    </div>
+                  </div>
+                ) : previewError ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <AlertCircle className="text-red-500 mx-auto mb-3" size={40} />
+                      <p className={`${colors.textPrimary} mb-2`}>{previewError}</p>
+                      <button
+                        onClick={() => handleItemClick(previewItem)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition mx-auto"
+                      >
+                        <Download size={16} />
+                        {lang === 'ar' ? 'تحميل الملف بدلاً من ذلك' : 'Download file instead'}
+                      </button>
+                    </div>
+                  </div>
+                ) : previewUrl ? (
+                  <iframe
+                    src={previewUrl}
+                    className="w-full h-full rounded-lg border-0"
+                    title={previewItem.title}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
