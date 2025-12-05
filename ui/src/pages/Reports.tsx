@@ -856,9 +856,9 @@ const Reports = () => {
               <Layers className="text-cyan-500 hidden sm:block" size={20} />
               {lang === 'ar' ? 'تحليل الأقسام' : 'Section Analysis'}
             </h2>
-            <div className="h-[150px] sm:h-[450px]">
+            <div className="h-[350px] sm:h-[450px]">
               <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={sectionData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }} outerRadius="45%">
+                <RadarChart data={sectionData} margin={{ top: 20, right: 30, bottom: 20, left: 30 }} outerRadius="70%">
                 <PolarGrid
                   stroke="#9CA3AF"
                   strokeWidth={1}
@@ -870,7 +870,7 @@ const Reports = () => {
                     const { x, y, payload, cx, cy } = props;
                     // Calculate distance from center and push label further out
                     const angle = Math.atan2(y - cy, x - cx);
-                    const offset = window.innerWidth < 640 ? 8 : 35; // Much smaller offset on mobile
+                    const offset = window.innerWidth < 640 ? 20 : 35;
                     const newX = x + Math.cos(angle) * offset;
                     const newY = y + Math.sin(angle) * offset;
 
@@ -881,7 +881,7 @@ const Reports = () => {
                         textAnchor="middle"
                         fill="currentColor"
                         className={colors.textPrimary}
-                        fontSize={window.innerWidth < 640 ? 6 : 12}
+                        fontSize={window.innerWidth < 640 ? 10 : 12}
                       >
                         {payload.value}
                       </text>
@@ -964,14 +964,14 @@ const Reports = () => {
               {lang === 'ar' ? 'توزيع حالة الأدلة' : 'Evidence Status'}
             </h2>
             {statusDistributionData.length > 0 ? (
-              <div className="h-[150px] sm:h-[450px]">
+              <div className="h-[350px] sm:h-[450px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 0, bottom: 15, left: 0 }}>
+                  <PieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <Pie
                     data={statusDistributionData}
                     cx="50%"
                     cy="45%"
-                    outerRadius="50%"
+                    outerRadius="80%"
                     dataKey="value"
                   >
                     {statusDistributionData.map((entry, index) => (
@@ -1017,7 +1017,7 @@ const Reports = () => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-[150px] sm:h-[450px]">
+              <div className="flex items-center justify-center h-[350px] sm:h-[450px]">
                 <div className="text-center">
                   <FileText className={`w-12 h-12 ${colors.textSecondary} mx-auto mb-3`} />
                   <p className={`${colors.textSecondary} font-medium`}>
@@ -1039,7 +1039,7 @@ const Reports = () => {
           </h2>
           {coloredDomainData.length > 0 ? (
             <div className="min-w-[400px]">
-            <ResponsiveContainer width="100%" height={Math.max(300, coloredDomainData.length * 25 + sections.length * 15)}>
+            <ResponsiveContainer width="100%" height={Math.max(400, coloredDomainData.length * 35 + sections.length * 20)}>
               <BarChart
                 data={coloredDomainData}
                 margin={{ top: 10, right: 10, left: 2, bottom: 10 }}
