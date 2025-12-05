@@ -43,7 +43,8 @@ export interface Recommendation {
   id: string;
   requirement_id: string;
   index_id: string;
-  current_status_ar: string;
+  current_status_ar: string | null;
+  current_status_en: string | null;
   recommendation_ar: string;
   recommendation_en: string | null;
   status: 'pending' | 'addressed' | 'in_progress';
@@ -242,11 +243,14 @@ export interface PreviousEvidence {
   document_name: string;
   status: string;
   current_version: number;
+  mime_type: string | null;
   created_at: string;
 }
 
 export interface PreviousRecommendation {
   id: string;
+  current_status_ar: string | null;  // الوضع الراهن
+  current_status_en: string | null;
   recommendation_ar: string;
   recommendation_en: string | null;
   status: string;
@@ -476,6 +480,29 @@ export const indicesAPI = {
   },
 
   /**
+   * Create an empty index without Excel upload
+   */
+  async createEmpty(data: {
+    code: string;
+    index_type: string;
+    name_ar: string;
+    name_en?: string;
+    description_ar?: string;
+    description_en?: string;
+    version?: string;
+    organization_id: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<Index> {
+    const response = await fetch(`${API_BASE_URL}/indices/create-empty`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Index>(response);
+  },
+
+  /**
    * Update index
    */
   async update(
@@ -542,12 +569,18 @@ export const indicesAPI = {
       username: string;
       full_name_ar: string | null;
       full_name_en: string | null;
+      user_role: string | null;  // System role (ADMIN, etc.)
+      index_role: string | null;  // Index role (OWNER, SUPERVISOR, CONTRIBUTOR)
       approved_documents: number;
       assigned_requirements: number;
       rejected_documents: number;
       total_uploads: number;
       total_comments: number;
       documents_reviewed: number;
+      draft_documents: number;
+      submitted_documents: number;
+      confirmed_documents: number;
+      checklist_items_completed: number;
       review_comments: number;
     }>;
   }> {
@@ -1554,6 +1587,586 @@ export const recommendationsAPI = {
 };
 
 // ============================================================================
+// Checklist Types & API
+// ============================================================================
+
+export interface ChecklistItem {
+  id: string;
+  requirement_id: string;
+  text_ar: string;
+  text_en: string | null;
+  is_checked: boolean;
+  checked_by: string | null;
+  checked_at: string | null;
+  display_order: number;
+  created_by: string;
+  created_at: string;
+  updated_by: string | null;
+  updated_at: string;
+  created_by_name: string | null;
+  checked_by_name: string | null;
+}
+
+export const checklistAPI = {
+  /**
+   * Get all checklist items for a requirement
+   */
+  async getAll(requirementId: string): Promise<ChecklistItem[]> {
+    const response = await fetch(`${API_BASE_URL}/checklist/${requirementId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<ChecklistItem[]>(response);
+  },
+
+  /**
+   * Create a new checklist item
+   */
+  async create(requirementId: string, data: {
+    text_ar: string;
+    text_en?: string;
+  }): Promise<ChecklistItem> {
+    const response = await fetch(`${API_BASE_URL}/checklist/${requirementId}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse<ChecklistItem>(response);
+  },
+
+  /**
+   * Update a checklist item
+   */
+  async update(itemId: string, data: {
+    text_ar?: string;
+    text_en?: string;
+    is_checked?: boolean;
+    display_order?: number;
+  }): Promise<ChecklistItem> {
+    const response = await fetch(`${API_BASE_URL}/checklist/${itemId}`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse<ChecklistItem>(response);
+  },
+
+  /**
+   * Delete a checklist item
+   */
+  async delete(itemId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/checklist/${itemId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new APIError('Failed to delete checklist item', response.status);
+    }
+  },
+
+  /**
+   * Toggle a checklist item's checked status
+   */
+  async toggle(itemId: string): Promise<ChecklistItem> {
+    const response = await fetch(`${API_BASE_URL}/checklist/${itemId}/toggle`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<ChecklistItem>(response);
+  },
+};
+
+// ============================================================================
+// Section Mappings API
+// ============================================================================
+
+export interface SectionMapping {
+  id: string;
+  current_index_id: string;
+  previous_index_id: string;
+  main_area_from_ar: string;
+  main_area_to_ar: string;
+  main_area_from_en?: string | null;
+  main_area_to_en?: string | null;
+  element_from_ar?: string | null;
+  element_to_ar?: string | null;
+  element_from_en?: string | null;
+  element_to_en?: string | null;
+  sub_domain_from_ar?: string | null;
+  sub_domain_to_ar?: string | null;
+  sub_domain_from_en?: string | null;
+  sub_domain_to_en?: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+export interface SectionComparisonItem {
+  level: 'main_area' | 'element' | 'sub_domain';
+  previous_value_ar?: string | null;
+  previous_value_en?: string | null;
+  current_value_ar?: string | null;
+  current_value_en?: string | null;
+  is_mapped: boolean;
+  mapping_id?: string | null;
+  parent_main_area_ar?: string | null;
+  parent_element_ar?: string | null;
+}
+
+export interface SectionComparisonResponse {
+  current_index_id: string;
+  previous_index_id: string;
+  current_index_name_ar: string;
+  previous_index_name_ar: string;
+  comparisons: SectionComparisonItem[];
+}
+
+export const sectionMappingsAPI = {
+  /**
+   * Compare sections between two indices
+   */
+  async compare(currentIndexId: string, previousIndexId: string): Promise<SectionComparisonResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/section-mappings/compare/${currentIndexId}/${previousIndexId}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<SectionComparisonResponse>(response);
+  },
+
+  /**
+   * Get all section mappings for an index
+   */
+  async getAll(currentIndexId: string, previousIndexId?: string): Promise<SectionMapping[]> {
+    const queryParams = new URLSearchParams();
+    if (previousIndexId) queryParams.append('previous_index_id', previousIndexId);
+
+    const response = await fetch(
+      `${API_BASE_URL}/section-mappings/${currentIndexId}?${queryParams}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await handleResponse<{ mappings: SectionMapping[] }>(response);
+    return result.mappings;
+  },
+
+  /**
+   * Create a single section mapping
+   */
+  async create(
+    currentIndexId: string,
+    previousIndexId: string,
+    mapping: Omit<SectionMapping, 'id' | 'current_index_id' | 'previous_index_id' | 'created_at' | 'updated_at' | 'created_by'>
+  ): Promise<SectionMapping> {
+    const response = await fetch(
+      `${API_BASE_URL}/section-mappings/${currentIndexId}?previous_index_id=${previousIndexId}`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(mapping),
+      }
+    );
+    return handleResponse<SectionMapping>(response);
+  },
+
+  /**
+   * Bulk create/update section mappings
+   */
+  async bulkCreate(
+    currentIndexId: string,
+    previousIndexId: string,
+    mappings: Array<Omit<SectionMapping, 'id' | 'current_index_id' | 'previous_index_id' | 'created_at' | 'updated_at' | 'created_by'>>
+  ): Promise<SectionMapping[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/section-mappings/${currentIndexId}/bulk`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          previous_index_id: previousIndexId,
+          mappings,
+        }),
+      }
+    );
+    return handleResponse<SectionMapping[]>(response);
+  },
+
+  /**
+   * Update a section mapping
+   */
+  async update(mappingId: string, data: Partial<SectionMapping>): Promise<SectionMapping> {
+    const response = await fetch(
+      `${API_BASE_URL}/section-mappings/${mappingId}`,
+      {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }
+    );
+    return handleResponse<SectionMapping>(response);
+  },
+
+  /**
+   * Delete a section mapping
+   */
+  async delete(mappingId: string): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/section-mappings/${mappingId}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to delete section mapping');
+    }
+  },
+
+  /**
+   * Get suggested mappings based on text similarity
+   */
+  async suggest(
+    currentIndexId: string,
+    previousIndexId: string
+  ): Promise<Array<Omit<SectionMapping, 'id' | 'current_index_id' | 'previous_index_id' | 'created_at' | 'updated_at' | 'created_by'>>> {
+    const response = await fetch(
+      `${API_BASE_URL}/section-mappings/${currentIndexId}/suggest?previous_index_id=${previousIndexId}`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<Array<Omit<SectionMapping, 'id' | 'current_index_id' | 'previous_index_id' | 'created_at' | 'updated_at' | 'created_by'>>>(response);
+  },
+};
+
+// ============================================================================
+// Knowledge Center API
+// ============================================================================
+
+export interface KnowledgeItem {
+  id: string;
+  title: string;
+  description: string | null;
+  content_type: 'youtube' | 'pdf' | 'pptx';
+  content_url: string;
+  thumbnail_path: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  index_id: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  display_order: number;
+  creator_name: string | null;
+  creator_name_en: string | null;
+}
+
+export interface KnowledgeItemListResponse {
+  items: KnowledgeItem[];
+  total: number;
+}
+
+export const knowledgeAPI = {
+  /**
+   * Get all knowledge items for an index
+   */
+  async getAll(indexId: string): Promise<KnowledgeItemListResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/knowledge?index_id=${indexId}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<KnowledgeItemListResponse>(response);
+  },
+
+  /**
+   * Get a single knowledge item
+   */
+  async getById(itemId: string): Promise<KnowledgeItem> {
+    const response = await fetch(
+      `${API_BASE_URL}/knowledge/${itemId}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<KnowledgeItem>(response);
+  },
+
+  /**
+   * Create a knowledge item (with optional file upload)
+   */
+  async create(data: {
+    index_id: string;
+    title: string;
+    description?: string;
+    content_type: 'youtube' | 'pdf' | 'pptx';
+    content_url?: string;
+    display_order?: number;
+    file?: File;
+  }): Promise<KnowledgeItem> {
+    const formData = new FormData();
+    formData.append('index_id', data.index_id);
+    formData.append('title', data.title);
+    formData.append('content_type', data.content_type);
+    if (data.description) formData.append('description', data.description);
+    if (data.content_url) formData.append('content_url', data.content_url);
+    if (data.display_order !== undefined) formData.append('display_order', data.display_order.toString());
+    if (data.file) formData.append('file', data.file);
+
+    const response = await fetch(`${API_BASE_URL}/knowledge`, {
+      method: 'POST',
+      headers: getAuthHeadersForUpload(),
+      body: formData,
+    });
+    return handleResponse<KnowledgeItem>(response);
+  },
+
+  /**
+   * Update a knowledge item
+   */
+  async update(itemId: string, data: {
+    title?: string;
+    description?: string;
+    content_url?: string;
+    display_order?: number;
+  }): Promise<KnowledgeItem> {
+    const response = await fetch(
+      `${API_BASE_URL}/knowledge/${itemId}`,
+      {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }
+    );
+    return handleResponse<KnowledgeItem>(response);
+  },
+
+  /**
+   * Delete a knowledge item
+   */
+  async delete(itemId: string): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/knowledge/${itemId}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to delete knowledge item');
+    }
+  },
+
+  /**
+   * Get download URL for a file
+   */
+  getDownloadUrl(itemId: string): string {
+    return `${API_BASE_URL}/knowledge/${itemId}/download`;
+  },
+};
+
+// ============================================================================
+// Support Types and API
+// ============================================================================
+
+export interface SupportAttachment {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number | null;
+  file_type: string | null;
+  thread_id: string | null;
+  reply_id: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface SupportReply {
+  id: string;
+  content: string;
+  thread_id: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  creator_name: string | null;
+  creator_name_en: string | null;
+  attachments: SupportAttachment[];
+}
+
+export interface SupportThread {
+  id: string;
+  title: string;
+  content: string;
+  index_id: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  is_resolved: boolean;
+  creator_name: string | null;
+  creator_name_en: string | null;
+  replies_count: number;
+  attachments: SupportAttachment[];
+  replies?: SupportReply[];
+}
+
+export interface SupportThreadListResponse {
+  threads: SupportThread[];
+  total: number;
+}
+
+export const supportAPI = {
+  /**
+   * Get all support threads for an index
+   */
+  async getAll(indexId: string, skip = 0, limit = 50): Promise<SupportThreadListResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/support?index_id=${indexId}&skip=${skip}&limit=${limit}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<SupportThreadListResponse>(response);
+  },
+
+  /**
+   * Get a single support thread with replies
+   */
+  async getById(threadId: string): Promise<SupportThread> {
+    const response = await fetch(
+      `${API_BASE_URL}/support/${threadId}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<SupportThread>(response);
+  },
+
+  /**
+   * Create a support thread
+   */
+  async create(data: {
+    index_id: string;
+    title: string;
+    content: string;
+    files?: File[];
+  }): Promise<SupportThread> {
+    const formData = new FormData();
+    formData.append('index_id', data.index_id);
+    formData.append('title', data.title);
+    formData.append('content', data.content);
+    if (data.files) {
+      data.files.forEach(file => {
+        formData.append('files', file);
+      });
+    }
+
+    const response = await fetch(`${API_BASE_URL}/support`, {
+      method: 'POST',
+      headers: getAuthHeadersForUpload(),
+      body: formData,
+    });
+    return handleResponse<SupportThread>(response);
+  },
+
+  /**
+   * Update a support thread
+   */
+  async update(threadId: string, data: {
+    title?: string;
+    content?: string;
+    is_resolved?: boolean;
+  }): Promise<SupportThread> {
+    const response = await fetch(
+      `${API_BASE_URL}/support/${threadId}`,
+      {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      }
+    );
+    return handleResponse<SupportThread>(response);
+  },
+
+  /**
+   * Delete a support thread
+   */
+  async delete(threadId: string): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/support/${threadId}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to delete support thread');
+    }
+  },
+
+  /**
+   * Create a reply to a thread
+   */
+  async createReply(threadId: string, data: {
+    content: string;
+    files?: File[];
+  }): Promise<SupportReply> {
+    const formData = new FormData();
+    formData.append('content', data.content);
+    if (data.files) {
+      data.files.forEach(file => {
+        formData.append('files', file);
+      });
+    }
+
+    const response = await fetch(`${API_BASE_URL}/support/${threadId}/replies`, {
+      method: 'POST',
+      headers: getAuthHeadersForUpload(),
+      body: formData,
+    });
+    return handleResponse<SupportReply>(response);
+  },
+
+  /**
+   * Delete a reply
+   */
+  async deleteReply(threadId: string, replyId: string): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/support/${threadId}/replies/${replyId}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to delete reply');
+    }
+  },
+
+  /**
+   * Get unread support count (threads in last 24 hours)
+   */
+  async getUnreadCount(indexId: string): Promise<{ count: number }> {
+    const response = await fetch(
+      `${API_BASE_URL}/support/unread-count?index_id=${indexId}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    return handleResponse<{ count: number }>(response);
+  },
+
+  /**
+   * Get attachment download URL
+   */
+  getAttachmentDownloadUrl(attachmentId: string): string {
+    return `${API_BASE_URL}/support/attachments/${attachmentId}/download`;
+  },
+};
+
+// ============================================================================
 // Export all APIs
 // ============================================================================
 
@@ -1566,6 +2179,10 @@ export const api = {
   evidence: evidenceAPI,
   recommendations: recommendationsAPI,
   notifications: notificationsAPI,
+  checklist: checklistAPI,
+  sectionMappings: sectionMappingsAPI,
+  knowledge: knowledgeAPI,
+  support: supportAPI,
 };
 
 // Convenience function for fetching indices (used by Tasks page)

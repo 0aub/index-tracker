@@ -108,6 +108,7 @@ def enrich_task_response(task: Task, db: Session) -> dict:
         "status": task.status.value,
         "priority": task.priority.value,
         "index_id": task.index_id,
+        "requirement_id": task.requirement_id,
         "due_date": task.due_date,
         "created_by": task.created_by,
         "created_at": task.created_at,
@@ -128,6 +129,14 @@ def enrich_task_response(task: Task, db: Session) -> dict:
     if task.index:
         task_dict["index_name"] = task.index.name_ar
         task_dict["index_name_en"] = task.index.name_en
+
+    # Add requirement info
+    if task.requirement:
+        task_dict["requirement_code"] = task.requirement.code
+        task_dict["requirement_question_ar"] = task.requirement.question_ar
+        task_dict["requirement_question_en"] = task.requirement.question_en
+        task_dict["requirement_main_area_ar"] = task.requirement.main_area_ar
+        task_dict["requirement_main_area_en"] = task.requirement.main_area_en
 
     # Add assignments with user info
     for assignment in task.assignments:
@@ -302,6 +311,7 @@ async def create_task(
         status=TaskStatus.TODO,
         priority=task_data.priority,
         index_id=task_data.index_id,
+        requirement_id=task_data.requirement_id,
         due_date=task_data.due_date,
         created_by=current_user.id,
         created_at=datetime.utcnow(),
@@ -310,8 +320,11 @@ async def create_task(
 
     db.add(task)
 
+    # If no assignees provided, assign to the creator (task for self)
+    assignee_ids = task_data.assignee_ids if task_data.assignee_ids else [current_user.id]
+
     # Create assignments
-    for user_id in task_data.assignee_ids:
+    for user_id in assignee_ids:
         # Verify user exists
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -334,7 +347,7 @@ async def create_task(
         db.refresh(task)
 
         # Create notifications for assigned users
-        for user_id in task_data.assignee_ids:
+        for user_id in assignee_ids:
             create_notification(
                 db=db,
                 user_id=user_id,

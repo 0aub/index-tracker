@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { Task, TaskCreateRequest, TaskUpdateRequest, User } from '../../types';
 import { colors, patterns } from '../../utils/darkMode';
 import { fetchUsers } from '../../services/userManagement';
-import { Index } from '../../services/api';
+import { Index, Requirement, api } from '../../services/api';
+import UserSearchSelector from '../common/UserSearchSelector';
 import toast from 'react-hot-toast';
 
 interface TaskFormProps {
@@ -18,17 +19,23 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Requirement selection state
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [loadingRequirements, setLoadingRequirements] = useState(false);
+  const [selectedMainArea, setSelectedMainArea] = useState<string>(task?.requirement_main_area_ar || '');
+  const [uniqueMainAreas, setUniqueMainAreas] = useState<string[]>([]);
+  const [selectedIndexId, setSelectedIndexId] = useState<string>(task?.index_id || '');
+
   const [formData, setFormData] = useState({
     title: task?.title || '',
     description: task?.description || '',
     index_id: task?.index_id || '',
+    requirement_id: task?.requirement_id || '',
     assignee_ids: task?.assignments?.map(a => a.user_id) || [],
     due_date: task?.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '',
     priority: task?.priority || 'medium',
     status: task?.status || 'todo'
   });
-
-  const [userSearch, setUserSearch] = useState('');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -46,6 +53,51 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
     loadUsers();
   }, [lang]);
 
+  // Load requirements when selectedIndexId changes (not formData.index_id to avoid loops)
+  useEffect(() => {
+    const loadRequirements = async () => {
+      if (!selectedIndexId) {
+        setRequirements([]);
+        setUniqueMainAreas([]);
+        return;
+      }
+
+      try {
+        setLoadingRequirements(true);
+        const data = await api.requirements.getAll({ index_id: selectedIndexId });
+        setRequirements(data);
+
+        // Extract unique main areas
+        const areas = [...new Set(data.map(r => r.main_area_ar))].filter(Boolean);
+        setUniqueMainAreas(areas);
+      } catch (error) {
+        console.error('Failed to load requirements:', error);
+      } finally {
+        setLoadingRequirements(false);
+      }
+    };
+
+    loadRequirements();
+  }, [selectedIndexId]);
+
+  // Filtered requirements by selected main area
+  const filteredRequirements = selectedMainArea
+    ? requirements.filter(r => r.main_area_ar === selectedMainArea)
+    : requirements;
+
+  // Handle index change
+  const handleIndexChange = (newIndexId: string) => {
+    setSelectedIndexId(newIndexId);
+    setSelectedMainArea('');
+    setFormData(prev => ({ ...prev, index_id: newIndexId, requirement_id: '' }));
+  };
+
+  // Handle main area change
+  const handleMainAreaChange = (newMainArea: string) => {
+    setSelectedMainArea(newMainArea);
+    setFormData(prev => ({ ...prev, requirement_id: '' }));
+  };
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
 
@@ -53,9 +105,7 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
       newErrors.title = lang === 'ar' ? 'العنوان مطلوب' : 'Title is required';
     }
 
-    if (formData.assignee_ids.length === 0) {
-      newErrors.assignee_ids = lang === 'ar' ? 'يجب تعيين المهمة لمستخدم واحد على الأقل' : 'At least one assignee is required';
-    }
+    // Assignees are now optional - if not provided, task will be assigned to the creator
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -77,6 +127,7 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
           title: formData.title.trim(),
           description: formData.description.trim() || undefined,
           index_id: formData.index_id || undefined,
+          requirement_id: formData.requirement_id || undefined,
           due_date: formData.due_date ? new Date(formData.due_date).toISOString() : undefined,
           priority: formData.priority,
           status: formData.status
@@ -88,6 +139,7 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
           title: formData.title.trim(),
           description: formData.description.trim() || undefined,
           index_id: formData.index_id || undefined,
+          requirement_id: formData.requirement_id || undefined,
           assignee_ids: formData.assignee_ids,
           due_date: formData.due_date ? new Date(formData.due_date).toISOString() : undefined,
           priority: formData.priority
@@ -97,20 +149,6 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
     } catch (error) {
       setLoading(false);
       // Error already handled in parent
-    }
-  };
-
-  const toggleAssignee = (userId: string) => {
-    if (formData.assignee_ids.includes(userId)) {
-      setFormData({
-        ...formData,
-        assignee_ids: formData.assignee_ids.filter(id => id !== userId)
-      });
-    } else {
-      setFormData({
-        ...formData,
-        assignee_ids: [...formData.assignee_ids, userId]
-      });
     }
   };
 
@@ -175,8 +213,8 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
               {lang === 'ar' ? 'المؤشر المرتبط' : 'Related Index'}
             </label>
             <select
-              value={formData.index_id}
-              onChange={(e) => setFormData({ ...formData, index_id: e.target.value })}
+              value={selectedIndexId}
+              onChange={(e) => handleIndexChange(e.target.value)}
               className={`w-full px-4 py-2 ${patterns.select}`}
             >
               <option value="">{lang === 'ar' ? 'لا يوجد' : 'None'}</option>
@@ -187,6 +225,64 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
               ))}
             </select>
           </div>
+
+          {/* Main Area and Requirement - Only show if index is selected */}
+          {selectedIndexId && (
+            <>
+              {/* Main Area Filter */}
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
+                  {lang === 'ar' ? 'المجال الرئيسي' : 'Main Area'}
+                </label>
+                {loadingRequirements ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <Loader2 className="animate-spin" size={16} />
+                    <span className={`text-sm ${colors.textSecondary}`}>
+                      {lang === 'ar' ? 'جاري التحميل...' : 'Loading...'}
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedMainArea}
+                    onChange={(e) => handleMainAreaChange(e.target.value)}
+                    className={`w-full px-4 py-2 ${patterns.select}`}
+                  >
+                    <option value="">{lang === 'ar' ? 'جميع المجالات' : 'All Areas'}</option>
+                    {uniqueMainAreas.map((area, idx) => (
+                      <option key={idx} value={area}>
+                        {area}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Requirement Selection */}
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
+                  {lang === 'ar' ? 'المتطلب المرتبط' : 'Related Requirement'}
+                </label>
+                <select
+                  value={formData.requirement_id}
+                  onChange={(e) => setFormData(prev => ({ ...prev, requirement_id: e.target.value }))}
+                  className={`w-full px-4 py-2 ${patterns.select}`}
+                  disabled={loadingRequirements}
+                >
+                  <option value="">{lang === 'ar' ? 'لا يوجد' : 'None'}</option>
+                  {filteredRequirements.map((req) => (
+                    <option key={req.id} value={req.id}>
+                      {req.code} - {lang === 'ar' ? req.question_ar : (req.question_en || req.question_ar)}
+                    </option>
+                  ))}
+                </select>
+                {filteredRequirements.length === 0 && !loadingRequirements && (
+                  <p className={`text-sm ${colors.textSecondary} mt-1`}>
+                    {lang === 'ar' ? 'لا توجد متطلبات' : 'No requirements found'}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Due Date and Priority - Two Columns */}
           <div className="grid grid-cols-2 gap-4">
@@ -221,95 +317,33 @@ const TaskForm = ({ task, onSave, onCancel, indices, lang }: TaskFormProps) => {
             </div>
           </div>
 
-          {/* Assignees - Searchable Multi-Select (Moved to end) */}
+          {/* Assignees - Searchable Multi-Select with User Cards */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
-              {lang === 'ar' ? 'تعيين إلى' : 'Assign To'} *
+            <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+              {lang === 'ar' ? 'تعيين إلى' : 'Assign To'}
             </label>
+            <p className={`text-xs ${colors.textSecondary} mb-3`}>
+              {lang === 'ar' ? 'اختياري - إذا لم يتم التعيين، ستكون المهمة لك' : 'Optional - If not assigned, the task will be for yourself'}
+            </p>
 
-            {/* Search Input */}
-            <div className="relative mb-2">
-              <input
-                type="text"
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-                className={`w-full px-4 py-2 ${patterns.input}`}
-                placeholder={lang === 'ar' ? 'ابحث عن مستخدم...' : 'Search for users...'}
-                dir={lang === 'ar' ? 'rtl' : 'ltr'}
-              />
-            </div>
-
-            {/* Selected Users */}
-            {formData.assignee_ids.length > 0 && (
-              <div className={`mb-2 p-3 ${colors.bgTertiary} rounded-lg`}>
-                <div className="flex flex-wrap gap-2">
-                  {formData.assignee_ids.map((userId) => {
-                    const user = users.find(u => u.id === userId);
-                    if (!user) return null;
-                    return (
-                      <div
-                        key={userId}
-                        className={`flex items-center gap-2 px-3 py-1 ${colors.bgSecondary} rounded-full border ${colors.border}`}
-                      >
-                        <span className={`text-sm ${colors.textPrimary}`}>
-                          {lang === 'ar' ? user.name : user.name_en}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleAssignee(userId)}
-                          className={`${colors.textSecondary} hover:text-red-500 transition`}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* User Selection List - Only show when searching */}
-            {userSearch.trim() && (
-              <div className={`max-h-48 overflow-y-auto ${colors.border} border rounded-lg divide-y ${colors.border}`}>
-                {users
-                  .filter(user => {
-                    const searchTerm = userSearch.toLowerCase();
-                    const userName = (lang === 'ar' ? user.name : user.name_en).toLowerCase();
-                    const userEmail = user.email.toLowerCase();
-                    return userName.includes(searchTerm) || userEmail.includes(searchTerm);
-                  })
-                  .map((user) => (
-                    <button
-                      key={user.id}
-                      type="button"
-                      onClick={() => toggleAssignee(user.id)}
-                      className={`w-full flex items-center justify-between p-3 ${colors.bgHover} transition ${
-                        formData.assignee_ids.includes(user.id) ? `${colors.bgTertiary} font-medium` : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${
-                          formData.assignee_ids.includes(user.id) ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                        }`} />
-                        <div className="text-left">
-                          <div className={colors.textPrimary}>
-                            {lang === 'ar' ? user.name : user.name_en}
-                          </div>
-                          <div className={`text-xs ${colors.textSecondary}`}>
-                            {user.email}
-                          </div>
-                        </div>
-                      </div>
-                      <span className={`text-xs px-2 py-1 rounded ${colors.bgSecondary} ${colors.textSecondary}`}>
-                        {user.role}
-                      </span>
-                    </button>
-                  ))}
-              </div>
-            )}
-            {errors.assignee_ids && (
-              <p className="mt-1 text-sm text-red-600">{errors.assignee_ids}</p>
-            )}
+            <UserSearchSelector
+              users={users}
+              selectedIds={formData.assignee_ids}
+              onSelect={(userId) => setFormData(prev => ({
+                ...prev,
+                assignee_ids: [...prev.assignee_ids, userId]
+              }))}
+              onDeselect={(userId) => setFormData(prev => ({
+                ...prev,
+                assignee_ids: prev.assignee_ids.filter(id => id !== userId)
+              }))}
+              placeholder={{
+                ar: 'ابحث بالاسم أو البريد الإلكتروني...',
+                en: 'Search by name or email...'
+              }}
+              multiple={true}
+              showRole={true}
+            />
           </div>
 
           {/* Status (only when editing) */}

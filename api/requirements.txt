@@ -28,6 +28,11 @@ pydantic-settings==2.1.0
 python-dateutil==2.8.2
 pytz==2024.1
 
+# PDF/PPTX thumbnail generation
+pdf2image==1.16.3
+python-pptx==0.6.23
+Pillow==10.2.0
+
 # Monitoring (optional)
 prometheus-fastapi-instrumentator==6.1.0
 

@@ -18,6 +18,10 @@ from app.models.requirement_activity import RequirementActivity
 from app.models.recommendation import Recommendation
 from app.models.task import Task, TaskAssignment, TaskComment, TaskAttachment, TaskStatus, TaskPriority
 from app.models.notification import Notification, NotificationType
+from app.models.checklist import ChecklistItem
+from app.models.section_mapping import SectionMapping
+from app.models.knowledge_item import KnowledgeItem, KnowledgeItemType
+from app.models.support import SupportThread, SupportReply, SupportAttachment
 
 __all__ = [
     "User",
@@ -49,4 +53,11 @@ __all__ = [
     "TaskPriority",
     "Notification",
     "NotificationType",
+    "ChecklistItem",
+    "SectionMapping",
+    "KnowledgeItem",
+    "KnowledgeItemType",
+    "SupportThread",
+    "SupportReply",
+    "SupportAttachment",
 ]

@@ -16,6 +16,7 @@ from app.schemas.index import (
     IndexResponse,
     IndexMinimal,
     IndexUpdate,
+    IndexCreateEmpty,
     IndexStatistics,
     IndexUserEngagementResponse,
     UserEngagementStats
@@ -32,6 +33,63 @@ import uuid
 from sqlalchemy import func
 
 router = APIRouter(prefix="/indices", tags=["Indices"])
+
+
+def compute_automatic_status(index: Index, db: Session) -> IndexStatus:
+    """
+    Compute the automatic status of an index based on dates and requirements.
+
+    Rules:
+    1. If is_completed is True -> COMPLETED
+    2. If status is ARCHIVED -> ARCHIVED (manual archive)
+    3. If all requirements have answer_status='confirmed' -> COMPLETED
+    4. If start_date is set and current date >= start_date -> IN_PROGRESS
+    5. Otherwise -> NOT_STARTED
+
+    Returns the computed status and updates the index in the database if needed.
+    """
+    from datetime import datetime
+    from app.models.requirement import Requirement
+
+    # Already completed or archived - don't change
+    if index.is_completed:
+        return IndexStatus.COMPLETED
+    if index.status == IndexStatus.ARCHIVED:
+        return IndexStatus.ARCHIVED
+
+    now = datetime.utcnow()
+    current_status = index.status
+    new_status = current_status
+
+    # Check if all requirements are confirmed (only if there are requirements)
+    if index.total_requirements > 0:
+        confirmed_count = db.query(func.count(Requirement.id)).filter(
+            Requirement.index_id == index.id,
+            Requirement.answer_status == 'confirmed'
+        ).scalar() or 0
+
+        if confirmed_count == index.total_requirements:
+            # All requirements confirmed - mark as completed
+            new_status = IndexStatus.COMPLETED
+            if current_status != new_status:
+                index.status = new_status
+                index.is_completed = True
+                index.completed_at = now
+                db.commit()
+            return new_status
+
+    # Check if we should be in_progress based on start_date
+    if index.start_date and index.start_date <= now:
+        new_status = IndexStatus.IN_PROGRESS
+    else:
+        new_status = IndexStatus.NOT_STARTED
+
+    # Update if status changed
+    if current_status != new_status:
+        index.status = new_status
+        db.commit()
+
+    return new_status
 
 
 @router.get("/template", response_class=FileResponse)
@@ -190,6 +248,98 @@ async def create_index_from_excel(
         )
 
 
+@router.post("/create-empty", response_model=IndexResponse, status_code=status.HTTP_201_CREATED)
+async def create_empty_index(
+    index_data: IndexCreateEmpty,
+    permissions: PermissionChecker = Depends(get_permissions),
+    db: Session = Depends(get_db)
+):
+    """
+    Create an empty index without uploading an Excel file.
+    Requirements can be added manually later.
+
+    Automatic status management:
+    - If start_date is set and current date >= start_date: status = in_progress
+    - Otherwise: status = not_started
+
+    Args:
+        index_data: Index creation data
+        permissions: Permission checker
+        db: Database session
+
+    Returns:
+        Created empty index
+    """
+    from datetime import datetime
+
+    # Check if user can create an index of this type
+    if not permissions.can_create_index(index_data.index_type):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ليس لديك صلاحية لإنشاء مؤشر من هذا النوع"
+        )
+
+    # Validate index type
+    try:
+        config = get_index_config(index_data.index_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid index type: {index_data.index_type}. Available types: {', '.join(get_available_index_types())}"
+        )
+
+    # Check if index code already exists
+    existing = db.query(Index).filter(Index.code == index_data.code).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Index with code '{index_data.code}' already exists"
+        )
+
+    # Determine initial status based on start_date
+    now = datetime.utcnow()
+    initial_status = IndexStatus.NOT_STARTED
+    if index_data.start_date and index_data.start_date <= now:
+        initial_status = IndexStatus.IN_PROGRESS
+
+    # Create the empty index
+    index = Index(
+        id=str(uuid.uuid4()),
+        code=index_data.code,
+        index_type=index_data.index_type,
+        name_ar=index_data.name_ar,
+        name_en=index_data.name_en,
+        description_ar=index_data.description_ar,
+        description_en=index_data.description_en,
+        version=index_data.version,
+        status=initial_status,
+        organization_id=index_data.organization_id,
+        total_requirements=0,
+        total_areas=0,
+        start_date=index_data.start_date,
+        end_date=index_data.end_date,
+        created_at=now,
+        updated_at=now
+    )
+
+    db.add(index)
+
+    # Add the creator as an owner in index_users
+    index_user = IndexUser(
+        id=str(uuid.uuid4()),
+        index_id=index.id,
+        user_id=permissions.user.id,
+        role=IndexUserRole.OWNER,
+        added_by=permissions.user.id
+    )
+    db.add(index_user)
+
+    db.commit()
+    db.refresh(index)
+
+    return index
+
+
 @router.get("", response_model=List[IndexMinimal])
 async def list_indices(
     organization_id: Optional[str] = None,
@@ -238,6 +388,9 @@ async def list_indices(
 
     result = []
     for index in indices:
+        # Compute automatic status based on dates and requirements
+        computed_status = compute_automatic_status(index, db)
+
         # Count evidence for this index
         evidence_count = db.query(func.count(Evidence.id)).join(
             Requirement, Evidence.requirement_id == Requirement.id
@@ -261,7 +414,7 @@ async def list_indices(
             'index_type': index.index_type,
             'name_ar': index.name_ar,
             'name_en': index.name_en,
-            'status': index.status,
+            'status': computed_status,  # Use computed status
             'total_requirements': index.total_requirements,
             'total_areas': index.total_areas,
             'total_evidence': evidence_count,
@@ -313,7 +466,18 @@ async def get_index(
         Requirement, Evidence.requirement_id == Requirement.id
     ).filter(Requirement.index_id == index.id).scalar() or 0
 
-    # Create response with evidence count
+    # Get the user's role in this index from index_users table
+    user_role = None
+    if not permissions.is_admin:
+        # For non-admin users, get their specific role in this index
+        index_user = db.query(IndexUser).filter(
+            IndexUser.index_id == index.id,
+            IndexUser.user_id == permissions.user.id
+        ).first()
+        if index_user:
+            user_role = index_user.role.value.upper()  # Convert enum to uppercase string
+
+    # Create response with evidence count and user role
     index_dict = {
         'id': index.id,
         'code': index.code,
@@ -334,7 +498,8 @@ async def get_index(
         'updated_at': index.updated_at,
         'published_at': index.published_at,
         'start_date': index.start_date,
-        'end_date': index.end_date
+        'end_date': index.end_date,
+        'user_role': user_role
     }
 
     return index_dict
@@ -414,10 +579,15 @@ async def get_index_user_engagement(
     user_stats = []
 
     for user in users:
-        # Count approved documents (evidence with status=approved)
-        approved_count = db.query(func.count(Evidence.id)).filter(
+        from app.models.requirement import Requirement
+
+        # Count approved documents (evidence with status=approved) - FILTERED BY INDEX
+        approved_count = db.query(func.count(Evidence.id)).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(
             Evidence.uploaded_by == user.id,
-            Evidence.status == "approved"
+            Evidence.status == "approved",
+            Requirement.index_id == index_id
         ).scalar() or 0
 
         # Count assigned requirements
@@ -426,19 +596,51 @@ async def get_index_user_engagement(
             Assignment.index_id == index_id
         ).scalar() or 0
 
-        # Count rejected documents
-        rejected_count = db.query(func.count(Evidence.id)).filter(
+        # Count rejected documents - FILTERED BY INDEX
+        rejected_count = db.query(func.count(Evidence.id)).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(
             Evidence.uploaded_by == user.id,
-            Evidence.status == "rejected"
+            Evidence.status == "rejected",
+            Requirement.index_id == index_id
         ).scalar() or 0
 
-        # Count total uploads
-        upload_count = db.query(func.count(Evidence.id)).filter(
-            Evidence.uploaded_by == user.id
+        # Count total uploads - FILTERED BY INDEX
+        upload_count = db.query(func.count(Evidence.id)).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(
+            Evidence.uploaded_by == user.id,
+            Requirement.index_id == index_id
+        ).scalar() or 0
+
+        # Count draft documents - FILTERED BY INDEX
+        draft_count = db.query(func.count(Evidence.id)).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(
+            Evidence.uploaded_by == user.id,
+            Evidence.status == "draft",
+            Requirement.index_id == index_id
+        ).scalar() or 0
+
+        # Count submitted documents (pending review) - FILTERED BY INDEX
+        submitted_count = db.query(func.count(Evidence.id)).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(
+            Evidence.uploaded_by == user.id,
+            Evidence.status == "submitted",
+            Requirement.index_id == index_id
+        ).scalar() or 0
+
+        # Count confirmed documents - FILTERED BY INDEX
+        confirmed_count = db.query(func.count(Evidence.id)).join(
+            Requirement, Evidence.requirement_id == Requirement.id
+        ).filter(
+            Evidence.uploaded_by == user.id,
+            Evidence.status == "confirmed",
+            Requirement.index_id == index_id
         ).scalar() or 0
 
         # Count total comments (need to join with requirements to filter by index)
-        from app.models.requirement import Requirement
         comment_count = db.query(func.count(Comment.id)).join(
             Requirement, Comment.requirement_id == Requirement.id
         ).filter(
@@ -472,18 +674,38 @@ async def get_index_user_engagement(
             Requirement.index_id == index_id
         ).scalar() or 0
 
+        # Count checklist items completed by this user
+        from app.models.checklist import ChecklistItem
+        checklist_completed_count = db.query(func.count(ChecklistItem.id)).join(
+            Requirement, ChecklistItem.requirement_id == Requirement.id
+        ).filter(
+            ChecklistItem.checked_by == user.id,
+            ChecklistItem.is_checked == True,
+            Requirement.index_id == index_id
+        ).scalar() or 0
+
+        # Get user's role in this index
+        index_user = next((iu for iu in index_users if iu.user_id == user.id), None)
+        user_index_role = index_user.role if index_user else None
+
         user_stats.append(UserEngagementStats(
             user_id=user.id,
             username=user.username,
             full_name_ar=user.full_name_ar,
             full_name_en=user.full_name_en,
+            user_role=user.role,  # System role (ADMIN, etc.)
+            index_role=user_index_role,  # Index role (OWNER, SUPERVISOR, CONTRIBUTOR)
             approved_documents=approved_count,
             assigned_requirements=assigned_count,
             rejected_documents=rejected_count,
             total_uploads=upload_count,
             total_comments=comment_count,
             documents_reviewed=reviewed_count,
-            review_comments=review_comment_count
+            review_comments=review_comment_count,
+            draft_documents=draft_count,
+            submitted_documents=submitted_count,
+            confirmed_documents=confirmed_count,
+            checklist_items_completed=checklist_completed_count
         ))
 
     return IndexUserEngagementResponse(

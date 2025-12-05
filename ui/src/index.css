@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* iOS Safari fixes */
+@supports (-webkit-touch-callout: none) {
+  /* iOS only */
+  .min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+
+  html, body {
+    height: -webkit-fill-available;
+  }
+}
+
 @layer base {
   :root {
     /* ===== STRUCTURAL COLORS - Light Mode ===== */
@@ -174,5 +186,28 @@
 
   .animate-float {
     animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fadeIn {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  /* Line clamp for truncating text */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }

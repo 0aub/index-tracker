@@ -4,11 +4,12 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including poppler for PDF thumbnail generation)
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
     curl \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file

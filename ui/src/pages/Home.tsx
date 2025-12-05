@@ -9,7 +9,7 @@ const Home = () => {
   const lang = language;
 
   return (
-    <div className="h-screen flex items-center justify-center relative">
+    <div className="min-h-[calc(100vh-73px)] flex items-center justify-center relative overflow-hidden">
       {/* Animated Wave Background */}
       <WaveAnimation />
 
@@ -19,14 +19,14 @@ const Home = () => {
         <div className="mb-6">
           <img
             src="/logo.png"
-            alt="Raqib Logo"
+            alt="Sahem Logo"
             className="w-32 h-32 object-contain mx-auto animate-pulse"
           />
         </div>
 
         {/* Title */}
         <h2 className={`text-3xl font-bold mb-3 ${colors.textPrimary}`}>
-          {lang === 'ar' ? 'راقب' : 'Raqib'}
+          {lang === 'ar' ? 'ساهم' : 'Sahem'}
         </h2>
 
         {/* Subtitle */}

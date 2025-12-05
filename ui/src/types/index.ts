@@ -17,13 +17,18 @@ export interface User {
   is_first_login?: boolean;
 }
 
+// System-level roles (stored in users.role)
+// Only ADMIN is a system-level role. Other users have no system role.
 export enum UserRole {
-  ADMIN = 'admin',
-  INDEX_MANAGER = 'index_manager',
-  SECTION_COORDINATOR = 'section_coordinator',
-  CONTRIBUTOR = 'contributor',
-  AUDITOR = 'auditor',
-  VIEWER = 'viewer'
+  ADMIN = 'ADMIN'
+}
+
+// Per-index roles (stored in index_users.role)
+// These roles determine what a user can do within a specific index
+export enum IndexUserRole {
+  OWNER = 'OWNER',       // Index owner - full management access
+  SUPERVISOR = 'SUPERVISOR', // Can review and approve
+  CONTRIBUTOR = 'CONTRIBUTOR' // Can submit evidence
 }
 
 export interface AuthState {
@@ -167,6 +172,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   index_id?: string;
+  requirement_id?: string;
   due_date?: string;
   created_by: string;
   created_at: string;
@@ -176,6 +182,11 @@ export interface Task {
   creator_name_en?: string;
   index_name?: string;
   index_name_en?: string;
+  requirement_code?: string;
+  requirement_question_ar?: string;
+  requirement_question_en?: string;
+  requirement_main_area_ar?: string;
+  requirement_main_area_en?: string;
   assignments: TaskAssignment[];
   comments: TaskComment[];
   comment_count: number;
@@ -206,6 +217,7 @@ export interface TaskCreateRequest {
   description?: string;
   priority?: string;
   index_id?: string;
+  requirement_id?: string;
   due_date?: string;
   assignee_ids?: string[];
 }
@@ -216,6 +228,7 @@ export interface TaskUpdateRequest {
   status?: string;
   priority?: string;
   index_id?: string;
+  requirement_id?: string;
   due_date?: string;
 }
 
@@ -265,4 +278,34 @@ export interface UIState {
   setLanguage: (lang: 'ar' | 'en') => void;
   setTheme: (theme: 'light' | 'dark') => void;
   toggleSidebar: () => void;
+}
+
+// Checklist Types
+export interface ChecklistItem {
+  id: string;
+  requirement_id: string;
+  text_ar: string;
+  text_en?: string;
+  is_checked: boolean;
+  checked_by?: string;
+  checked_at?: string;
+  display_order: number;
+  created_by: string;
+  created_at: string;
+  updated_by?: string;
+  updated_at: string;
+  created_by_name?: string;
+  checked_by_name?: string;
+}
+
+export interface ChecklistItemCreate {
+  text_ar: string;
+  text_en?: string;
+}
+
+export interface ChecklistItemUpdate {
+  text_ar?: string;
+  text_en?: string;
+  is_checked?: boolean;
+  display_order?: number;
 }

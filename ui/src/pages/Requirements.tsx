@@ -32,13 +32,46 @@ const Requirements = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Check if user has management access (can edit assignees)
-  const canManageAssignees = user?.role === 'INDEX_MANAGER' ||
-                            user?.role === 'SECTION_COORDINATOR' ||
-                            user?.role === 'ADMIN';
+  // User's role in the current index (fetched from API)
+  const [userIndexRole, setUserIndexRole] = useState<string | null>(null);
 
-  // Check if user can manage requirements (create/edit/delete/reorder)
-  const canManageRequirements = canManageAssignees; // Same permissions as assignee management
+  // Check if user is a system-level admin
+  const isSystemAdmin = user?.role === 'ADMIN';
+
+  // Check if user has management access for this index (per-index role)
+  // Roles from index_users table: 'owner', 'supervisor', 'contributor' (lowercase from API)
+  // Use fetched userIndexRole OR fallback to currentIndex.user_role
+  const effectiveUserRole = (userIndexRole || currentIndex?.user_role || '').toLowerCase();
+  const isIndexOwner = effectiveUserRole === 'owner';
+  const isIndexSupervisor = effectiveUserRole === 'supervisor';
+
+  // Supervisors can only see/manage their assigned requirements, not create new ones
+  const hasIndexManageAccess = isIndexOwner; // Supervisors no longer have full management access
+
+  // Check if user has global management access (system admin OR index owner only)
+  const hasGlobalManageAccess = isSystemAdmin || isIndexOwner;
+
+  // Check if user is owner/assignee of a specific requirement
+  const isRequirementAssignee = (req: RequirementWithAssignments) => {
+    if (!user) return false;
+    return req.assignments?.some(a => a.user_id === user.id) || false;
+  };
+
+  // Check if user can manage a specific requirement
+  // - Admin and Owner: Can manage any requirement
+  // - Supervisor: Can only manage requirements assigned to them
+  // - Contributor: Cannot manage requirements
+  const canManageRequirement = (req: RequirementWithAssignments) => {
+    if (hasGlobalManageAccess) return true;
+    // Supervisor can manage only their assigned requirements
+    if (isIndexSupervisor && isRequirementAssignee(req)) return true;
+    return false;
+  };
+
+  // For UI elements that need to know if ANY management is possible
+  // Supervisor can manage assignees on their assigned requirements
+  const canManageAssignees = hasGlobalManageAccess || isIndexSupervisor;
+  const canManageRequirements = hasGlobalManageAccess; // For header buttons (Add Requirement, etc.) - only admin/owner
 
   // Modal states for requirement CRUD
   const [showRequirementModal, setShowRequirementModal] = useState(false);
@@ -56,6 +89,41 @@ const Requirements = () => {
   const [selectedRequirementForRec, setSelectedRequirementForRec] = useState<Requirement | null>(null);
   const [currentRecommendation, setCurrentRecommendation] = useState<Recommendation | null>(null);
   const [showGroupRecommendationModal, setShowGroupRecommendationModal] = useState(false);
+
+  // Load user's role in the current index
+  useEffect(() => {
+    const loadUserRole = async () => {
+      if (!currentIndex || !user) {
+        setUserIndexRole(null);
+        return;
+      }
+
+      // If currentIndex already has user_role, use it
+      if (currentIndex.user_role) {
+        setUserIndexRole(currentIndex.user_role);
+        return;
+      }
+
+      // Otherwise, fetch from API
+      try {
+        const indexUsers = await api.indexUsers.getAll({
+          index_id: currentIndex.id,
+          user_id: user.id
+        });
+        if (indexUsers.length > 0) {
+          // Role comes as lowercase from backend: 'owner', 'supervisor', 'contributor'
+          setUserIndexRole(indexUsers[0].role);
+        } else {
+          setUserIndexRole(null);
+        }
+      } catch (err) {
+        console.error('Failed to load user role:', err);
+        setUserIndexRole(null);
+      }
+    };
+
+    loadUserRole();
+  }, [currentIndex?.id, user?.id]);
 
   // Load requirements when index changes
   useEffect(() => {
@@ -293,7 +361,10 @@ const Requirements = () => {
       <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="flex items-center justify-center py-20">
           <div className="text-center">
-            <Loader2 className={`w-12 h-12 animate-spin ${colors.primary} mx-auto mb-4`} />
+            <div className="relative w-16 h-16 mx-auto mb-4">
+              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
+              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
+            </div>
             <p className={colors.textSecondary}>
               {lang === 'ar' ? 'جاري تحميل المتطلبات...' : 'Loading requirements...'}
             </p>
@@ -398,17 +469,15 @@ const Requirements = () => {
                   <th className={`px-4 py-3 ${lang === 'ar' ? 'text-right' : 'text-left'} text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
                     {lang === 'ar' ? 'السؤال' : 'Question'}
                   </th>
-                  <th className={`w-28 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
-                    {lang === 'ar' ? 'المستوى' : 'Level'}
+                  <th className={`w-32 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
+                    {lang === 'ar' ? 'الحالة' : 'Status'}
                   </th>
                   <th className={`w-52 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
                     {lang === 'ar' ? 'المسؤولين' : 'Assignees'}
                   </th>
-                  {canManageRequirements && (
-                    <th className={`w-40 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
-                      {lang === 'ar' ? 'الإجراءات' : 'Actions'}
-                    </th>
-                  )}
+                  <th className={`w-40 px-4 py-3 text-center text-xs font-semibold ${colors.textSecondary} uppercase tracking-wider`}>
+                    {lang === 'ar' ? 'الإجراءات' : 'Actions'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgb(var(--color-border))]">
@@ -429,7 +498,7 @@ const Requirements = () => {
                     <>
                       {/* Section Header Row */}
                       <tr key={`section-${section}`}>
-                        <td colSpan={canManageRequirements ? 5 : 4} className="p-0">
+                        <td colSpan={5} className="p-0">
                           <div className={`${colors.primary} px-5 py-3`}>
                             <h3 className="text-base font-semibold text-white">
                               {section}
@@ -446,7 +515,7 @@ const Requirements = () => {
                           <>
                             {/* Criterion Header Row (المعيار) */}
                             <tr key={`criterion-${section}-${criterion}`}>
-                              <td colSpan={canManageRequirements ? 5 : 4} className="p-0">
+                              <td colSpan={5} className="p-0">
                                 <div className={`${colors.bgTertiary} px-5 py-2`}>
                                   <h4 className={`text-sm font-semibold ${colors.textPrimary}`}>
                                     {criterion}
@@ -517,25 +586,24 @@ const Requirements = () => {
                             <td className="px-4 py-4">
                               <div className="flex justify-center">
                                 {currentIndex?.index_type === 'ETARI' ? (
-                                  // Show single dot status indicator for ETARI - 5 colors for 5 statuses
-                                  <div
-                                    className={`w-4 h-4 rounded-full transition-all shadow-sm ${
-                                      req.answer_status === 'confirmed' ? 'bg-blue-500' :
-                                      req.answer_status === 'approved' ? 'bg-green-500' :
-                                      req.answer_status === 'rejected' ? 'bg-orange-500' :
-                                      req.answer_status === 'pending_review' ? 'bg-yellow-500' :
-                                      req.answer_status === 'draft' ? 'bg-gray-400' :
-                                      'bg-red-500'
+                                  // Show labeled status badge for ETARI
+                                  <span
+                                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                                      req.answer_status === 'confirmed' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                                      req.answer_status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
+                                      req.answer_status === 'rejected' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' :
+                                      req.answer_status === 'pending_review' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' :
+                                      req.answer_status === 'draft' ? 'bg-gray-200 text-gray-700 dark:bg-gray-600 dark:text-gray-200' :
+                                      'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
                                     }`}
-                                    title={
-                                      req.answer_status === 'confirmed' ? (lang === 'ar' ? 'مُؤكدة' : 'Confirmed') :
-                                      req.answer_status === 'approved' ? (lang === 'ar' ? 'مُوافق عليها' : 'Approved') :
-                                      req.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
-                                      req.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Under Review') :
-                                      req.answer_status === 'draft' ? (lang === 'ar' ? 'مسودة' : 'Draft') :
-                                      (lang === 'ar' ? 'لم يبدأ' : 'Not Started')
-                                    }
-                                  />
+                                  >
+                                    {req.answer_status === 'confirmed' ? (lang === 'ar' ? 'مُؤكدة' : 'Confirmed') :
+                                     req.answer_status === 'approved' ? (lang === 'ar' ? 'مُوافق عليها' : 'Approved') :
+                                     req.answer_status === 'rejected' ? (lang === 'ar' ? 'مرفوضة' : 'Rejected') :
+                                     req.answer_status === 'pending_review' ? (lang === 'ar' ? 'قيد المراجعة' : 'Under Review') :
+                                     req.answer_status === 'draft' ? (lang === 'ar' ? 'مسودة' : 'Draft') :
+                                     (lang === 'ar' ? 'لم يبدأ' : 'Not Started')}
+                                  </span>
                                 ) : (
                                   // Show level indicator for NAII
                                   <LevelIndicator
@@ -555,8 +623,11 @@ const Requirements = () => {
                                   {assignees.slice(0, 3).map((assignment, idx) => (
                                     <div
                                       key={assignment.id}
-                                      className={`w-8 h-8 border-2 border-[rgb(var(--color-focus-ring))] ${colors.bgSecondary} rounded-md flex items-center justify-center ${colors.primaryIcon} text-xs font-bold shadow-sm`}
-                                      style={{ zIndex: 10 - idx }}
+                                      className={`w-8 h-8 border ${colors.border} rounded-md flex items-center justify-center ${colors.primaryIcon} text-xs font-bold`}
+                                      style={{
+                                        zIndex: 10 - idx,
+                                        backgroundColor: isDark ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.08)'
+                                      }}
                                       title={lang === 'ar' ? assignment.user_name_ar : assignment.user_name_en || assignment.user_name_ar}
                                     >
                                       {(lang === 'ar' ? assignment.user_name_ar : assignment.user_name_en || assignment.user_name_ar).charAt(0)}
@@ -564,15 +635,18 @@ const Requirements = () => {
                                   ))}
                                   {assignees.length > 3 && (
                                     <div
-                                      className={`w-8 h-8 ${colors.bgTertiary} ${colors.textSecondary} rounded-md flex items-center justify-center text-xs font-bold shadow-sm border-2 ${colors.border}`}
-                                      style={{ zIndex: 0 }}
+                                      className={`w-8 h-8 ${colors.textSecondary} rounded-md flex items-center justify-center text-xs font-bold border ${colors.border}`}
+                                      style={{
+                                        zIndex: 0,
+                                        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)'
+                                      }}
                                       title={`+${assignees.length - 3} more`}
                                     >
                                       +{assignees.length - 3}
                                     </div>
                                   )}
                                 </div>
-                                {canManageAssignees && (
+                                {(canManageAssignees || isRequirementAssignee(req)) && (
                                   <button
                                     onClick={(e) => handleEditAssignees(e, req.id)}
                                     className={`p-1.5 ${colors.primaryIcon} hover:bg-green-50 dark:hover:${colors.bgHover} rounded-lg transition opacity-0 group-hover:opacity-100`}
@@ -585,8 +659,8 @@ const Requirements = () => {
                             </td>
 
                             {/* Actions - Edit, Delete, Reorder */}
-                            {canManageRequirements && (
-                              <td className="px-4 py-4">
+                            <td className="px-4 py-4">
+                              {canManageRequirement(req) ? (
                                 <div className="flex items-center justify-center gap-1">
                                   {/* Reorder Up */}
                                   <button
@@ -634,8 +708,10 @@ const Requirements = () => {
                                     <Trash2 size={16} />
                                   </button>
                                 </div>
-                              </td>
-                            )}
+                              ) : (
+                                <span className={`text-xs ${colors.textTertiary}`}>—</span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}

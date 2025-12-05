@@ -2,7 +2,7 @@
  * Index Store - Manages the current active index
  */
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Index } from '../services/api';
 
 interface IndexState {
@@ -10,6 +10,31 @@ interface IndexState {
   setCurrentIndex: (index: Index | null) => void;
   clearCurrentIndex: () => void;
 }
+
+// Safe storage that falls back gracefully on iOS
+const safeStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch {
+      // Silently fail on iOS private browsing or quota errors
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // Silently fail
+    }
+  },
+};
 
 export const useIndexStore = create<IndexState>()(
   persist(
@@ -19,7 +44,8 @@ export const useIndexStore = create<IndexState>()(
       clearCurrentIndex: () => set({ currentIndex: null }),
     }),
     {
-      name: 'raqib-index-storage',
+      name: 'sahem-index-storage',
+      storage: createJSONStorage(() => safeStorage),
     }
   )
 );

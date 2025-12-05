@@ -4,6 +4,7 @@ API endpoints for Index User operations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 from typing import List
 import uuid
 
@@ -15,9 +16,86 @@ from app.schemas.index_user import (
     IndexUserWithDetails
 )
 from app.models.index_user import IndexUser
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.api.dependencies import get_current_active_user
 
 router = APIRouter(prefix="/index-users", tags=["Index Users"])
+
+
+# ==== Get All Users from User's Indices ====
+
+@router.get("/all-users", response_model=List[IndexUserWithDetails])
+async def get_all_users_from_my_indices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get all users from indices that the current user has access to.
+    This endpoint is accessible to all authenticated users (not just admins).
+
+    Returns unique users from all indices the current user is a member of.
+    Admin users can see all users from all indices.
+    """
+    # Get indices the current user has access to
+    if current_user.role == UserRole.ADMIN:
+        # Admin can see all users from all indices
+        query = db.query(
+            IndexUser,
+            User.username,
+            User.full_name_ar,
+            User.full_name_en,
+            User.email,
+            User.role.label('system_role')
+        ).join(User, IndexUser.user_id == User.id)
+    else:
+        # Get indices the user is a member of
+        user_index_ids = db.query(IndexUser.index_id).filter(
+            IndexUser.user_id == current_user.id
+        ).subquery()
+
+        # Get all users from those indices
+        query = db.query(
+            IndexUser,
+            User.username,
+            User.full_name_ar,
+            User.full_name_en,
+            User.email,
+            User.role.label('system_role')
+        ).join(User, IndexUser.user_id == User.id).filter(
+            IndexUser.index_id.in_(user_index_ids)
+        )
+
+    results = query.all()
+
+    # Transform and deduplicate by user_id (keep first occurrence)
+    seen_users = set()
+    index_users_with_details = []
+
+    for index_user, username, full_name_ar, full_name_en, email, system_role in results:
+        # Skip system admins - they shouldn't appear in user selection lists
+        if system_role == UserRole.ADMIN:
+            continue
+
+        if index_user.user_id in seen_users:
+            continue
+        seen_users.add(index_user.user_id)
+
+        index_user_dict = {
+            "id": index_user.id,
+            "index_id": index_user.index_id,
+            "user_id": index_user.user_id,
+            "role": index_user.role,
+            "added_by": index_user.added_by,
+            "created_at": index_user.created_at,
+            "updated_at": index_user.updated_at,
+            "user_username": username,
+            "user_full_name_ar": full_name_ar,
+            "user_full_name_en": full_name_en,
+            "user_email": email
+        }
+        index_users_with_details.append(index_user_dict)
+
+    return index_users_with_details
 
 
 # ==== Index User CRUD Operations ====
@@ -53,13 +131,15 @@ async def list_index_users_with_details(
 ):
     """
     List index users with user details (username, full name, email)
+    Excludes system admin users from the results.
     """
     query = db.query(
         IndexUser,
         User.username,
         User.full_name_ar,
         User.full_name_en,
-        User.email
+        User.email,
+        User.role.label('system_role')
     ).join(User, IndexUser.user_id == User.id)
 
     if index_id:
@@ -67,9 +147,13 @@ async def list_index_users_with_details(
 
     results = query.all()
 
-    # Transform the results
+    # Transform the results, excluding system admins
     index_users_with_details = []
-    for index_user, username, full_name_ar, full_name_en, email in results:
+    for index_user, username, full_name_ar, full_name_en, email, system_role in results:
+        # Skip system admins - they shouldn't appear in user selection lists
+        if system_role == UserRole.ADMIN:
+            continue
+
         index_user_dict = {
             "id": index_user.id,
             "index_id": index_user.index_id,

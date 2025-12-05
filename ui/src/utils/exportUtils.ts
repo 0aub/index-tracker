@@ -24,7 +24,7 @@ export const exportToPDF = (title: string, data: any[], lang: 'ar' | 'en' = 'ar'
   // Add footer
   doc.setFontSize(8);
   doc.text(
-    lang === 'ar' ? 'راقب' : 'Raqib',
+    lang === 'ar' ? 'ساهم' : 'Sahem',
     20,
     doc.internal.pageSize.height - 10
   );
@@ -56,7 +56,7 @@ export const generateDashboardPDF = (dashboardData: any, lang: 'ar' | 'en' = 'ar
   // Title
   doc.setFontSize(24);
   doc.text(
-    lang === 'ar' ? 'تقرير راقب' : 'Raqib Report',
+    lang === 'ar' ? 'تقرير ساهم' : 'Sahem Report',
     20,
     20
   );
@@ -104,8 +104,8 @@ export const generateDashboardPDF = (dashboardData: any, lang: 'ar' | 'en' = 'ar
   doc.setFontSize(8);
   doc.text(
     lang === 'ar'
-      ? '© 2025 راقب - جميع الحقوق محفوظة'
-      : '© 2025 Raqib - All Rights Reserved',
+      ? '© 2025 ساهم - جميع الحقوق محفوظة'
+      : '© 2025 Sahem - All Rights Reserved',
     20,
     doc.internal.pageSize.height - 10
   );

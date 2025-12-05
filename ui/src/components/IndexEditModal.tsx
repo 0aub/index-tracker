@@ -51,46 +51,10 @@ const IndexEditModal = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check if status is changing to "completed"
-    if (formData.status === 'completed' && index.status !== 'completed') {
-      const confirmed = window.confirm(
-        lang === 'ar'
-          ? 'هل أنت متأكد من تغيير حالة المؤشر إلى "مكتمل"؟ لن تتمكن من حذف المؤشر بعد ذلك.'
-          : 'Are you sure you want to mark this index as "Completed"? You will not be able to delete the index after this.'
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    // Check if status is changing from "completed" to something else
-    if (formData.status !== 'completed' && index.status === 'completed') {
-      const confirmed = window.confirm(
-        lang === 'ar'
-          ? 'هل أنت متأكد من إعادة فتح المؤشر المكتمل؟'
-          : 'Are you sure you want to reopen this completed index?'
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    // Check if status is changing to "archived"
-    if (formData.status === 'archived' && index.status !== 'archived') {
-      const confirmed = window.confirm(
-        lang === 'ar'
-          ? 'هل أنت متأكد من أرشفة المؤشر؟ لن تتمكن من حذفه بعد ذلك.'
-          : 'Are you sure you want to archive this index? You will not be able to delete it after this.'
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
-
     const updates: any = {};
     if (formData.name_ar !== index.name_ar) updates.name_ar = formData.name_ar;
     if (formData.name_en !== (index.name_en || '')) updates.name_en = formData.name_en || null;
-    if (formData.status !== index.status) updates.status = formData.status;
+    // Status is no longer manually editable - it's computed automatically
 
     // Handle dates
     const oldStartDate = index.start_date ? new Date(index.start_date).toISOString().split('T')[0] : '';
@@ -181,20 +145,19 @@ const IndexEditModal = ({
             />
           </div>
 
-          {/* Status */}
+          {/* Status - Read-only, automatically managed */}
           <div>
             <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
               {lang === 'ar' ? 'حالة المؤشر' : 'Index Status'}
             </label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              className={`w-full px-4 py-2 ${colors.bgSecondary} border ${colors.border} rounded-lg ${colors.textPrimary} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            >
-              <option value="not_started">{getStatusLabel('not_started')}</option>
-              <option value="in_progress">{getStatusLabel('in_progress')}</option>
-              <option value="archived">{getStatusLabel('archived')}</option>
-            </select>
+            <div className={`w-full px-4 py-2 ${colors.bgSecondary} border ${colors.border} rounded-lg ${colors.textSecondary}`}>
+              {getStatusLabel(formData.status)}
+            </div>
+            <p className={`text-xs ${colors.textSecondary} mt-1`}>
+              {lang === 'ar'
+                ? 'الحالة تتغير تلقائياً: عند الوصول لتاريخ البدء تصبح "قيد التنفيذ"، وعند إكمال جميع المتطلبات تصبح "مكتمل"'
+                : 'Status changes automatically: becomes "In Progress" at start date, and "Completed" when all requirements are confirmed'}
+            </p>
           </div>
 
           {/* Date Range */}

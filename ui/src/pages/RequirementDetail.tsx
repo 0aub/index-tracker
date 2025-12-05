@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Users, Calendar, CheckCircle2, CheckCircle, Circle, Upload, FileText, File,
-  Clock, MessageSquare, ChevronDown, ChevronUp, CheckSquare, Trash2, X, History, Loader2, AlertCircle, Lightbulb, Info, Download, Edit, Plus
+  Clock, MessageSquare, ChevronDown, ChevronUp, CheckSquare, Trash2, X, History, Loader2, AlertCircle, Lightbulb, Info, Download, Edit, Plus, ExternalLink, Copy, Eye, ZoomIn, ZoomOut, RotateCw
 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore} from '../stores/authStore';
@@ -12,6 +12,7 @@ import { api, Requirement, AssignmentWithUser, PreviousYearContextResponse, Reco
 import { colors, patterns } from '../utils/darkMode';
 import { getIndexConfig, getLevelName, getLevelDescription } from '../config/indexConfigs';
 import RecommendationModal from '../components/RecommendationModal';
+import ChecklistSection from '../components/requirements/ChecklistSection';
 
 // Document status type
 type DocumentStatus = 'draft' | 'submitted' | 'confirmed' | 'approved';
@@ -295,6 +296,19 @@ const RequirementDetail = () => {
   const { currentIndex } = useIndexStore();
   const lang = language;
 
+  // User's role in the current index (fetched from API)
+  const [userIndexRole, setUserIndexRole] = useState<string | null>(null);
+
+  // Permission checks
+  // System-level admin check
+  const isSystemAdmin = user?.role === 'ADMIN';
+  // Per-index role check: 'owner', 'supervisor', 'contributor' (lowercase from API)
+  // Use fetched userIndexRole OR fallback to currentIndex.user_role
+  const effectiveUserRole = (userIndexRole || currentIndex?.user_role || '').toLowerCase();
+  const hasIndexManageAccess = effectiveUserRole === 'owner' || effectiveUserRole === 'supervisor';
+  // Combined permission for management actions
+  const canManage = isSystemAdmin || hasIndexManageAccess;
+
   // Data states
   const [requirement, setRequirement] = useState<any>(null);
   const [assignees, setAssignees] = useState<AssignmentWithUser[]>([]);
@@ -316,7 +330,8 @@ const RequirementDetail = () => {
   const [uploadingToLevel, setUploadingToLevel] = useState<number | null>(null);
   const [uploadingVersionForDoc, setUploadingVersionForDoc] = useState<string | null>(null);
   const [uploadComment, setUploadComment] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);  // Loading state for file upload
   const [documents, setDocuments] = useState<Record<number, UploadedDoc[]>>({});
   const [expandedDocVersions, setExpandedDocVersions] = useState<Record<string, boolean>>({});
   const [rejectingDoc, setRejectingDoc] = useState<{ level: number; docId: string } | null>(null);
@@ -331,6 +346,13 @@ const RequirementDetail = () => {
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [currentRecommendation, setCurrentRecommendation] = useState<Recommendation | null>(null);
   const [showRecommendationModal, setShowRecommendationModal] = useState(false);
+
+  // File preview modal state
+  const [previewFile, setPreviewFile] = useState<{ id: string; name: string; version: number } | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewMimeType, setPreviewMimeType] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // Handler for copying evidence from previous year
   const handleCopyEvidence = async (evidenceId: string, documentName: string) => {
@@ -393,10 +415,19 @@ const RequirementDetail = () => {
 
     } catch (err: any) {
       console.error('Failed to copy evidence:', err);
-      toast.error(lang === 'ar'
-        ? 'فشل في نسخ المستند'
-        : 'Failed to copy evidence'
-      );
+      // Check for specific error messages
+      const errorMessage = err?.message || '';
+      if (errorMessage.includes('not found on disk') || errorMessage.includes('no file')) {
+        toast.error(lang === 'ar'
+          ? 'الملف غير موجود على الخادم - جرب زر "فتح" للتحقق من توفر الملف'
+          : 'File not found on server - try the "Open" button to check if file is available'
+        );
+      } else {
+        toast.error(lang === 'ar'
+          ? 'فشل في نسخ المستند'
+          : 'Failed to copy evidence'
+        );
+      }
     } finally {
       setCopyingEvidenceId(null);
     }
@@ -438,6 +469,41 @@ const RequirementDetail = () => {
       toast.error(err.message || (lang === 'ar' ? 'فشل في حذف التوصية' : 'Failed to delete recommendation'));
     }
   };
+
+  // Load user's role in the current index
+  useEffect(() => {
+    const loadUserRole = async () => {
+      if (!currentIndex || !user) {
+        setUserIndexRole(null);
+        return;
+      }
+
+      // If currentIndex already has user_role, use it
+      if (currentIndex.user_role) {
+        setUserIndexRole(currentIndex.user_role);
+        return;
+      }
+
+      // Otherwise, fetch from API
+      try {
+        const indexUsers = await api.indexUsers.getAll({
+          index_id: currentIndex.id,
+          user_id: user.id
+        });
+        if (indexUsers.length > 0) {
+          // Role comes as lowercase from backend: 'owner', 'supervisor', 'contributor'
+          setUserIndexRole(indexUsers[0].role);
+        } else {
+          setUserIndexRole(null);
+        }
+      } catch (err) {
+        console.error('Failed to load user role:', err);
+        setUserIndexRole(null);
+      }
+    };
+
+    loadUserRole();
+  }, [currentIndex?.id, user?.id]);
 
   // Fetch requirement data
   useEffect(() => {
@@ -681,6 +747,35 @@ const RequirementDetail = () => {
     }
   };
 
+  // Helper function for file type badge
+  const getFileTypeBadge = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const typeConfig: Record<string, { label: string; color: string }> = {
+      'pdf': { label: 'PDF', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+      'doc': { label: 'DOC', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+      'docx': { label: 'DOCX', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+      'ppt': { label: 'PPT', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+      'pptx': { label: 'PPTX', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+      'xls': { label: 'XLS', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+      'xlsx': { label: 'XLSX', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+      'txt': { label: 'TXT', color: 'bg-gray-100 text-gray-700 dark:bg-gray-700/50 dark:text-gray-300' },
+      'csv': { label: 'CSV', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+      'png': { label: 'PNG', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+      'jpg': { label: 'JPG', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+      'jpeg': { label: 'JPEG', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+      'gif': { label: 'GIF', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+      'zip': { label: 'ZIP', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+      'rar': { label: 'RAR', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+    };
+
+    const config = typeConfig[ext] || { label: ext.toUpperCase() || 'FILE', color: 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400' };
+    return (
+      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${config.color}`}>
+        {config.label}
+      </span>
+    );
+  };
+
   const getLevelStatus = (level: number): 'completed' | 'current' | 'pending' => {
     // Check if manually marked as completed by admin
     if (manuallyCompletedLevels.includes(level)) return 'completed';
@@ -813,22 +908,34 @@ const RequirementDetail = () => {
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      // For new uploads, allow multiple files; for version uploads, only allow single file
+      if (uploadingVersionForDoc) {
+        setSelectedFiles([files[0]]);
+      } else {
+        setSelectedFiles(Array.from(files));
+      }
     }
   };
 
+  // Remove a file from the selected files list
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleUploadDocument = async (level: number, asDraft: boolean) => {
-    if (!selectedFile || !user || !id) {
+    if (selectedFiles.length === 0 || !user || !id) {
       toast.error(lang === 'ar' ? 'الرجاء اختيار ملف' : 'Please select a file');
       return;
     }
 
+    setIsUploading(true);
     try {
       // Check if we're adding a new version to an existing document
       if (uploadingVersionForDoc) {
-        // Upload new version
+        // Upload new version (single file only)
+        const selectedFile = selectedFiles[0];
         const newVersion = await api.evidence.uploadVersion(uploadingVersionForDoc, {
           file: selectedFile,
           uploaded_by: user.id,
@@ -846,42 +953,47 @@ const RequirementDetail = () => {
             : `New version uploaded successfully`
         );
 
-        // Reload evidence data
-        const evidenceData = await api.evidence.getAll({ requirement_id: id });
-        const docsGroupedByLevel: Record<number, UploadedDoc[]> = {};
-        for (const evidence of evidenceData) {
-          const evidenceDetails = await api.evidence.getById(evidence.id);
-          const transformedDoc: UploadedDoc = {
-            id: evidence.id,
-            document_name: evidence.document_name,
-            current_version: evidence.current_version,
-            status: evidence.status as DocumentStatus,
-            versions: evidenceDetails.versions.map(v => ({
-              version: v.version_number,
-              filename: v.filename,
-              file_size: v.file_size || undefined,
-              uploaded_by: v.uploaded_by,
-              uploaded_at: v.uploaded_at,
-              comment: v.upload_comment || undefined
-            })),
-            review_history: evidenceDetails.activities.map(a => ({
-              id: a.id,
-              reviewer_id: a.actor_id,
-              reviewer_name: a.actor_id,
-              action: a.action as any,
-              version: a.version_number || 0,
-              comment: a.comment || undefined,
-              timestamp: a.created_at
-            }))
-          };
-          // Normalize null maturity_level to 0 for ETARI evidence
-          const level = evidence.maturity_level ?? 0;
-          if (!docsGroupedByLevel[level]) {
-            docsGroupedByLevel[level] = [];
+        // Reload evidence data after version upload
+        try {
+          console.log('Reloading evidence after version upload for requirement:', id);
+          const evidenceData = await api.evidence.getAll({ requirement_id: id });
+          const docsGroupedByLevel: Record<number, UploadedDoc[]> = {};
+          for (const evidence of evidenceData) {
+            const evidenceDetails = await api.evidence.getById(evidence.id);
+            const transformedDoc: UploadedDoc = {
+              id: evidence.id,
+              document_name: evidence.document_name,
+              current_version: evidence.current_version,
+              status: evidence.status as DocumentStatus,
+              versions: evidenceDetails.versions.map(v => ({
+                version: v.version_number,
+                filename: v.filename,
+                file_size: v.file_size || undefined,
+                uploaded_by: v.uploaded_by,
+                uploaded_at: v.uploaded_at,
+                comment: v.upload_comment || undefined
+              })),
+              review_history: evidenceDetails.activities.map(a => ({
+                id: a.id,
+                reviewer_id: a.actor_id,
+                reviewer_name: a.actor_id,
+                action: a.action as any,
+                version: a.version_number || 0,
+                comment: a.comment || undefined,
+                timestamp: a.created_at
+              }))
+            };
+            // Normalize null maturity_level to 0 for ETARI evidence
+            const lvl = evidence.maturity_level ?? 0;
+            if (!docsGroupedByLevel[lvl]) {
+              docsGroupedByLevel[lvl] = [];
+            }
+            docsGroupedByLevel[lvl].push(transformedDoc);
           }
-          docsGroupedByLevel[level].push(transformedDoc);
+          setDocuments(docsGroupedByLevel);
+        } catch (reloadErr) {
+          console.error('Failed to reload evidence after version upload:', reloadErr);
         }
-        setDocuments(docsGroupedByLevel);
 
         // Reload requirement activities after upload
         try {
@@ -891,63 +1003,79 @@ const RequirementDetail = () => {
           console.error('Failed to reload activities:', err);
         }
       } else {
-        // Creating a new document
-        const newEvidence = await api.evidence.upload({
-          file: selectedFile,
-          requirement_id: id,
-          maturity_level: level,
-          document_name: selectedFile.name.replace(/\.[^/.]+$/, ''),
-          uploaded_by: user.id,
-          upload_comment: uploadComment || undefined
-        });
+        // Creating new documents - support bulk upload
+        const uploadedCount = selectedFiles.length;
 
-        // If not draft, submit for review
-        if (!asDraft) {
-          await api.evidence.performAction(newEvidence.id, 'submit', user.id);
+        for (const file of selectedFiles) {
+          const newEvidence = await api.evidence.upload({
+            file: file,
+            requirement_id: id,
+            maturity_level: level,
+            document_name: file.name.replace(/\.[^/.]+$/, ''),
+            uploaded_by: user.id,
+            upload_comment: uploadComment || undefined
+          });
+
+          // If not draft, submit for review
+          if (!asDraft) {
+            await api.evidence.performAction(newEvidence.id, 'submit', user.id);
+          }
         }
 
         toast.success(
           asDraft
-            ? (lang === 'ar' ? 'تم حفظ المسودة بنجاح' : 'Draft saved successfully')
-            : (lang === 'ar' ? 'تم رفع الملف للمراجعة' : 'File uploaded for review')
+            ? (lang === 'ar'
+                ? `تم حفظ ${uploadedCount} ${uploadedCount === 1 ? 'مسودة' : 'مسودات'} بنجاح`
+                : `${uploadedCount} draft${uploadedCount === 1 ? '' : 's'} saved successfully`)
+            : (lang === 'ar'
+                ? `تم رفع ${uploadedCount} ${uploadedCount === 1 ? 'ملف' : 'ملفات'} للمراجعة`
+                : `${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded for review`)
         );
 
-        // Reload evidence data
-        const evidenceData = await api.evidence.getAll({ requirement_id: id });
-        const docsGroupedByLevel: Record<number, UploadedDoc[]> = {};
-        for (const evidence of evidenceData) {
-          const evidenceDetails = await api.evidence.getById(evidence.id);
-          const transformedDoc: UploadedDoc = {
-            id: evidence.id,
-            document_name: evidence.document_name,
-            current_version: evidence.current_version,
-            status: evidence.status as DocumentStatus,
-            versions: evidenceDetails.versions.map(v => ({
-              version: v.version_number,
-              filename: v.filename,
-              file_size: v.file_size || undefined,
-              uploaded_by: v.uploaded_by,
-              uploaded_at: v.uploaded_at,
-              comment: v.upload_comment || undefined
-            })),
-            review_history: evidenceDetails.activities.map(a => ({
-              id: a.id,
-              reviewer_id: a.actor_id,
-              reviewer_name: a.actor_id,
-              action: a.action as any,
-              version: a.version_number || 0,
-              comment: a.comment || undefined,
-              timestamp: a.created_at
-            }))
-          };
-          // Normalize null maturity_level to 0 for ETARI evidence
-          const level = evidence.maturity_level ?? 0;
-          if (!docsGroupedByLevel[level]) {
-            docsGroupedByLevel[level] = [];
+        // Reload evidence data after successful upload
+        try {
+          console.log('Reloading evidence for requirement:', id);
+          const evidenceData = await api.evidence.getAll({ requirement_id: id });
+          console.log('Evidence data loaded:', evidenceData.length, 'items');
+          const docsGroupedByLevel: Record<number, UploadedDoc[]> = {};
+          for (const evidence of evidenceData) {
+            const evidenceDetails = await api.evidence.getById(evidence.id);
+            const transformedDoc: UploadedDoc = {
+              id: evidence.id,
+              document_name: evidence.document_name,
+              current_version: evidence.current_version,
+              status: evidence.status as DocumentStatus,
+              versions: evidenceDetails.versions.map(v => ({
+                version: v.version_number,
+                filename: v.filename,
+                file_size: v.file_size || undefined,
+                uploaded_by: v.uploaded_by,
+                uploaded_at: v.uploaded_at,
+                comment: v.upload_comment || undefined
+              })),
+              review_history: evidenceDetails.activities.map(a => ({
+                id: a.id,
+                reviewer_id: a.actor_id,
+                reviewer_name: a.actor_id,
+                action: a.action as any,
+                version: a.version_number || 0,
+                comment: a.comment || undefined,
+                timestamp: a.created_at
+              }))
+            };
+            // Normalize null maturity_level to 0 for ETARI evidence
+            const lvl = evidence.maturity_level ?? 0;
+            if (!docsGroupedByLevel[lvl]) {
+              docsGroupedByLevel[lvl] = [];
+            }
+            docsGroupedByLevel[lvl].push(transformedDoc);
           }
-          docsGroupedByLevel[level].push(transformedDoc);
+          console.log('Setting documents:', Object.keys(docsGroupedByLevel).length, 'levels');
+          setDocuments(docsGroupedByLevel);
+        } catch (reloadErr) {
+          console.error('Failed to reload evidence:', reloadErr);
+          toast.error(lang === 'ar' ? 'فشل في تحديث قائمة المستندات' : 'Failed to refresh document list');
         }
-        setDocuments(docsGroupedByLevel);
 
         // Reload requirement activities after upload
         try {
@@ -958,13 +1086,16 @@ const RequirementDetail = () => {
         }
       }
 
+      // Clear upload form state AFTER successful reload
       setUploadingToLevel(null);
       setUploadingVersionForDoc(null);
       setUploadComment('');
-      setSelectedFile(null);
+      setSelectedFiles([]);
     } catch (err: any) {
       console.error('Failed to upload document:', err);
       toast.error(lang === 'ar' ? 'فشل رفع الملف' : 'Failed to upload file');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -1516,7 +1647,10 @@ const RequirementDetail = () => {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
-              <Loader2 className={`w-12 h-12 animate-spin ${colors.primary} mx-auto mb-4`} />
+              <div className="relative w-16 h-16 mx-auto mb-4">
+                <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
+                <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
+              </div>
               <p className={colors.textSecondary}>
                 {lang === 'ar' ? 'جاري تحميل المتطلب...' : 'Loading requirement...'}
               </p>
@@ -1559,8 +1693,291 @@ const RequirementDetail = () => {
     );
   }
 
+  // Handle file preview
+  const handlePreviewFile = async (evidenceId: string, evidenceName: string, version: number) => {
+    setPreviewFile({ id: evidenceId, name: evidenceName, version });
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewMimeType(null);
+
+    try {
+      const blob = await api.evidence.download(evidenceId, version);
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+      // Store the MIME type from the blob for fallback file type detection
+      setPreviewMimeType(blob.type || null);
+    } catch (err: any) {
+      console.error('Failed to load file preview:', err);
+      setPreviewError(lang === 'ar' ? 'فشل تحميل المعاينة' : 'Failed to load preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewFile(null);
+    setPreviewUrl(null);
+    setPreviewMimeType(null);
+    setPreviewError(null);
+  };
+
+  // Get file extension for preview type detection
+  const getFileExtension = (filename: string): string => {
+    const parts = filename.split('.');
+    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+  };
+
+  // Check if file is previewable
+  const isPreviewable = (filename: string): boolean => {
+    const ext = getFileExtension(filename);
+    const previewableExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'txt', 'json', 'xml', 'html', 'css', 'js'];
+    return previewableExtensions.includes(ext);
+  };
+
   return (
     <div className={`min-h-screen ${colors.bgPrimary} p-6`}>
+      {/* File Preview Modal */}
+      {previewFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closePreview}>
+          <div
+            className={`${colors.bgSecondary} rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] max-h-[700px] flex flex-col overflow-hidden`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className={`flex items-center justify-between p-4 border-b ${colors.border}`}>
+              <div className="flex items-center gap-3">
+                <FileText className={colors.textSecondary} size={20} />
+                <div>
+                  <h3 className={`font-semibold ${colors.textPrimary}`}>{previewFile.name}</h3>
+                  <p className={`text-xs ${colors.textSecondary}`}>
+                    {lang === 'ar' ? `النسخة ${previewFile.version}` : `Version ${previewFile.version}`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      const blob = await api.evidence.download(previewFile.id, previewFile.version);
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = previewFile.name;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      toast.error(lang === 'ar' ? 'فشل تحميل الملف' : 'Failed to download file');
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${colors.hover} border ${colors.border} text-sm`}
+                >
+                  <Download size={16} />
+                  {lang === 'ar' ? 'تحميل' : 'Download'}
+                </button>
+                <button
+                  onClick={closePreview}
+                  className={`p-2 rounded-lg ${colors.hover}`}
+                >
+                  <X size={20} className={colors.textSecondary} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-auto p-4 bg-gray-100 dark:bg-gray-900">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <Loader2 className="animate-spin text-blue-500 mx-auto mb-3" size={40} />
+                    <p className={colors.textSecondary}>
+                      {lang === 'ar' ? 'جاري تحميل المعاينة...' : 'Loading preview...'}
+                    </p>
+                  </div>
+                </div>
+              ) : previewError ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <AlertCircle className="text-red-500 mx-auto mb-3" size={40} />
+                    <p className={`${colors.textPrimary} mb-2`}>{previewError}</p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const blob = await api.evidence.download(previewFile.id, previewFile.version);
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = previewFile.name;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
+                        } catch (err) {
+                          toast.error(lang === 'ar' ? 'فشل تحميل الملف' : 'Failed to download file');
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition mx-auto"
+                    >
+                      <Download size={16} />
+                      {lang === 'ar' ? 'تحميل الملف بدلاً من ذلك' : 'Download file instead'}
+                    </button>
+                  </div>
+                </div>
+              ) : previewUrl ? (
+                (() => {
+                  const ext = getFileExtension(previewFile.name);
+
+                  // Helper function to check file type using extension OR MIME type
+                  const isPdf = ext === 'pdf' || previewMimeType === 'application/pdf';
+                  const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext) ||
+                    (previewMimeType && previewMimeType.startsWith('image/'));
+                  const isText = ['txt', 'json', 'xml', 'html', 'css', 'js'].includes(ext) ||
+                    (previewMimeType && (previewMimeType.startsWith('text/') || previewMimeType === 'application/json'));
+                  const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext) ||
+                    (previewMimeType && (
+                      previewMimeType.includes('msword') ||
+                      previewMimeType.includes('wordprocessingml') ||
+                      previewMimeType.includes('spreadsheetml') ||
+                      previewMimeType.includes('presentationml') ||
+                      previewMimeType.includes('ms-excel') ||
+                      previewMimeType.includes('ms-powerpoint')
+                    ));
+
+                  // PDF Preview
+                  if (isPdf) {
+                    return (
+                      <iframe
+                        src={previewUrl}
+                        className="w-full h-full rounded-lg border-0"
+                        title={previewFile.name}
+                      />
+                    );
+                  }
+
+                  // Image Preview
+                  if (isImage) {
+                    return (
+                      <div className="flex items-center justify-center h-full">
+                        <img
+                          src={previewUrl}
+                          alt={previewFile.name}
+                          className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                        />
+                      </div>
+                    );
+                  }
+
+                  // Text-based files
+                  if (isText) {
+                    return (
+                      <iframe
+                        src={previewUrl}
+                        className="w-full h-full rounded-lg bg-white border-0"
+                        title={previewFile.name}
+                      />
+                    );
+                  }
+
+                  // Office documents - show info with download and open options
+                  if (isOffice) {
+                    const fileTypeNames: { [key: string]: { ar: string; en: string; icon: string; color: string } } = {
+                      'doc': { ar: 'مستند Word', en: 'Word Document', icon: '📄', color: 'bg-blue-500' },
+                      'docx': { ar: 'مستند Word', en: 'Word Document', icon: '📄', color: 'bg-blue-500' },
+                      'xls': { ar: 'جدول Excel', en: 'Excel Spreadsheet', icon: '📊', color: 'bg-green-500' },
+                      'xlsx': { ar: 'جدول Excel', en: 'Excel Spreadsheet', icon: '📊', color: 'bg-green-500' },
+                      'ppt': { ar: 'عرض PowerPoint', en: 'PowerPoint Presentation', icon: '📽️', color: 'bg-orange-500' },
+                      'pptx': { ar: 'عرض PowerPoint', en: 'PowerPoint Presentation', icon: '📽️', color: 'bg-orange-500' },
+                    };
+                    const fileInfo = fileTypeNames[ext] || { ar: 'ملف', en: 'File', icon: '📁', color: 'bg-gray-500' };
+
+                    return (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center max-w-md">
+                          <div className={`w-24 h-24 ${fileInfo.color} rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg`}>
+                            <span className="text-5xl">{fileInfo.icon}</span>
+                          </div>
+                          <p className={`${colors.textPrimary} font-bold mb-2 text-xl`}>
+                            {lang === 'ar' ? fileInfo.ar : fileInfo.en}
+                          </p>
+                          <p className={`${colors.textSecondary} text-sm mb-4 break-all px-4`}>
+                            {previewFile.name}
+                          </p>
+                          <div className={`${colors.bgTertiary} rounded-lg p-4 mb-6`}>
+                            <p className={`${colors.textSecondary} text-sm`}>
+                              {lang === 'ar'
+                                ? 'لعرض ملفات Office، يرجى تحميل الملف وفتحه باستخدام تطبيق Microsoft Office أو Google Docs.'
+                                : 'To view Office files, please download and open with Microsoft Office or Google Docs.'}
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              onClick={async () => {
+                                const link = document.createElement('a');
+                                link.href = previewUrl;
+                                link.download = previewFile.name;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                            >
+                              <Download size={18} />
+                              {lang === 'ar' ? 'تحميل' : 'Download'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                window.open(previewUrl, '_blank');
+                              }}
+                              className={`flex items-center gap-2 px-5 py-2.5 border ${colors.border} ${colors.textPrimary} rounded-lg ${colors.hover} transition font-medium`}
+                            >
+                              <ExternalLink size={18} />
+                              {lang === 'ar' ? 'فتح في نافذة جديدة' : 'Open in new tab'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Unsupported format - offer download
+                  return (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center max-w-md">
+                        <FileText className={`${colors.textSecondary} mx-auto mb-4`} size={50} />
+                        <p className={`${colors.textPrimary} mb-2 font-semibold`}>
+                          {lang === 'ar' ? 'لا يمكن معاينة هذا النوع من الملفات' : 'Cannot preview this file type'}
+                        </p>
+                        <p className={`${colors.textSecondary} text-sm mb-6 break-all px-4`}>
+                          {previewFile.name}
+                        </p>
+                        <button
+                          onClick={async () => {
+                            const link = document.createElement('a');
+                            link.href = previewUrl;
+                            link.download = previewFile.name;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition mx-auto font-medium"
+                        >
+                          <Download size={18} />
+                          {lang === 'ar' ? 'تحميل الملف' : 'Download File'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto">
         {/* Back Button */}
         <button
@@ -1847,12 +2264,40 @@ const RequirementDetail = () => {
                       {previousData.matched_requirement.evidence && previousData.matched_requirement.evidence.length > 0 ? (
                         <div className="space-y-2">
                           {previousData.matched_requirement.evidence.map((ev) => {
-                            // Extract file extension
-                            const getFileExtension = (filename: string) => {
+                            // Extract file extension from filename
+                            const getFileExtensionFromName = (filename: string) => {
                               const parts = filename.split('.');
                               return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : '';
                             };
-                            const extension = getFileExtension(ev.document_name);
+
+                            // Get extension from MIME type
+                            const getExtensionFromMimeType = (mimeType: string | null): string => {
+                              if (!mimeType) return '';
+                              const mimeToExt: { [key: string]: string } = {
+                                'application/pdf': 'PDF',
+                                'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+                                'application/vnd.ms-powerpoint': 'PPT',
+                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+                                'application/msword': 'DOC',
+                                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+                                'application/vnd.ms-excel': 'XLS',
+                                'image/png': 'PNG',
+                                'image/jpeg': 'JPG',
+                                'image/gif': 'GIF',
+                                'image/webp': 'WEBP',
+                                'text/plain': 'TXT',
+                                'application/json': 'JSON',
+                                'application/xml': 'XML',
+                                'text/html': 'HTML',
+                                'text/css': 'CSS',
+                                'application/zip': 'ZIP',
+                                'application/x-rar-compressed': 'RAR',
+                              };
+                              return mimeToExt[mimeType] || '';
+                            };
+
+                            // Try filename first, then MIME type
+                            const extension = getFileExtensionFromName(ev.document_name) || getExtensionFromMimeType(ev.mime_type);
 
                             return (
                               <div key={ev.id} className={`flex items-center justify-between p-3 ${colors.bgHover} rounded-lg`}>
@@ -1873,19 +2318,41 @@ const RequirementDetail = () => {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                {/* Preview Button */}
+                                <button
+                                  onClick={() => handlePreviewFile(ev.id, ev.document_name, ev.current_version)}
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-800 transition text-xs font-medium"
+                                  title={lang === 'ar' ? 'معاينة' : 'Preview'}
+                                >
+                                  <Eye size={14} />
+                                  {lang === 'ar' ? 'معاينة' : 'Preview'}
+                                </button>
+                                {/* Download Button */}
+                                <a
+                                  href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/evidence/${ev.id}/download/${ev.current_version}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition text-xs font-medium"
+                                  title={lang === 'ar' ? 'تحميل' : 'Download'}
+                                >
+                                  <ExternalLink size={14} />
+                                  {lang === 'ar' ? 'فتح' : 'Open'}
+                                </a>
+                                {/* Copy to Current Requirement Button */}
                                 <button
                                   onClick={() => handleCopyEvidence(ev.id, ev.document_name)}
                                   disabled={copyingEvidenceId === ev.id}
-                                  className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-800 transition text-xs disabled:opacity-50"
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-800 transition text-xs font-medium disabled:opacity-50"
+                                  title={lang === 'ar' ? 'نسخ إلى المتطلب الحالي' : 'Copy to current requirement'}
                                 >
                                   {copyingEvidenceId === ev.id ? (
                                     <>
                                       <Loader2 size={14} className="animate-spin" />
-                                      {lang === 'ar' ? 'جاري النسخ...' : 'Copying...'}
+                                      {lang === 'ar' ? 'جاري...' : 'Copying...'}
                                     </>
                                   ) : (
                                     <>
-                                      <Download size={14} />
+                                      <Copy size={14} />
                                       {lang === 'ar' ? 'نسخ' : 'Copy'}
                                     </>
                                   )}
@@ -1938,10 +2405,27 @@ const RequirementDetail = () => {
                           <AlertCircle className="text-amber-600 dark:text-amber-400" size={20} />
                           {lang === 'ar' ? 'توصية المعيار' : 'Standard Recommendation'}
                         </h3>
-                        <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}>
-                          <p className={`${colors.textPrimary} whitespace-pre-wrap mb-3`}>
-                            {lang === 'ar' ? previousData.standard_group.recommendation.recommendation_ar : previousData.standard_group.recommendation.recommendation_en || previousData.standard_group.recommendation.recommendation_ar}
-                          </p>
+                        <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500 space-y-3`}>
+                          {/* Current Status (الوضع الراهن) */}
+                          {previousData.standard_group.recommendation.current_status_ar && (
+                            <div>
+                              <h4 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                                {lang === 'ar' ? 'الوضع الراهن' : 'Current Status'}
+                              </h4>
+                              <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
+                                {previousData.standard_group.recommendation.current_status_ar}
+                              </p>
+                            </div>
+                          )}
+                          {/* Recommendation Text */}
+                          <div>
+                            <h4 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                              {lang === 'ar' ? 'التوصية' : 'Recommendation'}
+                            </h4>
+                            <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
+                              {lang === 'ar' ? previousData.standard_group.recommendation.recommendation_ar : previousData.standard_group.recommendation.recommendation_en || previousData.standard_group.recommendation.recommendation_ar}
+                            </p>
+                          </div>
                           <div className="flex items-center gap-3">
                             <span className={`text-xs px-2 py-1 rounded-full ${
                               previousData.standard_group.recommendation.status === 'addressed' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
@@ -2033,12 +2517,40 @@ const RequirementDetail = () => {
                                   </span>
                                 </div>
                                 {req.evidence.map((ev) => {
-                                  // Extract file extension
-                                  const getFileExtension = (filename: string) => {
+                                  // Extract file extension from filename
+                                  const getFileExtensionFromName = (filename: string) => {
                                     const parts = filename.split('.');
                                     return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : '';
                                   };
-                                  const extension = getFileExtension(ev.document_name);
+
+                                  // Get extension from MIME type
+                                  const getExtensionFromMimeType = (mimeType: string | null): string => {
+                                    if (!mimeType) return '';
+                                    const mimeToExt: { [key: string]: string } = {
+                                      'application/pdf': 'PDF',
+                                      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+                                      'application/vnd.ms-powerpoint': 'PPT',
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+                                      'application/msword': 'DOC',
+                                      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+                                      'application/vnd.ms-excel': 'XLS',
+                                      'image/png': 'PNG',
+                                      'image/jpeg': 'JPG',
+                                      'image/gif': 'GIF',
+                                      'image/webp': 'WEBP',
+                                      'text/plain': 'TXT',
+                                      'application/json': 'JSON',
+                                      'application/xml': 'XML',
+                                      'text/html': 'HTML',
+                                      'text/css': 'CSS',
+                                      'application/zip': 'ZIP',
+                                      'application/x-rar-compressed': 'RAR',
+                                    };
+                                    return mimeToExt[mimeType] || '';
+                                  };
+
+                                  // Try filename first, then MIME type
+                                  const extension = getFileExtensionFromName(ev.document_name) || getExtensionFromMimeType(ev.mime_type);
 
                                   return (
                                     <div key={ev.id} className="flex items-center justify-between p-2 bg-white/50 dark:bg-black/20 rounded text-xs">
@@ -2050,13 +2562,32 @@ const RequirementDetail = () => {
                                           </span>
                                         )}
                                       </div>
-                                      <button
-                                        onClick={() => handleCopyEvidence(ev.id, ev.document_name)}
-                                        disabled={copyingEvidenceId === ev.id}
-                                        className="text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50 ml-2 flex-shrink-0"
-                                      >
-                                        {copyingEvidenceId === ev.id ? (lang === 'ar' ? 'جاري...' : 'Copying...') : (lang === 'ar' ? 'نسخ' : 'Copy')}
-                                      </button>
+                                      <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                                        <button
+                                          onClick={() => handlePreviewFile(ev.id, ev.document_name, ev.current_version)}
+                                          className="flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded hover:bg-purple-200 dark:hover:bg-purple-800 transition"
+                                          title={lang === 'ar' ? 'معاينة' : 'Preview'}
+                                        >
+                                          <Eye size={12} />
+                                        </button>
+                                        <a
+                                          href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/evidence/${ev.id}/download/${ev.current_version}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition"
+                                          title={lang === 'ar' ? 'فتح' : 'Open'}
+                                        >
+                                          <ExternalLink size={12} />
+                                        </a>
+                                        <button
+                                          onClick={() => handleCopyEvidence(ev.id, ev.document_name)}
+                                          disabled={copyingEvidenceId === ev.id}
+                                          className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-800 transition disabled:opacity-50"
+                                          title={lang === 'ar' ? 'نسخ' : 'Copy'}
+                                        >
+                                          {copyingEvidenceId === ev.id ? <Loader2 size={12} className="animate-spin" /> : <Copy size={12} />}
+                                        </button>
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -2103,22 +2634,52 @@ const RequirementDetail = () => {
           ) : currentRecommendation ? (
             <div className={`p-4 ${colors.bgHover} rounded-lg border-l-4 border-amber-500`}>
               <div className="space-y-3">
-                <div>
-                  <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
-                    {lang === 'ar' ? 'الوضع الراهن' : 'Current Status'}
-                  </h3>
-                  <p className={`${colors.textPrimary}`}>
-                    {lang === 'ar' ? currentRecommendation.current_status_ar : currentRecommendation.current_status_ar}
-                  </p>
+                {/* Status Badge */}
+                <div className="flex items-center gap-3">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                    currentRecommendation.status === 'addressed' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' :
+                    currentRecommendation.status === 'in_progress' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' :
+                    'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                  }`}>
+                    {currentRecommendation.status === 'addressed' ? (lang === 'ar' ? 'تمت معالجتها' : 'Addressed') :
+                     currentRecommendation.status === 'in_progress' ? (lang === 'ar' ? 'قيد التنفيذ' : 'In Progress') :
+                     (lang === 'ar' ? 'معلقة' : 'Pending')}
+                  </span>
                 </div>
+
+                {/* Current Status (الوضع الراهن) */}
+                {currentRecommendation.current_status_ar && (
+                  <div>
+                    <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                      {lang === 'ar' ? 'الوضع الراهن' : 'Current Status'}
+                    </h3>
+                    <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
+                      {lang === 'ar' ? currentRecommendation.current_status_ar : currentRecommendation.current_status_ar}
+                    </p>
+                  </div>
+                )}
+
+                {/* Recommendation Text (التوصية) */}
                 <div>
                   <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
                     {lang === 'ar' ? 'التوصية' : 'Recommendation'}
                   </h3>
-                  <p className={`${colors.textPrimary}`}>
+                  <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
                     {lang === 'ar' ? currentRecommendation.recommendation_ar : currentRecommendation.recommendation_ar}
                   </p>
                 </div>
+
+                {/* Addressed Comment if recommendation was addressed */}
+                {currentRecommendation.addressed_comment && (
+                  <div className={`pt-3 border-t ${colors.border}`}>
+                    <h3 className={`text-sm font-semibold ${colors.textSecondary} mb-1`}>
+                      {lang === 'ar' ? 'تعليق المعالجة' : 'Addressing Comment'}
+                    </h3>
+                    <p className={`${colors.textPrimary} whitespace-pre-wrap`}>
+                      {currentRecommendation.addressed_comment}
+                    </p>
+                  </div>
+                )}
 
                 {/* Action buttons for admin */}
                 {user?.role === 'admin' && (
@@ -2149,78 +2710,81 @@ const RequirementDetail = () => {
         </div>
         )}
 
-        {/* Activity Timeline Toggle */}
-        <button
-          onClick={() => setShowActivities(!showActivities)}
-          className={`w-full flex items-center justify-between px-6 py-4 ${colors.bgSecondary} rounded-xl shadow-md mb-6 hover:shadow-lg transition`}
-        >
-          <div className="flex items-center gap-3">
-            <Clock className={colors.primaryIcon} size={24} />
-            <div className="text-left">
-              <h2 className={`text-lg font-bold ${colors.textPrimary}`}>
-                {lang === 'ar' ? 'سجل النشاطات والتغييرات' : 'Activity & Change History'}
-              </h2>
-              <p className={`text-sm ${colors.textSecondary}`}>
-                {lang === 'ar' ? `${activities.length} نشاط` : `${activities.length} activities`}
-              </p>
-            </div>
+        {/* Checklist Section */}
+        {requirement?.real_id && (
+          <div className="mb-6">
+            <ChecklistSection
+              requirementId={requirement.real_id}
+              canEdit={canManage || assignees.some(a => a.user_id === user?.id)}
+            />
           </div>
-          {showActivities ? <ChevronUp size={24} className={colors.textSecondary} /> : <ChevronDown size={24} className={colors.textSecondary} />}
-        </button>
+        )}
 
-        {/* Activity Timeline */}
-        {showActivities && (
-          <div className={`${colors.bgSecondary} rounded-xl shadow-md p-6 mb-6`}>
-            <div className="space-y-4">
-              {activities.length === 0 ? (
-                <p className={`text-center ${colors.textSecondary} py-4`}>
-                  {lang === 'ar' ? 'لا توجد نشاطات بعد' : 'No activities yet'}
-                </p>
-              ) : (
-                activities.map((activity, index) => (
-                  <div key={activity.id} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getActivityBgColor(activity.action_type)}`}>
-                        {getActivityIcon(activity.action_type)}
-                      </div>
-                      {index < activities.length - 1 && (
-                        <div className={`w-0.5 h-full ${colors.border} mt-2 flex-1`} style={{ minHeight: '40px' }} />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <div className="flex items-start justify-between mb-1">
-                        <div>
-                          <p className={`font-medium ${colors.textPrimary} mb-1`}>
+        {/* Activity History - Compact Floating Panel */}
+        {activities.length > 0 && (
+          <div className={`fixed ${lang === 'ar' ? 'left-4' : 'right-4'} top-20 z-40`}>
+            <div className="relative">
+              {/* Compact toggle button */}
+              <button
+                onClick={() => setShowActivities(!showActivities)}
+                className={`flex items-center gap-2 px-4 py-2 ${colors.bgSecondary} rounded-full shadow-lg hover:shadow-xl transition border ${colors.border} group`}
+                title={lang === 'ar' ? 'سجل النشاطات' : 'Activity Log'}
+              >
+                <Clock className={`${colors.primaryIcon} transition-transform ${showActivities ? 'rotate-12' : ''}`} size={18} />
+                <span className={`text-sm font-medium ${colors.textPrimary}`}>
+                  {activities.length}
+                </span>
+                {showActivities ? (
+                  <X size={16} className={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={16} className={colors.textSecondary} />
+                )}
+              </button>
+
+              {/* Activity dropdown panel */}
+              {showActivities && (
+                <div className={`absolute ${lang === 'ar' ? 'left-0' : 'right-0'} top-12 w-80 max-h-96 overflow-y-auto ${colors.bgSecondary} rounded-xl shadow-2xl border ${colors.border} animate-fadeIn`}>
+                  <div className={`sticky top-0 ${colors.bgSecondary} px-4 py-3 border-b ${colors.border} z-10`}>
+                    <h3 className={`text-sm font-bold ${colors.textPrimary} flex items-center gap-2`}>
+                      <History size={16} className={colors.primaryIcon} />
+                      {lang === 'ar' ? 'سجل النشاطات' : 'Activity History'}
+                    </h3>
+                  </div>
+                  <div className="p-3 space-y-3">
+                    {activities.slice(0, 10).map((activity, index) => (
+                      <div key={activity.id} className={`flex gap-3 ${index > 0 ? `pt-3 border-t ${colors.border}` : ''}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getActivityBgColor(activity.action_type)}`}>
+                          {getActivityIcon(activity.action_type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${colors.textPrimary} line-clamp-2`}>
                             {lang === 'ar' ? activity.description_ar : activity.description_en}
                           </p>
-                          <p className={`text-sm ${colors.textSecondary}`}>
-                            {lang === 'ar' ? activity.actor_name : activity.actor_name_en}
-                            {activity.maturity_level !== null && activity.maturity_level > 0 && currentIndex?.index_type !== 'ETARI' && (
-                              <>
-                                {' • '}
-                                {lang === 'ar' ? `المستوى ${activity.maturity_level}` : `Level ${activity.maturity_level}`}
-                              </>
-                            )}
-                          </p>
+                          <div className={`flex items-center gap-2 mt-1 text-xs ${colors.textTertiary}`}>
+                            <span className="truncate">{lang === 'ar' ? activity.actor_name : activity.actor_name_en}</span>
+                            <span>•</span>
+                            <span className="whitespace-nowrap">
+                              {new Date(activity.created_at).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+                                month: 'short',
+                                day: 'numeric'
+                              })}
+                            </span>
+                          </div>
                           {activity.comment && (
-                            <p className={`text-sm ${colors.textSecondary} mt-1 italic`}>
+                            <p className={`text-xs ${colors.textSecondary} mt-1 italic truncate`}>
                               "{activity.comment}"
                             </p>
                           )}
                         </div>
-                        <span className={`text-xs ${colors.textTertiary} whitespace-nowrap ml-4`}>
-                          {new Date(activity.created_at).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
                       </div>
-                    </div>
+                    ))}
+                    {activities.length > 10 && (
+                      <p className={`text-center text-xs ${colors.textSecondary} pt-2`}>
+                        {lang === 'ar' ? `+${activities.length - 10} نشاط آخر` : `+${activities.length - 10} more activities`}
+                      </p>
+                    )}
                   </div>
-                ))
+                </div>
               )}
             </div>
           </div>
@@ -2312,7 +2876,7 @@ const RequirementDetail = () => {
                     </>
                   )}
 
-                  {requirement.answer_status === 'pending_review' && (user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER' || user?.role === 'SECTION_COORDINATOR') && !reviewAction && (
+                  {requirement.answer_status === 'pending_review' && canManage && !reviewAction && (
                     <>
                       <button
                         onClick={() => setReviewAction('approve')}
@@ -2336,7 +2900,7 @@ const RequirementDetail = () => {
                   )}
 
                   {/* Confirm approved answer */}
-                  {requirement.answer_status === 'approved' && (user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER' || user?.role === 'SECTION_COORDINATOR') && (
+                  {requirement.answer_status === 'approved' && canManage && (
                     <button
                       onClick={handleConfirmAnswer}
                       disabled={confirmingAnswer}
@@ -2429,7 +2993,7 @@ const RequirementDetail = () => {
                         setUploadingToLevel(null);
                         setUploadingVersionForDoc(null);
                         setUploadComment('');
-                        setSelectedFile(null);
+                        setSelectedFiles([]);
                       }}
                       className={colors.textTertiary}
                     >
@@ -2440,17 +3004,34 @@ const RequirementDetail = () => {
                   <div className="space-y-3">
                     <div>
                       <label className={`block text-sm font-medium ${colors.textSecondary} mb-2`}>
-                        {lang === 'ar' ? 'اختر الملف' : 'Select File'}
+                        {uploadingVersionForDoc
+                          ? (lang === 'ar' ? 'اختر الملف' : 'Select File')
+                          : (lang === 'ar' ? 'اختر الملفات' : 'Select Files')}
                       </label>
                       <input
                         type="file"
                         onChange={handleFileSelect}
+                        multiple={!uploadingVersionForDoc}
                         className={`w-full text-sm ${colors.textSecondary} file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:${colors.primary} file:text-white file:${colors.primaryHover}`}
                       />
-                      {selectedFile && (
-                        <p className={`text-xs ${colors.primaryText} mt-2`}>
-                          {lang === 'ar' ? 'تم اختيار:' : 'Selected:'} {selectedFile.name}
-                        </p>
+                      {selectedFiles.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className={`text-xs font-medium ${colors.primaryText}`}>
+                            {lang === 'ar' ? `تم اختيار ${selectedFiles.length} ${selectedFiles.length === 1 ? 'ملف' : 'ملفات'}:` : `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} selected:`}
+                          </p>
+                          {selectedFiles.map((file, index) => (
+                            <div key={index} className={`flex items-center justify-between text-xs ${colors.bgTertiary} rounded px-2 py-1`}>
+                              <span className={colors.textSecondary}>{file.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeSelectedFile(index)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
 
@@ -2470,16 +3051,19 @@ const RequirementDetail = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleUploadDocument(0, true)}
-                        className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2`}
+                        disabled={isUploading}
+                        className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
-                        {lang === 'ar' ? 'حفظ كمسودة' : 'Save as Draft'}
+                        {isUploading ? <Loader2 size={16} className="animate-spin" /> : null}
+                        {isUploading ? (lang === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (lang === 'ar' ? 'حفظ كمسودة' : 'Save as Draft')}
                       </button>
                       <button
                         onClick={() => handleUploadDocument(0, false)}
-                        className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2`}
+                        disabled={isUploading}
+                        className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
-                        <CheckCircle2 size={16} />
-                        {lang === 'ar' ? 'رفع وإرسال' : 'Upload & Submit'}
+                        {isUploading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                        {isUploading ? (lang === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (lang === 'ar' ? 'رفع وإرسال' : 'Upload & Submit')}
                       </button>
                     </div>
                   </div>
@@ -2545,8 +3129,9 @@ const RequirementDetail = () => {
                           <div className="flex items-start gap-3 flex-1">
                             <FileText className={colors.primaryIcon} size={20} />
                             <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <p className={`text-sm font-bold ${colors.textPrimary}`}>{displayName}</p>
+                                {getFileTypeBadge(cleanFilename)}
                                 <span className={`text-xs ${colors.primaryLight} ${colors.primaryText} px-2 py-0.5 rounded-full font-semibold`}>
                                   {lang === 'ar' ? `إصدار ${doc.current_version}` : `v${doc.current_version}`}
                                 </span>
@@ -2609,6 +3194,13 @@ const RequirementDetail = () => {
                         {/* Action Buttons */}
                         <div className={`flex items-center gap-2 mb-3 pb-3 border-b ${colors.border} flex-wrap`}>
                           <button
+                            onClick={() => handlePreviewFile(doc.id, doc.document_name, doc.current_version)}
+                            className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition flex items-center gap-1"
+                          >
+                            <Eye size={14} />
+                            {lang === 'ar' ? 'معاينة' : 'Preview'}
+                          </button>
+                          <button
                             onClick={handleDownload}
                             className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center gap-1"
                           >
@@ -2628,7 +3220,7 @@ const RequirementDetail = () => {
                           )}
 
                           {/* Submitted Status - Supervisor/Admin buttons (Confirm/Reject) */}
-                          {doc.status === 'submitted' && (user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER' || user?.role === 'SECTION_COORDINATOR') && (
+                          {doc.status === 'submitted' && canManage && (
                             <>
                               <button
                                 onClick={() => handleConfirmDocument(0, doc.id)}
@@ -2647,8 +3239,8 @@ const RequirementDetail = () => {
                             </>
                           )}
 
-                          {/* Confirmed Status - Approve button */}
-                          {doc.status === 'confirmed' && user?.role === 'ADMIN' && (
+                          {/* Confirmed Status - Approve button (ADMIN or OWNER can approve) */}
+                          {doc.status === 'confirmed' && (isSystemAdmin || effectiveUserRole === 'owner') && (
                             <button
                               onClick={() => handleApproveDocument(0, doc.id)}
                               className="px-3 py-1.5 text-xs bg-green-700 text-white rounded hover:bg-green-800 transition flex items-center gap-1 font-semibold"
@@ -2781,8 +3373,8 @@ const RequirementDetail = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    {/* Admin Level Completion Toggle */}
-                    {user?.role === 'ADMIN' && criteria.level > 0 && (
+                    {/* Admin/Owner Level Completion Toggle */}
+                    {(isSystemAdmin || effectiveUserRole === 'owner') && criteria.level > 0 && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2933,8 +3525,8 @@ const RequirementDetail = () => {
                                     </button>
                                   )}
 
-                                  {/* Submitted Status - Auditor buttons (Confirm/Reject) */}
-                                  {doc.status === 'submitted' && user?.role === 'ADMIN' && (
+                                  {/* Submitted Status - Supervisor/Admin buttons (Confirm/Reject) */}
+                                  {doc.status === 'submitted' && canManage && (
                                     <>
                                       <button
                                         onClick={() => handleConfirmDocument(criteria.level, doc.id)}
@@ -2953,8 +3545,8 @@ const RequirementDetail = () => {
                                     </>
                                   )}
 
-                                  {/* Confirmed Status - Approve button */}
-                                  {doc.status === 'confirmed' && user?.role === 'ADMIN' && (
+                                  {/* Confirmed Status - Approve button (ADMIN or OWNER can approve) */}
+                                  {doc.status === 'confirmed' && (isSystemAdmin || effectiveUserRole === 'owner') && (
                                     <button
                                       onClick={() => handleApproveDocument(criteria.level, doc.id)}
                                       className="px-3 py-1.5 text-xs bg-green-700 text-white rounded hover:bg-green-800 transition flex items-center gap-1 font-semibold"
@@ -3106,7 +3698,7 @@ const RequirementDetail = () => {
                                 setUploadingToLevel(null);
                                 setUploadingVersionForDoc(null);
                                 setUploadComment('');
-                                setSelectedFile(null);
+                                setSelectedFiles([]);
                               }}
                               className={colors.textTertiary}
                             >
@@ -3117,17 +3709,34 @@ const RequirementDetail = () => {
                           <div className="space-y-3">
                             <div>
                               <label className={`block text-sm font-medium ${colors.textSecondary} mb-2`}>
-                                {lang === 'ar' ? 'اختر الملف' : 'Select File'}
+                                {uploadingVersionForDoc
+                                  ? (lang === 'ar' ? 'اختر الملف' : 'Select File')
+                                  : (lang === 'ar' ? 'اختر الملفات' : 'Select Files')}
                               </label>
                               <input
                                 type="file"
                                 onChange={handleFileSelect}
+                                multiple={!uploadingVersionForDoc}
                                 className={`w-full text-sm ${colors.textSecondary} file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:${colors.primary} file:text-white file:${colors.primaryHover}`}
                               />
-                              {selectedFile && (
-                                <p className={`text-xs ${colors.primaryText} mt-2`}>
-                                  {lang === 'ar' ? 'تم اختيار:' : 'Selected:'} {selectedFile.name}
-                                </p>
+                              {selectedFiles.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  <p className={`text-xs font-medium ${colors.primaryText}`}>
+                                    {lang === 'ar' ? `تم اختيار ${selectedFiles.length} ${selectedFiles.length === 1 ? 'ملف' : 'ملفات'}:` : `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} selected:`}
+                                  </p>
+                                  {selectedFiles.map((file, index) => (
+                                    <div key={index} className={`flex items-center justify-between text-xs ${colors.bgTertiary} rounded px-2 py-1`}>
+                                      <span className={colors.textSecondary}>{file.name}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeSelectedFile(index)}
+                                        className="text-red-500 hover:text-red-700"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
 
@@ -3147,16 +3756,19 @@ const RequirementDetail = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleUploadDocument(criteria.level, true)}
-                                className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2`}
+                                disabled={isUploading}
+                                className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                               >
-                                {lang === 'ar' ? 'حفظ كمسودة' : 'Save as Draft'}
+                                {isUploading ? <Loader2 size={16} className="animate-spin" /> : null}
+                                {isUploading ? (lang === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (lang === 'ar' ? 'حفظ كمسودة' : 'Save as Draft')}
                               </button>
                               <button
                                 onClick={() => handleUploadDocument(criteria.level, false)}
-                                className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2`}
+                                disabled={isUploading}
+                                className={`flex-1 px-4 py-2 ${colors.primary} text-white rounded-lg ${colors.primaryHover} transition text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                               >
-                                <CheckCircle2 size={16} />
-                                {lang === 'ar' ? 'رفع وإرسال' : 'Upload & Submit'}
+                                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                {isUploading ? (lang === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (lang === 'ar' ? 'رفع وإرسال' : 'Upload & Submit')}
                               </button>
                             </div>
                           </div>

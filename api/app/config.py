@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     """Application settings"""
 
     # Application
-    APP_NAME: str = "Raqib Index Management System"
+    APP_NAME: str = "Sahem Index Management System"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://raqib_user:CHANGE_THIS_DB_PASSWORD@postgres:5432/raqib_db"
+        "postgresql://sahem_user:CHANGE_THIS_DB_PASSWORD@postgres:5432/sahem_db"
     )
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 10
@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
-    # CORS
-    CORS_ORIGINS: List[str] = [
+    # CORS - Base origins (additional origins added via EXTRA_CORS_ORIGINS env var)
+    CORS_ORIGINS_BASE: List[str] = [
         "http://localhost:3000",
         "http://localhost:8080",
         "http://ui:3000"
@@ -65,10 +65,10 @@ class Settings(BaseSettings):
     SMTP_USER: str = os.getenv("SMTP_USER", "noreply@example.com")
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "noreply@example.com")
-    SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "Raqib Platform")
+    SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "Sahem Platform")
 
     # Frontend URL
-    FRONTEND_URL: str = "http://localhost:8080"
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8080")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -84,3 +84,15 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+# Compute CORS_ORIGINS by combining base + extra from environment
+def get_cors_origins() -> List[str]:
+    """Get complete CORS origins list including extra from environment"""
+    origins = list(settings.CORS_ORIGINS_BASE)
+    extra = os.getenv("EXTRA_CORS_ORIGINS", "")
+    if extra:
+        origins.extend([origin.strip() for origin in extra.split(",") if origin.strip()])
+    return origins
+
+# Make CORS_ORIGINS available as a module-level attribute
+CORS_ORIGINS = get_cors_origins()

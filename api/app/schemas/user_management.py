@@ -118,3 +118,24 @@ class UpdateUserStatusResponse(BaseModel):
     message: str
     user_id: str
     is_active: bool
+
+
+# Update User (Admin)
+class UpdateUserRequest(BaseModel):
+    """Request to update user details (admin only)"""
+    user_id: str
+    first_name_ar: Optional[str] = None
+    last_name_ar: Optional[str] = None
+    first_name_en: Optional[str] = None
+    last_name_en: Optional[str] = None
+    agency_id: Optional[str] = None
+    general_management_id: Optional[str] = None
+    department_id: Optional[str] = None
+
+
+class UpdateUserResponse(BaseModel):
+    """Response after updating user"""
+    message: str
+    user_id: str
+    full_name_ar: str
+    full_name_en: Optional[str]

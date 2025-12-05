@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Plus, Edit, Trash2, CheckSquare, TrendingUp, Loader2, AlertCircle, FileText, CheckCircle2, Upload, Download } from 'lucide-react';
+import { Layers, Plus, Edit, Trash2, CheckSquare, TrendingUp, Loader2, AlertCircle, FileText, CheckCircle2, Upload, Download, GitBranch } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { api, Index, RecommendationUploadResult } from '../services/api';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import IndexEditModal from '../components/IndexEditModal';
+import SectionMappingEditor from '../components/SectionMappingEditor';
 
 const Indices = () => {
   const navigate = useNavigate();
@@ -30,6 +31,8 @@ const Indices = () => {
   const [uploadResult, setUploadResult] = useState<{ indexId: string; result: RecommendationUploadResult } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIndexForUpload, setSelectedIndexForUpload] = useState<string | null>(null);
+  const [showMappingEditor, setShowMappingEditor] = useState(false);
+  const [indexForMapping, setIndexForMapping] = useState<Index | null>(null);
 
   // Load indices on mount
   useEffect(() => {
@@ -127,6 +130,11 @@ const Indices = () => {
     window.open(url, '_blank');
   };
 
+  const handleOpenMappingEditor = (index: Index) => {
+    setIndexForMapping(index);
+    setShowMappingEditor(true);
+  };
+
   const triggerFileUpload = (indexId: string) => {
     setSelectedIndexForUpload(indexId);
     fileInputRef.current?.click();
@@ -182,7 +190,10 @@ const Indices = () => {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <Loader2 className={`w-12 h-12 animate-spin ${colors.primary} mx-auto mb-4`} />
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
+            <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
+          </div>
           <p className={colors.textSecondary}>
             {lang === 'ar' ? 'جاري تحميل المؤشرات...' : 'Loading indices...'}
           </p>
@@ -227,7 +238,8 @@ const Indices = () => {
                 : 'Manage and track all assessment indices in the system'}
             </p>
           </div>
-          {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
+          {/* System ADMIN can always add indices */}
+          {user?.role === 'ADMIN' && (
             <button
               onClick={handleAddIndex}
               className={`flex items-center gap-2 px-4 py-2.5 ${patterns.button}`}
@@ -362,8 +374,16 @@ const Indices = () => {
                   >
                     {lang === 'ar' ? 'عرض المؤشر' : 'View Index'}
                   </button>
-                  {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
+                  {/* System ADMIN or OWNER of this index can edit/delete */}
+                  {(user?.role === 'ADMIN' || index.user_role?.toLowerCase() === 'owner') && (
                     <>
+                      <button
+                        onClick={() => handleOpenMappingEditor(index)}
+                        className={`p-2 ${colors.textSecondary} hover:${colors.bgHover} rounded-lg transition`}
+                        title={lang === 'ar' ? 'تعيين الأقسام' : 'Section Mapping'}
+                      >
+                        <GitBranch size={18} />
+                      </button>
                       <button
                         onClick={() => handleEditIndex(index)}
                         className={`p-2 ${colors.textSecondary} hover:${colors.bgHover} rounded-lg transition`}
@@ -402,8 +422,8 @@ const Indices = () => {
                 )}
               </div>
 
-              {/* Completion & Recommendations Actions */}
-              {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
+              {/* Completion & Recommendations Actions - ADMIN or OWNER */}
+              {(user?.role === 'ADMIN' || index.user_role?.toLowerCase() === 'owner') && (
                 <div className={`mt-4 pt-4 border-t ${colors.border}`}>
                   {/* Show Complete Button for non-completed indices */}
                   {!index.is_completed && (
@@ -523,7 +543,8 @@ const Indices = () => {
               ? 'ابدأ بإضافة مؤشر جديد لتتبع وقياس الأداء'
               : 'Start by adding a new index to track and measure performance'}
           </p>
-          {(user?.role === 'ADMIN' || user?.role === 'INDEX_MANAGER') && (
+          {/* System ADMIN can add indices */}
+          {user?.role === 'ADMIN' && (
             <button
               onClick={handleAddIndex}
               className={`px-6 py-3 ${patterns.button}`}
@@ -569,6 +590,19 @@ const Indices = () => {
           onSave={handleSaveIndex}
           index={indexToEdit}
           language={lang}
+        />
+      )}
+
+      {/* Section Mapping Editor Modal */}
+      {showMappingEditor && indexForMapping && (
+        <SectionMappingEditor
+          currentIndex={indexForMapping}
+          indices={indices}
+          onClose={() => {
+            setShowMappingEditor(false);
+            setIndexForMapping(null);
+          }}
+          lang={lang}
         />
       )}
     </div>

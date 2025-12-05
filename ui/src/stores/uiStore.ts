@@ -1,6 +1,31 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { UIState } from '../types';
+
+// Safe storage that falls back gracefully on iOS
+const safeStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch {
+      // Silently fail on iOS private browsing or quota errors
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // Silently fail
+    }
+  },
+};
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -16,7 +41,8 @@ export const useUIStore = create<UIState>()(
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen }))
     }),
     {
-      name: 'ui-storage'
+      name: 'ui-storage',
+      storage: createJSONStorage(() => safeStorage),
     }
   )
 );

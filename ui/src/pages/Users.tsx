@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, UserCheck, UserX, Loader2, AlertCircle, Users as UsersIcon, Key, Eye, CheckCircle, Copy, Mail } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, UserCheck, UserX, Loader2, AlertCircle, Users as UsersIcon, Key, Eye, CheckCircle, Copy, Mail, Shield } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
 import { api, User, IndexUserWithDetails } from '../services/api';
-import { userManagementApi, type UserWithRoles, type CreateUserRequest } from '../services/userManagement';
+import { userManagementApi, type UserWithRoles, type CreateUserRequest, type UpdateUserRequest } from '../services/userManagement';
+import { getCompleteHierarchy } from '../services/organizationHierarchy';
 import toast from 'react-hot-toast';
 import { colors, patterns } from '../utils/darkMode';
+import UserSearchSelector from '../components/common/UserSearchSelector';
 
 const Users = () => {
   const { language } = useUIStore();
   const { user: currentUser } = useAuthStore();
-  const { currentIndex } = useIndexStore();
+  const { currentIndex, setCurrentIndex } = useIndexStore();
   const lang = language;
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+  const isOwner = currentIndex?.user_role?.toLowerCase() === 'owner';
+  const canManageRoles = isAdmin || isOwner;
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'index' | 'system'>('index');
@@ -46,6 +50,25 @@ const Users = () => {
 
   // New system user form
   const [newUserEmail, setNewUserEmail] = useState('');
+
+  // Role change modal state
+  const [showRoleChangeModal, setShowRoleChangeModal] = useState(false);
+  const [roleChangeUser, setRoleChangeUser] = useState<IndexUserWithDetails | null>(null);
+  const [newRole, setNewRole] = useState<'owner' | 'supervisor' | 'contributor'>('contributor');
+
+  // Edit user modal state
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editUserData, setEditUserData] = useState({
+    user_id: '',
+    first_name_ar: '',
+    last_name_ar: '',
+    first_name_en: '',
+    last_name_en: '',
+    agency_id: '',
+    general_management_id: '',
+    department_id: ''
+  });
+  const [hierarchy, setHierarchy] = useState<any>(null);
 
   useEffect(() => {
     if (activeTab === 'index' && currentIndex) {
@@ -130,6 +153,51 @@ const Users = () => {
     } catch (err: any) {
       console.error('Failed to remove user:', err);
       toast.error(err.message || (lang === 'ar' ? 'فشل إزالة المستخدم' : 'Failed to remove user'));
+    }
+  };
+
+  const openRoleChangeModal = (indexUser: IndexUserWithDetails) => {
+    setRoleChangeUser(indexUser);
+    setNewRole(indexUser.role as 'owner' | 'supervisor' | 'contributor');
+    setShowRoleChangeModal(true);
+  };
+
+  const handleRoleChange = async () => {
+    if (!roleChangeUser || !currentIndex) return;
+
+    // Check if current user can change this role
+    const isCurrentUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    const isCurrentUserOwner = currentIndex.user_role?.toLowerCase() === 'owner';
+    const isTargetOwner = roleChangeUser.role?.toLowerCase() === 'owner';
+
+    // Only admin or owner can change roles
+    if (!isCurrentUserAdmin && !isCurrentUserOwner) {
+      toast.error(lang === 'ar' ? 'ليس لديك صلاحية لتغيير الأدوار' : 'You do not have permission to change roles');
+      return;
+    }
+
+    // Owner can only be downgraded by another owner or admin
+    if (isTargetOwner && !isCurrentUserAdmin && !isCurrentUserOwner) {
+      toast.error(lang === 'ar' ? 'فقط المعتمد أو المدير يمكنه تغيير دور المعتمد' : 'Only owner or admin can change owner role');
+      return;
+    }
+
+    try {
+      await api.indexUsers.update(roleChangeUser.id, { role: newRole });
+      toast.success(lang === 'ar' ? 'تم تغيير الدور بنجاح' : 'Role changed successfully');
+      setShowRoleChangeModal(false);
+      setRoleChangeUser(null);
+      loadIndexUsers();
+
+      // If the changed user is the current user, refresh the current index to update user_role
+      if (roleChangeUser.user_id === currentUser?.id && currentIndex) {
+        // Fetch fresh index data to update cached user_role
+        const freshIndex = await api.indices.getById(currentIndex.id);
+        setCurrentIndex(freshIndex);
+      }
+    } catch (err: any) {
+      console.error('Failed to change role:', err);
+      toast.error(err.message || (lang === 'ar' ? 'فشل تغيير الدور' : 'Failed to change role'));
     }
   };
 
@@ -234,10 +302,49 @@ const Users = () => {
     }
   };
 
+  const openEditUserModal = async (user: UserWithRoles) => {
+    // Load hierarchy for dropdowns
+    try {
+      const hierarchyData = await getCompleteHierarchy();
+      setHierarchy(hierarchyData);
+    } catch (error) {
+      console.error('Failed to load hierarchy:', error);
+    }
+
+    setEditUserData({
+      user_id: user.id,
+      first_name_ar: user.first_name_ar || '',
+      last_name_ar: user.last_name_ar || '',
+      first_name_en: user.first_name_en || '',
+      last_name_en: user.last_name_en || '',
+      agency_id: user.agency_id || '',
+      general_management_id: user.general_management_id || '',
+      department_id: user.department_id || ''
+    });
+    setShowEditUserModal(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editUserData.first_name_ar || !editUserData.last_name_ar) {
+      toast.error(lang === 'ar' ? 'يرجى إدخال الاسم بالعربي' : 'Please enter Arabic name');
+      return;
+    }
+
+    try {
+      await userManagementApi.updateUser(editUserData);
+      toast.success(lang === 'ar' ? 'تم تحديث المستخدم بنجاح' : 'User updated successfully');
+      setShowEditUserModal(false);
+      loadSystemUsers();
+    } catch (error: any) {
+      console.error('Failed to update user:', error);
+      toast.error(error.message || (lang === 'ar' ? 'فشل تحديث المستخدم' : 'Failed to update user'));
+    }
+  };
+
   const roleLabels = {
     // Index roles (per-index, not system-wide)
-    owner: { ar: 'مالك', en: 'Owner' },
-    supervisor: { ar: 'مشرف', en: 'Supervisor' },
+    owner: { ar: 'معتمد', en: 'Owner' },
+    supervisor: { ar: 'مدقق', en: 'Reviewer' },
     contributor: { ar: 'مساهم', en: 'Contributor' },
     // System role (only ADMIN exists as global role)
     admin: { ar: 'مدير المنصة', en: 'Admin' },
@@ -313,7 +420,10 @@ const Users = () => {
       return (
         <div className="flex items-center justify-center py-20">
           <div className="text-center">
-            <Loader2 className={`w-12 h-12 animate-spin ${colors.primary} mx-auto mb-4`} />
+            <div className="relative w-16 h-16 mx-auto mb-4">
+              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
+              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
+            </div>
             <p className={colors.textSecondary}>
               {lang === 'ar' ? 'جاري تحميل المستخدمين...' : 'Loading users...'}
             </p>
@@ -367,11 +477,11 @@ const Users = () => {
             <p className={`text-2xl font-bold ${colors.textPrimary}`}>{roleStats.all}</p>
           </div>
           <div className={`${colors.bgSecondary} rounded-lg p-4 ${colors.border} border`}>
-            <p className={`text-sm ${colors.textSecondary} mb-1`}>{lang === 'ar' ? 'مالكين' : 'Owners'}</p>
+            <p className={`text-sm ${colors.textSecondary} mb-1`}>{lang === 'ar' ? 'معتمدين' : 'Owners'}</p>
             <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{roleStats.owner}</p>
           </div>
           <div className={`${colors.bgSecondary} rounded-lg p-4 ${colors.border} border`}>
-            <p className={`text-sm ${colors.textSecondary} mb-1`}>{lang === 'ar' ? 'مشرفين' : 'Supervisors'}</p>
+            <p className={`text-sm ${colors.textSecondary} mb-1`}>{lang === 'ar' ? 'مدققين' : 'Reviewers'}</p>
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{roleStats.supervisor}</p>
           </div>
           <div className={`${colors.bgSecondary} rounded-lg p-4 ${colors.border} border`}>
@@ -400,8 +510,8 @@ const Users = () => {
               className={`px-4 py-2 ${patterns.input}`}
             >
               <option value="all">{lang === 'ar' ? 'جميع الأدوار' : 'All Roles'}</option>
-              <option value="owner">{lang === 'ar' ? 'مالك' : 'Owner'}</option>
-              <option value="supervisor">{lang === 'ar' ? 'مشرف' : 'Supervisor'}</option>
+              <option value="owner">{lang === 'ar' ? 'معتمد' : 'Owner'}</option>
+              <option value="supervisor">{lang === 'ar' ? 'مدقق' : 'Reviewer'}</option>
               <option value="contributor">{lang === 'ar' ? 'مساهم' : 'Contributor'}</option>
             </select>
           </div>
@@ -449,13 +559,24 @@ const Users = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleRemoveUser(indexUser.id)}
-                        className={`p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition`}
-                        title={lang === 'ar' ? 'إزالة' : 'Remove'}
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex gap-2">
+                        {canManageRoles && (
+                          <button
+                            onClick={() => openRoleChangeModal(indexUser)}
+                            className={`p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition`}
+                            title={lang === 'ar' ? 'تغيير الدور' : 'Change Role'}
+                          >
+                            <Shield size={18} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleRemoveUser(indexUser.id)}
+                          className={`p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition`}
+                          title={lang === 'ar' ? 'إزالة' : 'Remove'}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -464,45 +585,116 @@ const Users = () => {
           </table>
         </div>
 
+        {/* Role Change Modal */}
+        {showRoleChangeModal && roleChangeUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+            <div className={`${colors.bgSecondary} rounded-xl p-6 w-full max-w-md shadow-xl`}>
+              <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'تغيير دور المستخدم' : 'Change User Role'}
+              </h2>
+
+              <div className="mb-4">
+                <p className={`${colors.textSecondary} mb-2`}>
+                  {lang === 'ar' ? 'المستخدم:' : 'User:'}
+                </p>
+                <p className={`font-medium ${colors.textPrimary}`}>
+                  {lang === 'ar' ? roleChangeUser.user_full_name_ar : roleChangeUser.user_full_name_en || roleChangeUser.user_full_name_ar}
+                </p>
+                <p className={`text-sm ${colors.textSecondary}`}>
+                  {roleChangeUser.user_email}
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <p className={`${colors.textSecondary} mb-2`}>
+                  {lang === 'ar' ? 'الدور الحالي:' : 'Current Role:'}
+                </p>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeColor(roleChangeUser.role)}`}>
+                  {getRoleLabel(roleChangeUser.role)}
+                </span>
+              </div>
+
+              <div className="mb-6">
+                <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
+                  {lang === 'ar' ? 'الدور الجديد' : 'New Role'}
+                </label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as any)}
+                  className={`w-full px-3 py-2.5 ${patterns.input}`}
+                >
+                  <option value="contributor">{lang === 'ar' ? 'مساهم' : 'Contributor'}</option>
+                  <option value="supervisor">{lang === 'ar' ? 'مدقق' : 'Reviewer'}</option>
+                  <option value="owner">{lang === 'ar' ? 'معتمد' : 'Owner'}</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRoleChange}
+                  disabled={newRole === roleChangeUser.role}
+                  className={`flex-1 px-4 py-2.5 ${patterns.primaryButton} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {lang === 'ar' ? 'تغيير الدور' : 'Change Role'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRoleChangeModal(false);
+                    setRoleChangeUser(null);
+                  }}
+                  className={`flex-1 px-4 py-2.5 ${patterns.secondaryButton}`}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Add User Modal */}
         {showAddUserModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-            <div className={`${colors.bgSecondary} rounded-lg p-6 w-full max-w-md`}>
+            <div className={`${colors.bgSecondary} rounded-xl p-6 w-full max-w-lg shadow-xl`}>
               <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
                 {lang === 'ar' ? 'إضافة مستخدم للمؤشر' : 'Add User to Index'}
               </h2>
 
               <div className="space-y-4">
                 <div>
-                  <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                  <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
                     {lang === 'ar' ? 'المستخدم' : 'User'}
                   </label>
-                  <select
-                    value={selectedUserId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                    className={`w-full px-3 py-2 ${patterns.input}`}
-                  >
-                    <option value="">{lang === 'ar' ? 'اختر مستخدم' : 'Select user'}</option>
-                    {allUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {lang === 'ar' ? user.name : user.name_en || user.name} - {user.email}
-                      </option>
-                    ))}
-                  </select>
+                  <UserSearchSelector
+                    users={allUsers.map(user => ({
+                      id: user.id,
+                      name: user.name,
+                      name_en: user.name_en || user.name,
+                      email: user.email,
+                    }))}
+                    selectedIds={selectedUserId ? [selectedUserId] : []}
+                    onSelect={(userId) => setSelectedUserId(userId)}
+                    onDeselect={() => setSelectedUserId('')}
+                    placeholder={{
+                      ar: 'ابحث بالاسم أو البريد الإلكتروني...',
+                      en: 'Search by name or email...'
+                    }}
+                    multiple={false}
+                    showRole={false}
+                  />
                 </div>
 
                 <div>
-                  <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
-                    {lang === 'ar' ? 'الدور' : 'Role'}
+                  <label className={`block text-sm font-medium mb-2 ${colors.textPrimary}`}>
+                    {lang === 'ar' ? 'الدور في المؤشر' : 'Role in Index'}
                   </label>
                   <select
                     value={selectedRole}
                     onChange={(e) => setSelectedRole(e.target.value as any)}
-                    className={`w-full px-3 py-2 ${patterns.input}`}
+                    className={`w-full px-3 py-2.5 ${patterns.input}`}
                   >
                     <option value="contributor">{lang === 'ar' ? 'مساهم' : 'Contributor'}</option>
-                    <option value="supervisor">{lang === 'ar' ? 'مشرف' : 'Supervisor'}</option>
-                    <option value="owner">{lang === 'ar' ? 'مالك' : 'Owner'}</option>
+                    <option value="supervisor">{lang === 'ar' ? 'مدقق' : 'Reviewer'}</option>
+                    <option value="owner">{lang === 'ar' ? 'معتمد' : 'Owner'}</option>
                   </select>
                 </div>
               </div>
@@ -510,13 +702,17 @@ const Users = () => {
               <div className="flex gap-2 mt-6">
                 <button
                   onClick={handleAddUser}
-                  className={`flex-1 px-4 py-2 ${patterns.primaryButton}`}
+                  disabled={!selectedUserId}
+                  className={`flex-1 px-4 py-2.5 ${patterns.primaryButton} disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   {lang === 'ar' ? 'إضافة' : 'Add'}
                 </button>
                 <button
-                  onClick={() => setShowAddUserModal(false)}
-                  className={`flex-1 px-4 py-2 ${patterns.secondaryButton}`}
+                  onClick={() => {
+                    setShowAddUserModal(false);
+                    setSelectedUserId('');
+                  }}
+                  className={`flex-1 px-4 py-2.5 ${patterns.secondaryButton}`}
                 >
                   {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>
@@ -573,7 +769,10 @@ const Users = () => {
         {/* Users Table */}
         {systemLoading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className={`w-12 h-12 animate-spin ${colors.primary}`} />
+            <div className="relative w-16 h-16">
+              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
+              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
+            </div>
           </div>
         ) : (
           <div className={`${colors.bgSecondary} rounded-lg overflow-hidden ${colors.border} border`}>
@@ -637,6 +836,13 @@ const Users = () => {
                             title={lang === 'ar' ? 'عرض التفاصيل' : 'View Details'}
                           >
                             <Eye size={18} />
+                          </button>
+                          <button
+                            onClick={() => openEditUserModal(user)}
+                            className={`p-2 ${patterns.iconButton}`}
+                            title={lang === 'ar' ? 'تعديل المستخدم' : 'Edit User'}
+                          >
+                            <Edit size={18} />
                           </button>
                           <button
                             onClick={() => handleResetPassword(user.id)}
@@ -806,6 +1012,168 @@ const Users = () => {
             </div>
           </div>
         )}
+
+        {/* Edit User Modal */}
+        {showEditUserModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+            <div className={`${colors.bgSecondary} rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto`}>
+              <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'تعديل بيانات المستخدم' : 'Edit User Details'}
+              </h2>
+
+              <div className="space-y-4">
+                {/* Arabic Name */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'الاسم الأول (عربي)' : 'First Name (Arabic)'} *
+                    </label>
+                    <input
+                      type="text"
+                      value={editUserData.first_name_ar}
+                      onChange={(e) => setEditUserData(prev => ({ ...prev, first_name_ar: e.target.value }))}
+                      className={`w-full px-3 py-2 ${patterns.input}`}
+                      dir="rtl"
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'الاسم الأخير (عربي)' : 'Last Name (Arabic)'} *
+                    </label>
+                    <input
+                      type="text"
+                      value={editUserData.last_name_ar}
+                      onChange={(e) => setEditUserData(prev => ({ ...prev, last_name_ar: e.target.value }))}
+                      className={`w-full px-3 py-2 ${patterns.input}`}
+                      dir="rtl"
+                    />
+                  </div>
+                </div>
+
+                {/* English Name */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'الاسم الأول (إنجليزي)' : 'First Name (English)'}
+                    </label>
+                    <input
+                      type="text"
+                      value={editUserData.first_name_en}
+                      onChange={(e) => setEditUserData(prev => ({ ...prev, first_name_en: e.target.value }))}
+                      className={`w-full px-3 py-2 ${patterns.input}`}
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                      {lang === 'ar' ? 'الاسم الأخير (إنجليزي)' : 'Last Name (English)'}
+                    </label>
+                    <input
+                      type="text"
+                      value={editUserData.last_name_en}
+                      onChange={(e) => setEditUserData(prev => ({ ...prev, last_name_en: e.target.value }))}
+                      className={`w-full px-3 py-2 ${patterns.input}`}
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Organizational Hierarchy */}
+                {hierarchy && (
+                  <>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                        {lang === 'ar' ? 'الوكالة' : 'Agency'}
+                      </label>
+                      <select
+                        value={editUserData.agency_id}
+                        onChange={(e) => setEditUserData(prev => ({
+                          ...prev,
+                          agency_id: e.target.value,
+                          general_management_id: '',
+                          department_id: ''
+                        }))}
+                        className={`w-full px-3 py-2 ${patterns.input}`}
+                      >
+                        <option value="">{lang === 'ar' ? 'اختر الوكالة' : 'Select Agency'}</option>
+                        {hierarchy.agencies?.map((agency: any) => (
+                          <option key={agency.id} value={agency.id}>
+                            {lang === 'ar' ? agency.name_ar : agency.name_en || agency.name_ar}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {editUserData.agency_id && (
+                      <div>
+                        <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                          {lang === 'ar' ? 'الإدارة العامة' : 'General Management'}
+                        </label>
+                        <select
+                          value={editUserData.general_management_id}
+                          onChange={(e) => setEditUserData(prev => ({
+                            ...prev,
+                            general_management_id: e.target.value,
+                            department_id: ''
+                          }))}
+                          className={`w-full px-3 py-2 ${patterns.input}`}
+                        >
+                          <option value="">{lang === 'ar' ? 'اختر الإدارة العامة' : 'Select General Management'}</option>
+                          {hierarchy.agencies
+                            ?.find((a: any) => a.id === editUserData.agency_id)
+                            ?.general_managements?.map((gm: any) => (
+                              <option key={gm.id} value={gm.id}>
+                                {lang === 'ar' ? gm.name_ar : gm.name_en || gm.name_ar}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {editUserData.general_management_id && (
+                      <div>
+                        <label className={`block text-sm font-medium mb-1 ${colors.textPrimary}`}>
+                          {lang === 'ar' ? 'الإدارة' : 'Department'}
+                        </label>
+                        <select
+                          value={editUserData.department_id}
+                          onChange={(e) => setEditUserData(prev => ({ ...prev, department_id: e.target.value }))}
+                          className={`w-full px-3 py-2 ${patterns.input}`}
+                        >
+                          <option value="">{lang === 'ar' ? 'اختر الإدارة' : 'Select Department'}</option>
+                          {hierarchy.agencies
+                            ?.find((a: any) => a.id === editUserData.agency_id)
+                            ?.general_managements
+                            ?.find((gm: any) => gm.id === editUserData.general_management_id)
+                            ?.departments?.map((dept: any) => (
+                              <option key={dept.id} value={dept.id}>
+                                {lang === 'ar' ? dept.name_ar : dept.name_en || dept.name_ar}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={handleUpdateUser}
+                  className={`flex-1 px-4 py-2 ${patterns.primaryButton}`}
+                >
+                  {lang === 'ar' ? 'حفظ التغييرات' : 'Save Changes'}
+                </button>
+                <button
+                  onClick={() => setShowEditUserModal(false)}
+                  className={`flex-1 px-4 py-2 ${patterns.secondaryButton}`}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -888,8 +1256,19 @@ const Users = () => {
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(generatedPassword);
-                        toast.success(lang === 'ar' ? 'تم نسخ كلمة المرور!' : 'Password copied!');
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(generatedPassword);
+                          toast.success(lang === 'ar' ? 'تم نسخ كلمة المرور!' : 'Password copied!');
+                        } else {
+                          // Fallback for HTTP: select the text
+                          const textArea = document.createElement('textarea');
+                          textArea.value = generatedPassword;
+                          document.body.appendChild(textArea);
+                          textArea.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(textArea);
+                          toast.success(lang === 'ar' ? 'تم نسخ كلمة المرور!' : 'Password copied!');
+                        }
                       }}
                       className="mt-3 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
                     >

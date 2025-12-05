@@ -8,6 +8,7 @@ from typing import List
 import uuid
 
 from app.database import get_db
+from app.api.dependencies import get_current_active_user
 from app.schemas.assignment import (
     AssignmentCreate,
     AssignmentBatchCreate,
@@ -16,16 +17,58 @@ from app.schemas.assignment import (
     AssignmentWithUser
 )
 from app.models.assignment import Assignment
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.models.index_user import IndexUser, IndexUserRole
 from app.models import NotificationType, Requirement
 from app.api.v1.notifications import create_notification
 
 router = APIRouter(prefix="/assignments", tags=["Assignments"])
 
 
+def can_assign_to_requirement(user: User, requirement_id: str, db: Session) -> bool:
+    """
+    Check if user can create assignments for a requirement.
+    - ADMIN: Can assign to any requirement
+    - OWNER: Can assign to any requirement in their indices
+    - SUPERVISOR: Can only assign to requirements they are assigned to (as support)
+    - CONTRIBUTOR: Cannot assign
+    """
+    if user.role == UserRole.ADMIN:
+        return True
+
+    # Get requirement to check its index
+    requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
+    if not requirement:
+        return False
+
+    # Get user's role in the index
+    index_user = db.query(IndexUser).filter(
+        IndexUser.user_id == user.id,
+        IndexUser.index_id == requirement.index_id
+    ).first()
+
+    if not index_user:
+        return False
+
+    # OWNER can assign to any requirement
+    if index_user.role == IndexUserRole.OWNER:
+        return True
+
+    # SUPERVISOR can only assign to requirements they are assigned to
+    if index_user.role == IndexUserRole.SUPERVISOR:
+        assignment = db.query(Assignment).filter(
+            Assignment.requirement_id == requirement_id,
+            Assignment.user_id == user.id
+        ).first()
+        return assignment is not None
+
+    return False
+
+
 @router.post("", response_model=AssignmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_assignment(
     assignment: AssignmentCreate,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -33,13 +76,27 @@ async def create_assignment(
 
     Assigns a user to a requirement in an index
 
+    Permission:
+    - ADMIN: Can assign to any requirement
+    - OWNER: Can assign to any requirement in their indices
+    - SUPERVISOR: Can only assign to requirements they are assigned to
+    - CONTRIBUTOR: Cannot assign
+
     Args:
         assignment: Assignment data
+        current_user: Current authenticated user
         db: Database session
 
     Returns:
         Created assignment
     """
+    # Check if user can assign to this requirement
+    if not can_assign_to_requirement(current_user, assignment.requirement_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to assign users to this requirement"
+        )
+
     try:
         new_assignment = Assignment(
             id=str(uuid.uuid4()),
@@ -80,6 +137,7 @@ async def create_assignment(
 @router.post("/batch", response_model=List[AssignmentResponse], status_code=status.HTTP_201_CREATED)
 async def create_assignments_batch(
     batch: AssignmentBatchCreate,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -87,13 +145,27 @@ async def create_assignments_batch(
 
     Assigns multiple users to a single requirement
 
+    Permission:
+    - ADMIN: Can assign to any requirement
+    - OWNER: Can assign to any requirement in their indices
+    - SUPERVISOR: Can only assign to requirements they are assigned to
+    - CONTRIBUTOR: Cannot assign
+
     Args:
         batch: Batch assignment data
+        current_user: Current authenticated user
         db: Database session
 
     Returns:
         List of created assignments
     """
+    # Check if user can assign to this requirement
+    if not can_assign_to_requirement(current_user, batch.requirement_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to assign users to this requirement"
+        )
+
     created_assignments = []
 
     try:

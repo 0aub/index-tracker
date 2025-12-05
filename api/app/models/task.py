@@ -39,8 +39,9 @@ class Task(Base):
     status = Column(SQLEnum(TaskStatus), nullable=False, default=TaskStatus.TODO, index=True)
     priority = Column(SQLEnum(TaskPriority), nullable=False, default=TaskPriority.MEDIUM, index=True)
 
-    # Optional Index Association
+    # Optional Index and Requirement Association
     index_id = Column(String, ForeignKey("indices.id"), nullable=True, index=True)
+    requirement_id = Column(String, ForeignKey("requirements.id"), nullable=True, index=True)
 
     # Creator and Timestamps
     created_by = Column(String, ForeignKey("users.id"), nullable=False, index=True)
@@ -54,6 +55,7 @@ class Task(Base):
     # Relationships
     creator = relationship("User", foreign_keys=[created_by], backref="created_tasks")
     index = relationship("Index", foreign_keys=[index_id], backref="tasks")
+    requirement = relationship("Requirement", foreign_keys=[requirement_id], backref="tasks")
     assignments = relationship("TaskAssignment", back_populates="task", cascade="all, delete-orphan")
     comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan", order_by="TaskComment.created_at.desc()")
     notifications = relationship("Notification", back_populates="task", cascade="all, delete-orphan")

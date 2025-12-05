@@ -133,7 +133,7 @@ class PermissionChecker:
         Check if user can edit a requirement
         ADMIN: Can edit any requirement
         OWNER: Can edit requirements in their indices
-        SUPERVISOR: Can edit requirements in their indices
+        SUPERVISOR: Can only edit requirements assigned to them
         CONTRIBUTOR: Cannot edit requirements
         """
         if self.is_admin:
@@ -149,14 +149,31 @@ class PermissionChecker:
 
         # Check per-index role
         index_role = self.get_index_role(requirement.index_id)
-        return index_role in [IndexUserRole.OWNER, IndexUserRole.SUPERVISOR]
+
+        # Owner can edit any requirement
+        if index_role == IndexUserRole.OWNER:
+            return True
+
+        # Supervisor can only edit requirements assigned to them
+        if index_role == IndexUserRole.SUPERVISOR:
+            assignment = (
+                self.db.query(Assignment)
+                .filter(
+                    Assignment.requirement_id == requirement_id,
+                    Assignment.user_id == self.user.id
+                )
+                .first()
+            )
+            return assignment is not None
+
+        return False
 
     def can_manage_requirements(self, index_id: str) -> bool:
         """
         Check if user can create/edit/delete/reorder requirements for an index
         ADMIN: Can manage all requirements
         OWNER: Can manage requirements in their indices
-        SUPERVISOR: Can manage requirements in their indices
+        SUPERVISOR: Cannot create new requirements (only manage assigned ones)
         CONTRIBUTOR: Cannot manage requirements
         """
         if self.is_admin:
@@ -165,9 +182,9 @@ class PermissionChecker:
         if not self.has_index_access(index_id):
             return False
 
-        # Check per-index role
+        # Check per-index role - only OWNER can create new requirements
         index_role = self.get_index_role(index_id)
-        return index_role in [IndexUserRole.OWNER, IndexUserRole.SUPERVISOR]
+        return index_role == IndexUserRole.OWNER
 
     def can_submit_evidence(self, requirement_id: str) -> bool:
         """
@@ -224,7 +241,8 @@ class PermissionChecker:
     def get_accessible_requirement_ids(self, index_id: str) -> List[str]:
         """
         Get list of requirement IDs the user can access within an index
-        ADMIN, OWNER, SUPERVISOR: All requirements
+        ADMIN, OWNER: All requirements
+        SUPERVISOR: Only assigned requirements (can add contributors to their assigned requirements)
         CONTRIBUTOR: Only assigned requirements
         """
         if self.is_admin:
@@ -241,8 +259,8 @@ class PermissionChecker:
 
         index_role = self.get_index_role(index_id)
 
-        # OWNER and SUPERVISOR see all requirements
-        if index_role in [IndexUserRole.OWNER, IndexUserRole.SUPERVISOR]:
+        # OWNER sees all requirements
+        if index_role == IndexUserRole.OWNER:
             requirements = (
                 self.db.query(Requirement.id)
                 .filter(Requirement.index_id == index_id)
@@ -250,8 +268,8 @@ class PermissionChecker:
             )
             return [r.id for r in requirements]
 
-        # CONTRIBUTOR only sees assigned requirements
-        if index_role == IndexUserRole.CONTRIBUTOR:
+        # SUPERVISOR and CONTRIBUTOR only see assigned requirements
+        if index_role in [IndexUserRole.SUPERVISOR, IndexUserRole.CONTRIBUTOR]:
             assignments = (
                 self.db.query(Assignment.requirement_id)
                 .filter(Assignment.user_id == self.user.id)

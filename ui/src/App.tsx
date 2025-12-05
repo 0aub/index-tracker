@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ManagementRoute from './components/auth/ManagementRoute';
+import OwnerRoute from './components/auth/OwnerRoute';
 import AdminRoute from './components/auth/AdminRoute';
 import Login from './pages/Login';
 import MainLayout from './components/common/MainLayout';
@@ -23,6 +24,9 @@ import Forbidden from './pages/Forbidden';
 import ServerError from './pages/ServerError';
 import FirstTimeSetup from './pages/FirstTimeSetup';
 import OrganizationHierarchy from './pages/OrganizationHierarchy';
+import KnowledgeCenter from './pages/KnowledgeCenter';
+import Support from './pages/Support';
+import EvidenceManagement from './pages/EvidenceManagement';
 import { useUIStore } from './stores/uiStore';
 
 function App() {
@@ -95,31 +99,31 @@ function App() {
           >
             <Route index element={<Home />} />
             <Route path="home" element={<Home />} />
-            {/* Index Management - Only accessible to management team */}
+            {/* Index Management - Only accessible to admin and owners */}
             <Route
               path="index"
               element={
-                <ManagementRoute>
+                <OwnerRoute>
                   <Indices />
-                </ManagementRoute>
+                </OwnerRoute>
               }
             />
             <Route
               path="index/new"
               element={
-                <ManagementRoute>
+                <OwnerRoute>
                   <IndexCreate />
-                </ManagementRoute>
+                </OwnerRoute>
               }
             />
             <Route path="dashboard" element={<Dashboard />} />
-            {/* Reports - Only accessible to management team */}
+            {/* Reports - Only accessible to admin and owners */}
             <Route
               path="reports"
               element={
-                <ManagementRoute>
+                <OwnerRoute>
                   <Reports />
-                </ManagementRoute>
+                </OwnerRoute>
               }
             />
             {/* Requirements - Accessible to all authenticated users */}
@@ -127,15 +131,21 @@ function App() {
             <Route path="requirements/:id" element={<RequirementDetail />} />
             {/* Tasks page - Accessible to all authenticated users (backend filters by role) */}
             <Route path="tasks" element={<Tasks />} />
+            {/* Knowledge Center - Accessible to all authenticated users (only shows for ETARI indexes) */}
+            <Route path="knowledge" element={<KnowledgeCenter />} />
+            {/* Support - Accessible to all authenticated users (only shows for ETARI indexes) */}
+            <Route path="support" element={<Support />} />
+            {/* Evidence Management - Accessible to all authenticated users (only shows for ETARI indexes) */}
+            <Route path="evidence-management" element={<EvidenceManagement />} />
             {/* Notifications page - Accessible to all authenticated users */}
             <Route path="notifications" element={<Notifications />} />
-            {/* Users - Only accessible to management team */}
+            {/* Users - Only accessible to admin and owners */}
             <Route
               path="users"
               element={
-                <ManagementRoute>
+                <OwnerRoute>
                   <Users />
-                </ManagementRoute>
+                </OwnerRoute>
               }
             />
             {/* Organization Hierarchy - Admin only */}

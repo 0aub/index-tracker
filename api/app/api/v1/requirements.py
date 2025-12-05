@@ -26,10 +26,11 @@ from app.schemas.requirement import (
 )
 from app.models.requirement import Requirement, MaturityLevel
 from app.models.requirement_activity import RequirementActivity
-from app.models.evidence import Evidence
+from app.models.evidence import Evidence, EvidenceVersion
 from app.models.recommendation import Recommendation
 from app.models.index import Index
 from app.models.user import User
+from app.models.section_mapping import SectionMapping
 from datetime import datetime
 import uuid
 
@@ -802,6 +803,14 @@ async def get_previous_year_context(
         t2 = text2.strip().lower()
         return SequenceMatcher(None, t1, t2).ratio()
 
+    def get_evidence_mime_type(evidence: Evidence) -> Optional[str]:
+        """Get MIME type for an evidence from its current version"""
+        version = db.query(EvidenceVersion).filter(
+            EvidenceVersion.evidence_id == evidence.id,
+            EvidenceVersion.version_number == evidence.current_version
+        ).first()
+        return version.mime_type if version else None
+
     # Get the current requirement
     requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
     if not requirement:
@@ -833,14 +842,94 @@ async def get_previous_year_context(
         # No previous year index found
         return None
 
-    # Find all requirements in the previous index with the same المعيار (sub_domain_ar)
+    # ========================================================================
+    # SECTION MAPPING LOOKUP
+    # Check if there are section mappings from current index to previous index
+    # The mappings store: current_index -> previous_index category name translations
+    # ========================================================================
+
+    # Get the sub_domain to search for in the previous index
+    # By default, use the same name from current requirement
+    previous_sub_domain_ar = requirement.sub_domain_ar
+    previous_element_ar = requirement.element_ar
+    previous_main_area_ar = requirement.main_area_ar
+
+    # Look up section mappings (current -> previous)
+    # Note: The mapping stores "from" = previous index values, "to" = current index values
+    # So we need to find where "to" matches our current requirement values
+
+    # First try to find a sub_domain level mapping
+    if requirement.sub_domain_ar:
+        sub_domain_mapping = db.query(SectionMapping).filter(
+            SectionMapping.current_index_id == current_index.id,
+            SectionMapping.previous_index_id == previous_index.id,
+            SectionMapping.sub_domain_to_ar == requirement.sub_domain_ar
+        ).first()
+
+        if sub_domain_mapping:
+            previous_sub_domain_ar = sub_domain_mapping.sub_domain_from_ar
+            # Also use the mapped element and main_area if available
+            if sub_domain_mapping.element_from_ar:
+                previous_element_ar = sub_domain_mapping.element_from_ar
+            if sub_domain_mapping.main_area_from_ar:
+                previous_main_area_ar = sub_domain_mapping.main_area_from_ar
+
+    # If no sub_domain mapping found, try element level mapping
+    if previous_sub_domain_ar == requirement.sub_domain_ar and requirement.element_ar:
+        element_mapping = db.query(SectionMapping).filter(
+            SectionMapping.current_index_id == current_index.id,
+            SectionMapping.previous_index_id == previous_index.id,
+            SectionMapping.element_to_ar == requirement.element_ar,
+            SectionMapping.sub_domain_to_ar == None
+        ).first()
+
+        if element_mapping:
+            previous_element_ar = element_mapping.element_from_ar
+            if element_mapping.main_area_from_ar:
+                previous_main_area_ar = element_mapping.main_area_from_ar
+
+    # If still no mapping, try main_area level mapping
+    if previous_main_area_ar == requirement.main_area_ar and requirement.main_area_ar:
+        main_area_mapping = db.query(SectionMapping).filter(
+            SectionMapping.current_index_id == current_index.id,
+            SectionMapping.previous_index_id == previous_index.id,
+            SectionMapping.main_area_to_ar == requirement.main_area_ar,
+            SectionMapping.element_to_ar == None,
+            SectionMapping.sub_domain_to_ar == None
+        ).first()
+
+        if main_area_mapping:
+            previous_main_area_ar = main_area_mapping.main_area_from_ar
+
+    # ========================================================================
+    # FIND PREVIOUS REQUIREMENTS
+    # Use the mapped (or original) sub_domain_ar to find requirements
+    # ========================================================================
+
+    # Find all requirements in the previous index with the mapped المعيار (sub_domain_ar)
     previous_requirements_in_standard = db.query(Requirement).filter(
         Requirement.index_id == previous_index.id,
-        Requirement.sub_domain_ar == requirement.sub_domain_ar
+        Requirement.sub_domain_ar == previous_sub_domain_ar
     ).all()
 
     if not previous_requirements_in_standard:
-        # No requirements in the same المعيار
+        # No requirements in the same المعيار, even with mapping
+        # Try a broader search using element_ar if available
+        if previous_element_ar:
+            previous_requirements_in_standard = db.query(Requirement).filter(
+                Requirement.index_id == previous_index.id,
+                Requirement.element_ar == previous_element_ar
+            ).all()
+
+        # If still nothing, try main_area_ar
+        if not previous_requirements_in_standard and previous_main_area_ar:
+            previous_requirements_in_standard = db.query(Requirement).filter(
+                Requirement.index_id == previous_index.id,
+                Requirement.main_area_ar == previous_main_area_ar
+            ).all()
+
+    if not previous_requirements_in_standard:
+        # No requirements found even with fallbacks
         return None
 
     # Try to find matching requirement by question text similarity
@@ -870,13 +959,14 @@ async def get_previous_year_context(
             Recommendation.index_id == previous_index.id
         ).first()
 
-        # Build evidence list
+        # Build evidence list with mime_type
         evidence_list = [
             PreviousEvidenceResponse(
                 id=e.id,
                 document_name=e.document_name,
                 status=e.status,
                 current_version=e.current_version,
+                mime_type=get_evidence_mime_type(e),
                 created_at=e.created_at
             )
             for e in matched_evidence
@@ -887,6 +977,8 @@ async def get_previous_year_context(
         if matched_recommendation:
             recommendation_data = PreviousRecommendationResponse(
                 id=matched_recommendation.id,
+                current_status_ar=matched_recommendation.current_status_ar,
+                current_status_en=matched_recommendation.current_status_en,
                 recommendation_ar=matched_recommendation.recommendation_ar,
                 recommendation_en=matched_recommendation.recommendation_en,
                 status=matched_recommendation.status,
@@ -928,6 +1020,8 @@ async def get_previous_year_context(
             if rec:
                 group_recommendation = PreviousRecommendationResponse(
                     id=rec.id,
+                    current_status_ar=rec.current_status_ar,
+                    current_status_en=rec.current_status_en,
                     recommendation_ar=rec.recommendation_ar,
                     recommendation_en=rec.recommendation_en,
                     status=rec.status,
@@ -949,6 +1043,7 @@ async def get_previous_year_context(
                     document_name=e.document_name,
                     status=e.status,
                     current_version=e.current_version,
+                    mime_type=get_evidence_mime_type(e),
                     created_at=e.created_at
                 )
                 for e in req_evidence
@@ -965,9 +1060,10 @@ async def get_previous_year_context(
             ))
 
         # Build المعيار group data
+        # Use the mapped previous_sub_domain_ar to show the actual previous year category name
         standard_data = StandardGroupData(
-            sub_domain_ar=requirement.sub_domain_ar,
-            sub_domain_en=requirement.sub_domain_en,
+            sub_domain_ar=previous_sub_domain_ar,  # Use mapped name from previous index
+            sub_domain_en=requirement.sub_domain_en,  # Keep current for display purposes
             recommendation=group_recommendation,
             requirements=group_requirements
         )

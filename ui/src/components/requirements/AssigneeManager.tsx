@@ -4,6 +4,7 @@ import { colors, patterns } from '../../utils/darkMode';
 import toast from 'react-hot-toast';
 import { api, User, AssignmentWithUser } from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
+import UserSearchSelector from '../common/UserSearchSelector';
 
 interface AssigneeManagerProps {
   requirementId: string;
@@ -148,42 +149,43 @@ const AssigneeManager = ({ requirementId, indexId, onSave, onClose, lang }: Assi
                 <label className={`block text-sm font-semibold mb-2 ${colors.textPrimary}`}>
                   {lang === 'ar' ? 'إضافة مسؤول' : 'Add Assignee'}
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
-                    className={`flex-1 px-4 py-2 ${patterns.select}`}
-                    disabled={saving}
-                  >
-                    <option value="">
-                      {lang === 'ar' ? 'اختر مستخدم...' : 'Select a user...'}
-                    </option>
-                    {availableUsers.map(user => (
-                      <option key={user.id} value={user.id}>
-                        {lang === 'ar' ? user.full_name_ar : user.full_name_en || user.full_name_ar}
-                        {' '}
-                        ({user.role === 'owner'
-                          ? (lang === 'ar' ? 'مالك' : 'Owner')
-                          : user.role === 'supervisor'
-                          ? (lang === 'ar' ? 'مشرف' : 'Supervisor')
-                          : (lang === 'ar' ? 'مساهم' : 'Contributor')
-                        })
-                      </option>
-                    ))}
-                  </select>
+
+                {/* User Search Selector */}
+                <UserSearchSelector
+                  users={availableUsers.map(user => ({
+                    id: user.id,
+                    name: user.full_name_ar,
+                    name_en: user.full_name_en || user.full_name_ar,
+                    email: user.email,
+                    role: user.role as string,
+                  }))}
+                  selectedIds={selectedUser ? [selectedUser] : []}
+                  onSelect={(userId) => setSelectedUser(userId)}
+                  onDeselect={() => setSelectedUser('')}
+                  placeholder={{
+                    ar: 'ابحث بالاسم أو البريد الإلكتروني...',
+                    en: 'Search by name or email...'
+                  }}
+                  multiple={false}
+                  showRole={true}
+                  disabled={saving}
+                />
+
+                {/* Add Button */}
+                {selectedUser && (
                   <button
                     onClick={handleAddAssignee}
                     disabled={!selectedUser || saving}
-                    className={`flex items-center gap-2 px-4 py-2 ${patterns.button} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className={`mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 ${patterns.button} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {saving ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                       <UserPlus size={20} />
                     )}
-                    <span>{lang === 'ar' ? 'إضافة' : 'Add'}</span>
+                    <span>{lang === 'ar' ? 'إضافة المسؤول' : 'Add Assignee'}</span>
                   </button>
-                </div>
+                )}
               </div>
 
               {/* Current Assignees */}

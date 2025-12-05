@@ -30,6 +30,20 @@ class IndexCreateFromExcel(BaseModel):
     organization_id: str
 
 
+# Schema for creating an empty index (without Excel)
+class IndexCreateEmpty(BaseModel):
+    code: str = Field(..., min_length=2, max_length=50)
+    index_type: str = Field(..., description="Type of index: NAII, ETARI, etc.")
+    name_ar: str = Field(..., min_length=3, max_length=200)
+    name_en: Optional[str] = Field(None, max_length=200)
+    description_ar: Optional[str] = None
+    description_en: Optional[str] = None
+    version: str = Field(default="1.0", max_length=20)
+    organization_id: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+
 # Schema for updating index
 class IndexUpdate(BaseModel):
     name_ar: Optional[str] = Field(None, min_length=3, max_length=200)
@@ -59,6 +73,8 @@ class IndexResponse(IndexBase):
     is_completed: bool = False
     completed_at: Optional[datetime] = None
     previous_index_id: Optional[str] = None
+    # User's role in this specific index (from index_users table)
+    user_role: Optional[str] = None  # OWNER, SUPERVISOR, CONTRIBUTOR
 
     class Config:
         from_attributes = True
@@ -105,6 +121,8 @@ class UserEngagementStats(BaseModel):
     username: str
     full_name_ar: Optional[str] = None
     full_name_en: Optional[str] = None
+    user_role: Optional[str] = None  # System role (ADMIN, INDEX_MANAGER, etc.)
+    index_role: Optional[str] = None  # Index role (OWNER, SUPERVISOR, CONTRIBUTOR)
     approved_documents: int
     assigned_requirements: int
     rejected_documents: int
@@ -112,6 +130,11 @@ class UserEngagementStats(BaseModel):
     total_comments: int
     documents_reviewed: int = 0  # Documents this user reviewed (approved/rejected)
     review_comments: int = 0  # Comments made while reviewing others' documents
+    # New fields for detailed tracking
+    draft_documents: int = 0  # Documents saved as drafts
+    submitted_documents: int = 0  # Documents submitted for review
+    confirmed_documents: int = 0  # Documents confirmed by owner
+    checklist_items_completed: int = 0  # Checklist items marked as done
 
     class Config:
         from_attributes = True

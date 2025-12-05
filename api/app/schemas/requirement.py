@@ -198,6 +198,7 @@ class PreviousEvidenceResponse(BaseModel):
     document_name: str
     status: str
     current_version: int
+    mime_type: Optional[str] = None  # MIME type of the current version
     created_at: datetime
 
     class Config:
@@ -207,6 +208,8 @@ class PreviousEvidenceResponse(BaseModel):
 # Schema for previous recommendation
 class PreviousRecommendationResponse(BaseModel):
     id: str
+    current_status_ar: Optional[str] = None  # الوضع الراهن
+    current_status_en: Optional[str] = None
     recommendation_ar: str
     recommendation_en: Optional[str] = None
     status: str

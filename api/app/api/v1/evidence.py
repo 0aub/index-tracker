@@ -536,8 +536,13 @@ async def download_evidence(
             detail=f"Version {version} not found"
         )
 
+    # Normalize file path - handle both relative and absolute paths
+    file_path = evidence_version.file_path
+    if not file_path.startswith('/app/uploads'):
+        file_path = f"/app/uploads/evidence/{file_path}"
+
     # Check if file exists
-    if not os.path.exists(evidence_version.file_path):
+    if not os.path.exists(file_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found on disk"
@@ -545,7 +550,7 @@ async def download_evidence(
 
     # Return file
     return FileResponse(
-        path=evidence_version.file_path,
+        path=file_path,
         filename=evidence_version.filename,
         media_type=evidence_version.mime_type or 'application/octet-stream'
     )
@@ -619,8 +624,13 @@ async def copy_evidence(
                 detail="Source evidence has no file to copy"
             )
 
+        # Normalize source file path - handle both relative and absolute paths
+        source_file_path = source_version.file_path
+        if not source_file_path.startswith('/app/uploads'):
+            source_file_path = f"/app/uploads/evidence/{source_file_path}"
+
         # Check if source file exists
-        if not os.path.exists(source_version.file_path):
+        if not os.path.exists(source_file_path):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Source evidence file not found on disk"
@@ -643,11 +653,11 @@ async def copy_evidence(
         os.makedirs(new_upload_dir, exist_ok=True)
 
         # Copy the file
-        source_filename = os.path.basename(source_version.file_path)
+        source_filename = os.path.basename(source_file_path)
         new_filename = f"v1_{source_evidence.document_name}_{os.path.splitext(source_filename)[1]}"
         new_file_path = os.path.join(new_upload_dir, new_filename)
 
-        shutil.copy2(source_version.file_path, new_file_path)
+        shutil.copy2(source_file_path, new_file_path)
         file_size = os.path.getsize(new_file_path)
 
         # Create new Evidence record

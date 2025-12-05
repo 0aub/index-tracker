@@ -3,6 +3,7 @@ Authentication API Endpoints - Login, Logout, Token Management
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import bcrypt
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timedelta
@@ -55,8 +56,8 @@ def login(
 
     Returns JWT access token and user information
     """
-    # Find user by email
-    user = db.query(User).filter(User.email == login_data.email).first()
+    # Find user by email (case-insensitive)
+    user = db.query(User).filter(func.lower(User.email) == login_data.email.lower()).first()
 
     if not user:
         raise HTTPException(
@@ -106,7 +107,7 @@ def login(
             "email": user.email,
             "full_name_ar": user.full_name_ar,
             "full_name_en": user.full_name_en,
-            "role": user.role.value,
+            "role": user.role.value if user.role else None,
             "is_first_login": user.is_first_login,
             "is_active": user.is_active,
             "department_ar": user.department_ar,
@@ -132,7 +133,7 @@ def get_me(
         email=current_user.email,
         full_name_ar=current_user.full_name_ar,
         full_name_en=current_user.full_name_en,
-        role=current_user.role.value,
+        role=current_user.role.value if current_user.role else None,
         is_first_login=current_user.is_first_login,
         is_active=current_user.is_active,
         department_ar=current_user.department_ar,

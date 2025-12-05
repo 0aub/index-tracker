@@ -24,7 +24,8 @@ from app.schemas.user_management import (
     ChangePasswordRequest, ChangePasswordResponse,
     UserWithIndexRoles, UserIndexRole,
     ResetPasswordRequest, ResetPasswordResponse,
-    UpdateUserStatusRequest, UpdateUserStatusResponse
+    UpdateUserStatusRequest, UpdateUserStatusResponse,
+    UpdateUserRequest, UpdateUserResponse
 )
 from app.utils.password_generator import generate_temp_password, validate_password_strength
 from app.services.email_service import email_service
@@ -77,7 +78,7 @@ def create_user(
         hashed_password=hashed_password,
         full_name_ar="مستخدم جديد",  # Placeholder, will be updated on first login
         full_name_en="New User",
-        role=UserRole.UNASSIGNED,  # No role until assigned to an index
+        role=None,  # No system role - roles are assigned per-index
         organization_id=org.id,
         is_active=False,  # Inactive until first-time setup is completed
         is_first_login=True,
@@ -376,4 +377,76 @@ def update_user_status(
         message=f"User {status_text} successfully",
         user_id=user.id,
         is_active=user.is_active
+    )
+
+
+# ===== Update User Details (Admin) =====
+
+@router.post("/users/update", response_model=UpdateUserResponse)
+def update_user(
+    update_data: UpdateUserRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Update user details (Admin only)
+
+    Allows admin to update user's name and organizational hierarchy
+    """
+    user = db.query(User).filter(User.id == update_data.user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Update name fields if provided
+    if update_data.first_name_ar is not None:
+        user.first_name_ar = update_data.first_name_ar
+    if update_data.last_name_ar is not None:
+        user.last_name_ar = update_data.last_name_ar
+    if update_data.first_name_en is not None:
+        user.first_name_en = update_data.first_name_en
+    if update_data.last_name_en is not None:
+        user.last_name_en = update_data.last_name_en
+
+    # Update full names if first/last names provided
+    if update_data.first_name_ar is not None or update_data.last_name_ar is not None:
+        first_ar = update_data.first_name_ar or user.first_name_ar or ""
+        last_ar = update_data.last_name_ar or user.last_name_ar or ""
+        user.full_name_ar = f"{first_ar} {last_ar}".strip()
+
+    if update_data.first_name_en is not None or update_data.last_name_en is not None:
+        first_en = update_data.first_name_en or user.first_name_en or ""
+        last_en = update_data.last_name_en or user.last_name_en or ""
+        user.full_name_en = f"{first_en} {last_en}".strip() if first_en or last_en else None
+
+    # Update organizational hierarchy if provided
+    if update_data.agency_id is not None:
+        # Verify agency exists
+        agency = db.query(Agency).filter(Agency.id == update_data.agency_id).first()
+        if not agency:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agency ID")
+        user.agency_id = update_data.agency_id
+
+    if update_data.general_management_id is not None:
+        # Verify GM exists
+        gm = db.query(GeneralManagement).filter(GeneralManagement.id == update_data.general_management_id).first()
+        if not gm:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid general management ID")
+        user.general_management_id = update_data.general_management_id
+
+    if update_data.department_id is not None:
+        # Verify department exists
+        dept = db.query(Department).filter(Department.id == update_data.department_id).first()
+        if not dept:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid department ID")
+        user.department_id = update_data.department_id
+
+    db.commit()
+    db.refresh(user)
+
+    return UpdateUserResponse(
+        message="User updated successfully",
+        user_id=user.id,
+        full_name_ar=user.full_name_ar,
+        full_name_en=user.full_name_en
     )

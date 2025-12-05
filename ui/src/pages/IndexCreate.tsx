@@ -1,9 +1,9 @@
 /**
- * Index Create Page - Upload Excel to create new index
+ * Index Create Page - Create new index with optional Excel upload
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Download, Loader2, FileSpreadsheet, Check, X, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Upload, Download, Loader2, FileSpreadsheet, Check, X, AlertCircle, ChevronUp, ChevronDown, Calendar } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -66,6 +66,9 @@ const IndexCreate: React.FC = () => {
   const [selectedTemplate, setSelectedTemplate] = useState('naii'); // Default to NAII
   const [ownerEmail, setOwnerEmail] = useState(user?.email || '');
   const [indexYear, setIndexYear] = useState(new Date().getFullYear().toString());
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [useExcel, setUseExcel] = useState(true); // Toggle between Excel and empty index creation
 
   // Get selected template data - ensure it's an active template
   const selectedTemplateData = TEMPLATES.find(t => t.id === selectedTemplate && t.active) || TEMPLATES[0];
@@ -104,8 +107,8 @@ const IndexCreate: React.FC = () => {
       return;
     }
 
-    if (!file) {
-      toast.error(lang === 'ar' ? 'يرجى اختيار ملف Excel' : 'Please select an Excel file');
+    if (useExcel && !file) {
+      toast.error(lang === 'ar' ? 'يرجى اختيار ملف Excel أو إنشاء مؤشر فارغ' : 'Please select an Excel file or create an empty index');
       return;
     }
 
@@ -118,17 +121,41 @@ const IndexCreate: React.FC = () => {
       setUploading(true);
 
       const indexCode = `${selectedTemplateData.code}-${indexYear}`;
+      let index;
 
-      const index = await api.indices.createFromExcel({
-        file,
-        code: indexCode,
-        index_type: selectedTemplateData.code,  // Pass index type (NAII, ETARI, etc.)
-        name_ar: selectedTemplateData.name_ar,
-        name_en: selectedTemplateData.name_en,
-        version: '1.0',
-        organization_id: '404bb2f7-672d-4f65-b907-6b2bea76a55f', // Default organization
-        created_by_user_id: user?.id || 'unknown',
-      });
+      if (useExcel && file) {
+        // Create from Excel
+        index = await api.indices.createFromExcel({
+          file,
+          code: indexCode,
+          index_type: selectedTemplateData.code,
+          name_ar: selectedTemplateData.name_ar,
+          name_en: selectedTemplateData.name_en,
+          version: '1.0',
+          organization_id: '404bb2f7-672d-4f65-b907-6b2bea76a55f',
+          created_by_user_id: user?.id || 'unknown',
+        });
+
+        // Update dates if provided (separate call since Excel upload doesn't include dates)
+        if (startDate || endDate) {
+          await api.indices.update(index.id, {
+            start_date: startDate ? new Date(startDate).toISOString() : undefined,
+            end_date: endDate ? new Date(endDate).toISOString() : undefined,
+          });
+        }
+      } else {
+        // Create empty index
+        index = await api.indices.createEmpty({
+          code: indexCode,
+          index_type: selectedTemplateData.code,
+          name_ar: selectedTemplateData.name_ar,
+          name_en: selectedTemplateData.name_en,
+          version: '1.0',
+          organization_id: '404bb2f7-672d-4f65-b907-6b2bea76a55f',
+          start_date: startDate ? new Date(startDate).toISOString() : undefined,
+          end_date: endDate ? new Date(endDate).toISOString() : undefined,
+        });
+      }
 
       toast.success(
         lang === 'ar'
@@ -309,77 +336,165 @@ const IndexCreate: React.FC = () => {
             </div>
           </div>
 
-          {/* Step 3: Download & Upload Template */}
+          {/* Step 3: Dates */}
           <div className={`${colors.bgSecondary} rounded-xl shadow-lg dark:shadow-gray-900/50 p-6`}>
             <div className="flex items-center gap-3 mb-4">
               <div className={`px-3 py-1.5 border ${colors.border} rounded-md flex items-center justify-center ${colors.textSecondary} font-medium`}>
                 3
               </div>
               <h2 className={`text-xl font-bold ${colors.textPrimary}`}>
-                {lang === 'ar' ? 'القالب والملف' : 'Template & File'}
+                {lang === 'ar' ? 'تواريخ المؤشر' : 'Index Dates'}
               </h2>
             </div>
 
-            <div className="space-y-4">
-              {/* Download Template */}
-              <div className={`flex items-start gap-3 p-4 border ${colors.border} rounded-lg`}>
-                <FileSpreadsheet className={`w-6 h-6 ${colors.primaryIcon} flex-shrink-0 mt-1`} />
-                <div className="flex-1">
-                  <p className={`text-sm ${colors.textSecondary} mb-3`}>
-                    {lang === 'ar'
-                      ? 'حمّل القالب، املأه بالبيانات، ثم ارفعه أدناه'
-                      : 'Download the template, fill it with data, then upload it below'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleDownloadTemplate}
-                    className={`flex items-center gap-2 px-4 py-2 ${patterns.button} text-sm`}
-                  >
-                    <Download className="w-4 h-4" />
-                    {lang === 'ar' ? 'تحميل القالب' : 'Download Template'}
-                  </button>
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Start Date */}
+              <div>
+                <label className={`block text-sm font-medium ${colors.textSecondary} mb-2`}>
+                  <Calendar className="w-4 h-4 inline-block me-1" />
+                  {lang === 'ar' ? 'تاريخ البدء' : 'Start Date'}
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={`w-full px-4 py-3 ${patterns.input}`}
+                />
+                <p className={`text-xs ${colors.textSecondary} mt-1`}>
+                  {lang === 'ar'
+                    ? 'عند الوصول لهذا التاريخ، تتغير الحالة إلى "قيد التنفيذ" تلقائياً'
+                    : 'When this date is reached, status changes to "In Progress" automatically'}
+                </p>
               </div>
 
-              {/* Upload File */}
-              <div className={`border-2 border-dashed ${colors.border} rounded-lg p-6`}>
-                <div className="text-center">
-                  {file ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-center gap-2">
-                        <FileSpreadsheet className={`w-10 h-10 ${colors.primaryIcon}`} />
+              {/* End Date */}
+              <div>
+                <label className={`block text-sm font-medium ${colors.textSecondary} mb-2`}>
+                  <Calendar className="w-4 h-4 inline-block me-1" />
+                  {lang === 'ar' ? 'تاريخ الانتهاء' : 'End Date'}
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate || undefined}
+                  className={`w-full px-4 py-3 ${patterns.input}`}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Step 4: Requirements Method */}
+          <div className={`${colors.bgSecondary} rounded-xl shadow-lg dark:shadow-gray-900/50 p-6`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`px-3 py-1.5 border ${colors.border} rounded-md flex items-center justify-center ${colors.textSecondary} font-medium`}>
+                4
+              </div>
+              <h2 className={`text-xl font-bold ${colors.textPrimary}`}>
+                {lang === 'ar' ? 'المتطلبات' : 'Requirements'}
+              </h2>
+            </div>
+
+            {/* Toggle between Excel and Empty */}
+            <div className="flex gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => setUseExcel(true)}
+                className={`flex-1 p-3 rounded-lg border-2 transition-all ${
+                  useExcel
+                    ? `border-[rgb(var(--color-focus-ring))] ${colors.primaryLight}`
+                    : `${colors.border} hover:${colors.borderHover}`
+                }`}
+              >
+                <FileSpreadsheet className={`w-6 h-6 mx-auto mb-2 ${useExcel ? colors.primaryIcon : colors.textSecondary}`} />
+                <p className={`text-sm font-medium ${useExcel ? colors.primaryIcon : colors.textPrimary}`}>
+                  {lang === 'ar' ? 'رفع ملف Excel' : 'Upload Excel File'}
+                </p>
+                <p className={`text-xs ${colors.textSecondary} mt-1`}>
+                  {lang === 'ar' ? 'استيراد المتطلبات من ملف' : 'Import requirements from file'}
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setUseExcel(false); setFile(null); }}
+                className={`flex-1 p-3 rounded-lg border-2 transition-all ${
+                  !useExcel
+                    ? `border-[rgb(var(--color-focus-ring))] ${colors.primaryLight}`
+                    : `${colors.border} hover:${colors.borderHover}`
+                }`}
+              >
+                <Upload className={`w-6 h-6 mx-auto mb-2 ${!useExcel ? colors.primaryIcon : colors.textSecondary}`} />
+                <p className={`text-sm font-medium ${!useExcel ? colors.primaryIcon : colors.textPrimary}`}>
+                  {lang === 'ar' ? 'إنشاء فارغ' : 'Create Empty'}
+                </p>
+                <p className={`text-xs ${colors.textSecondary} mt-1`}>
+                  {lang === 'ar' ? 'إضافة المتطلبات يدوياً لاحقاً' : 'Add requirements manually later'}
+                </p>
+              </button>
+            </div>
+
+            {/* Excel Upload Section - Only show if useExcel is true */}
+            {useExcel && (
+              <div className="space-y-4">
+                {/* Download Template */}
+                <div className={`flex items-start gap-3 p-4 border ${colors.border} rounded-lg`}>
+                  <FileSpreadsheet className={`w-6 h-6 ${colors.primaryIcon} flex-shrink-0 mt-1`} />
+                  <div className="flex-1">
+                    <p className={`text-sm ${colors.textSecondary} mb-3`}>
+                      {lang === 'ar'
+                        ? 'حمّل القالب، املأه بالبيانات، ثم ارفعه أدناه'
+                        : 'Download the template, fill it with data, then upload it below'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleDownloadTemplate}
+                      className={`flex items-center gap-2 px-4 py-2 ${patterns.button} text-sm`}
+                    >
+                      <Download className="w-4 h-4" />
+                      {lang === 'ar' ? 'تحميل القالب' : 'Download Template'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Upload File */}
+                <div className={`border-2 border-dashed ${colors.border} rounded-lg p-6`}>
+                  <div className="text-center">
+                    {file ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-center gap-2">
+                          <FileSpreadsheet className={`w-10 h-10 ${colors.primaryIcon}`} />
+                        </div>
+                        <div className={`flex items-center justify-center gap-2 ${colors.primaryIcon}`}>
+                          <Check className="w-4 h-4" />
+                          <span className="text-sm font-medium">{file.name}</span>
+                        </div>
+                        <p className={`text-xs ${colors.textSecondary}`}>
+                          {(file.size / 1024).toFixed(2)} KB
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setFile(null)}
+                          className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium"
+                        >
+                          <X className="w-3 h-3" />
+                          {lang === 'ar' ? 'إزالة' : 'Remove'}
+                        </button>
                       </div>
-                      <div className={`flex items-center justify-center gap-2 ${colors.primaryIcon}`}>
-                        <Check className="w-4 h-4" />
-                        <span className="text-sm font-medium">{file.name}</span>
-                      </div>
-                      <p className={`text-xs ${colors.textSecondary}`}>
-                        {(file.size / 1024).toFixed(2)} KB
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setFile(null)}
-                        className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium"
-                      >
-                        <X className="w-3 h-3" />
-                        {lang === 'ar' ? 'إزالة' : 'Remove'}
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className={`w-12 h-12 ${colors.textSecondary} mx-auto mb-3`} />
-                      <p className={`text-sm ${colors.textSecondary} mb-3`}>
-                        {lang === 'ar'
-                          ? 'اسحب الملف هنا أو انقر للاختيار'
-                          : 'Drag file here or click to select'}
-                      </p>
-                      <label className={`inline-block px-4 py-2 ${patterns.button} cursor-pointer text-sm`}>
-                        {lang === 'ar' ? 'اختيار ملف' : 'Select File'}
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls"
-                          onChange={handleFileChange}
-                          className="hidden"
+                    ) : (
+                      <>
+                        <Upload className={`w-12 h-12 ${colors.textSecondary} mx-auto mb-3`} />
+                        <p className={`text-sm ${colors.textSecondary} mb-3`}>
+                          {lang === 'ar'
+                            ? 'اسحب الملف هنا أو انقر للاختيار'
+                            : 'Drag file here or click to select'}
+                        </p>
+                        <label className={`inline-block px-4 py-2 ${patterns.button} cursor-pointer text-sm`}>
+                          {lang === 'ar' ? 'اختيار ملف' : 'Select File'}
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={handleFileChange}
+                            className="hidden"
                         />
                       </label>
                       <p className={`text-xs ${colors.textSecondary} mt-2`}>
@@ -390,13 +505,25 @@ const IndexCreate: React.FC = () => {
                 </div>
               </div>
             </div>
+            )}
+
+            {/* Empty index info */}
+            {!useExcel && (
+              <div className={`p-4 border ${colors.border} rounded-lg bg-blue-50 dark:bg-blue-900/20`}>
+                <p className={`text-sm text-blue-700 dark:text-blue-300`}>
+                  {lang === 'ar'
+                    ? 'سيتم إنشاء مؤشر فارغ. يمكنك إضافة المتطلبات يدوياً من صفحة المتطلبات بعد إنشاء المؤشر.'
+                    : 'An empty index will be created. You can add requirements manually from the Requirements page after creating the index.'}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Step 4: Owner Email */}
+          {/* Step 5: Owner Email */}
           <div className={`${colors.bgSecondary} rounded-xl shadow-lg dark:shadow-gray-900/50 p-6`}>
             <div className="flex items-center gap-3 mb-4">
               <div className={`px-3 py-1.5 border ${colors.border} rounded-md flex items-center justify-center ${colors.textSecondary} font-medium`}>
-                4
+                5
               </div>
               <h2 className={`text-xl font-bold ${colors.textPrimary}`}>
                 {lang === 'ar' ? 'المسؤول' : 'Owner'}
@@ -424,22 +551,24 @@ const IndexCreate: React.FC = () => {
             </div>
           </div>
 
-          {/* Info Banner */}
-          <div className={`${colors.primaryLight} border-l-4 border-[rgb(var(--color-focus-ring))] p-4 rounded`}>
-            <div className="flex gap-3">
-              <AlertCircle className={`w-5 h-5 ${colors.primaryIcon} flex-shrink-0 mt-0.5`} />
-              <div>
-                <p className={`text-sm ${colors.textPrimary} font-medium mb-1`}>
-                  {lang === 'ar' ? 'ملاحظة هامة' : 'Important Note'}
-                </p>
-                <p className={`text-sm ${colors.textPrimary}`}>
-                  {lang === 'ar'
-                    ? 'تأكد من أن ملف Excel يتبع التنسيق الموجود في القالب بالضبط. أي تعديل في بنية الجدول قد يؤدي إلى فشل في الاستيراد.'
-                    : 'Make sure the Excel file follows the exact format in the template. Any modification to the table structure may result in import failure.'}
-                </p>
+          {/* Info Banner - Only for Excel mode */}
+          {useExcel && (
+            <div className={`${colors.primaryLight} border-l-4 border-[rgb(var(--color-focus-ring))] p-4 rounded`}>
+              <div className="flex gap-3">
+                <AlertCircle className={`w-5 h-5 ${colors.primaryIcon} flex-shrink-0 mt-0.5`} />
+                <div>
+                  <p className={`text-sm ${colors.textPrimary} font-medium mb-1`}>
+                    {lang === 'ar' ? 'ملاحظة هامة' : 'Important Note'}
+                  </p>
+                  <p className={`text-sm ${colors.textPrimary}`}>
+                    {lang === 'ar'
+                      ? 'تأكد من أن ملف Excel يتبع التنسيق الموجود في القالب بالضبط. أي تعديل في بنية الجدول قد يؤدي إلى فشل في الاستيراد.'
+                      : 'Make sure the Excel file follows the exact format in the template. Any modification to the table structure may result in import failure.'}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Actions */}
           <div className={`flex items-center justify-between pt-4 border-t ${colors.border}`}>
@@ -453,7 +582,7 @@ const IndexCreate: React.FC = () => {
             </button>
             <button
               type="submit"
-              disabled={uploading || !file || !ownerEmail || !indexYear}
+              disabled={uploading || (useExcel && !file) || !ownerEmail || !indexYear}
               className={`flex items-center gap-2 px-8 py-3 ${patterns.button} disabled:opacity-50 disabled:cursor-not-allowed font-medium`}
             >
               {uploading ? (

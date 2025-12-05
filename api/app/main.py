@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 
-from app.config import settings
+from app.config import settings, CORS_ORIGINS
 from app.database import init_db, engine, Base
 from app.api.v1.api import api_router
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Backend API for Raqib Index Management System",
+    description="Backend API for Sahem Index Management System",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json"
@@ -30,7 +30,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=CORS_ORIGINS,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
     allow_methods=settings.CORS_ALLOW_METHODS,
     allow_headers=settings.CORS_ALLOW_HEADERS,
@@ -75,7 +75,7 @@ async def health_check():
 async def root():
     """Root endpoint"""
     return {
-        "message": "Raqib Index Management System API",
+        "message": "Sahem Index Management System API",
         "version": settings.APP_VERSION,
         "docs": "/api/docs"
     }

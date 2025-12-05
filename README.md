@@ -1,4 +1,4 @@
-# راقب | Raqib - Index Management Platform
+# ساهم | Sahem - Smart Index Management Platform
 
 A comprehensive platform for managing and tracking organizational maturity indices with evidence-based assessment.
 
@@ -79,7 +79,7 @@ ADMIN_PASSWORD=new-secure-password
 
 2. **Update the database with new credentials:**
 ```bash
-docker exec -t raqib-api python3 /app/scripts/seed_admin.py
+docker exec -t sahem-api python3 /app/scripts/seed_admin.py
 ```
 
 3. **Restart the API container (if needed):**
@@ -217,17 +217,17 @@ docker-compose up -d
 
 ### Access PostgreSQL
 ```bash
-docker exec -it raqib-postgres psql -U raqib_user -d raqib_db
+docker exec -it sahem-postgres psql -U sahem_user -d sahem_db
 ```
 
 ### Run Migrations
 ```bash
-docker exec -t raqib-api alembic upgrade head
+docker exec -t sahem-api alembic upgrade head
 ```
 
 ### Seed Sample Data
 ```bash
-docker exec -t raqib-api python3 /app/scripts/seed_users.py
+docker exec -t sahem-api python3 /app/scripts/seed_users.py
 ```
 
 ## Environment Variables Reference
@@ -235,9 +235,9 @@ docker exec -t raqib-api python3 /app/scripts/seed_users.py
 | Variable | Description | Default |
 |----------|-------------|---------|
 | **Database** | | |
-| `POSTGRES_USER` | PostgreSQL username | `raqib_user` |
+| `POSTGRES_USER` | PostgreSQL username | `sahem_user` |
 | `POSTGRES_PASSWORD` | PostgreSQL password | `CHANGE_THIS_DB_PASSWORD` |
-| `POSTGRES_DB` | PostgreSQL database name | `raqib_db` |
+| `POSTGRES_DB` | PostgreSQL database name | `sahem_db` |
 | **Admin Credentials** | | |
 | `ADMIN_EMAIL` | Admin account email | `admin@example.com` |
 | `ADMIN_USERNAME` | Admin account username | `admin` |
@@ -250,7 +250,7 @@ docker exec -t raqib-api python3 /app/scripts/seed_users.py
 | `SMTP_USER` | SMTP account username | - |
 | `SMTP_PASSWORD` | SMTP account password | - |
 | `SMTP_FROM_EMAIL` | Email sender address | - |
-| `SMTP_FROM_NAME` | Email sender name | `Raqib Platform` |
+| `SMTP_FROM_NAME` | Email sender name | `Sahem Platform` |
 | **Frontend** | | |
 | `FRONTEND_URL` | Frontend application URL | `http://localhost:8080` |
 | `VITE_ADMIN_PASSWORD` | Frontend mock password (dev only) | Same as `ADMIN_PASSWORD` |
@@ -301,7 +301,7 @@ docker exec -t raqib-api python3 /app/scripts/seed_users.py
 
 ### Cannot log in with admin credentials
 1. Verify credentials in `.env` file
-2. Run the seed script: `docker exec -t raqib-api python3 /app/scripts/seed_admin.py`
+2. Run the seed script: `docker exec -t sahem-api python3 /app/scripts/seed_admin.py`
 3. Check API logs: `docker-compose logs -f api`
 
 ### Containers won't start

@@ -79,6 +79,9 @@ class Requirement(Base):
     # Self-referencing relationship for versioning
     previous_requirement = relationship("Requirement", remote_side=[id], foreign_keys=[previous_requirement_id])
 
+    # Checklist items
+    checklist_items = relationship("ChecklistItem", back_populates="requirement", cascade="all, delete-orphan")
+
     # Table arguments - composite unique constraint
     __table_args__ = (
         UniqueConstraint('index_id', 'code', name='requirements_index_code_unique'),

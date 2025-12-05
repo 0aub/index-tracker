@@ -366,10 +366,10 @@ const FirstTimeSetup: React.FC = () => {
           {/* Mobile Header */}
           <div className="lg:hidden text-center mb-8">
             <div className="inline-flex items-center justify-center mb-4">
-              <img src="/logo.png" alt="Raqib Logo" className="w-24 h-24 object-contain" />
+              <img src="/logo.png" alt="Sahem Logo" className="w-24 h-24 object-contain" />
             </div>
             <h1 className={`text-4xl font-bold mb-2 ${colors.textPrimary}`}>
-              {lang === 'ar' ? 'راقب' : 'Raqib'}
+              {lang === 'ar' ? 'ساهم' : 'Sahem'}
             </h1>
             <p className={colors.textSecondary}>
               {lang === 'ar' ? 'المنصة الذكية لإدارة المؤشرات' : 'Index Management System'}

@@ -17,10 +17,11 @@ import {
   CartesianGrid,
   Tooltip
 } from 'recharts';
-import { FileText, FileSpreadsheet, Presentation, ChevronDown, ChevronUp, Loader2, AlertCircle, Layers } from 'lucide-react';
+import { FileText, FileSpreadsheet, Presentation, ChevronDown, ChevronUp, Loader2, AlertCircle, Layers, Users, ClipboardList, FileCheck, Clock, TrendingUp, PieChart as PieChartIcon, BarChart3, FolderOpen, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MaturityGauge from '../components/MaturityGauge';
 import LevelIndicator from '../components/LevelIndicator';
+import ContributionBubbleCloud from '../components/ContributionBubbleCloud';
 import {
   calculateOverallMaturity,
   calculateSectionMaturity,
@@ -33,6 +34,7 @@ import {
 import { colors, patterns } from '../utils/darkMode';
 import { useUIStore } from '../stores/uiStore';
 import { useIndexStore } from '../stores/indexStore';
+import { useAuthStore } from '../stores/authStore';
 import { api, Assignment } from '../services/api';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
@@ -42,7 +44,13 @@ const Reports = () => {
   const navigate = useNavigate();
   const { language } = useUIStore();
   const { currentIndex } = useIndexStore();
+  const { user } = useAuthStore();
   const lang = language;
+
+  // Access control - only admin or owner can view reports
+  const isAdmin = user?.role === 'ADMIN';
+  const isOwner = currentIndex?.user_role?.toLowerCase() === 'owner';
+  const canViewReports = isAdmin || isOwner;
 
   const [requirements, setRequirements] = useState<any[]>([]);
   const [evidence, setEvidence] = useState<any[]>([]);
@@ -50,6 +58,7 @@ const Reports = () => {
     approved: 0,
     rejected: 0,
     underRevision: 0,
+    draft: 0,
     total: 0
   });
   const [userEngagement, setUserEngagement] = useState<any[]>([]);
@@ -99,6 +108,7 @@ const Reports = () => {
         approved: indexEvidence.filter(e => e.status === 'approved').length,
         rejected: indexEvidence.filter(e => e.status === 'rejected').length,
         underRevision: indexEvidence.filter(e => e.status === 'submitted' || e.status === 'confirmed').length,
+        draft: indexEvidence.filter(e => e.status === 'draft').length,
         total: indexEvidence.length
       };
 
@@ -266,13 +276,43 @@ const Reports = () => {
     );
   }
 
+  // Access denied - only admin and owner can view reports
+  if (!canViewReports) {
+    return (
+      <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h3 className={`text-xl font-bold ${colors.textPrimary} mb-2`}>
+              {lang === 'ar' ? 'غير مصرح لك بالوصول' : 'Access Denied'}
+            </h3>
+            <p className={`${colors.textSecondary} mb-6`}>
+              {lang === 'ar'
+                ? 'صفحة التقارير متاحة فقط للمسؤولين والملاك'
+                : 'Reports page is only accessible to Admins and Owners'}
+            </p>
+            <button
+              onClick={() => navigate('/requirements')}
+              className={`px-6 py-3 ${patterns.button}`}
+            >
+              {lang === 'ar' ? 'العودة للمتطلبات' : 'Go to Requirements'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Loading state
   if (loading) {
     return (
       <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="flex items-center justify-center py-20">
           <div className="text-center">
-            <Loader2 className={`w-12 h-12 animate-spin ${colors.primary} mx-auto mb-4`} />
+            <div className="relative w-16 h-16 mx-auto mb-4">
+              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
+              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
+            </div>
             <p className={colors.textSecondary}>
               {lang === 'ar' ? 'جاري تحميل التقارير...' : 'Loading reports...'}
             </p>
@@ -485,16 +525,16 @@ const Reports = () => {
 
   return (
     <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className={`text-3xl font-bold ${colors.textPrimary}`}>
+            <h1 className={`text-2xl sm:text-3xl font-bold ${colors.textPrimary}`}>
               {lang === 'ar' ? 'تقارير المؤشر' : 'Index Reports'}
             </h1>
-            <p className={`mt-2 ${colors.textSecondary}`}>
+            <p className={`mt-2 text-sm sm:text-base ${colors.textSecondary}`}>
               {lang === 'ar'
-                ? `${currentIndex.name_ar} - ${currentIndex.code}`
-                : `${currentIndex.name_en || currentIndex.name_ar} - ${currentIndex.code}`}
+                ? currentIndex.name_ar
+                : currentIndex.name_en || currentIndex.name_ar}
             </p>
             {currentIndex.end_date && (() => {
               const endDate = new Date(currentIndex.end_date);
@@ -526,169 +566,299 @@ const Reports = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Show Overall Maturity Level for NAII, Requirements Overview for ETARI */}
-          {currentIndex?.index_type === 'ETARI' ? (
-            <div className={`${patterns.section} p-6`}>
-              <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
-                {lang === 'ar' ? 'نظرة عامة على المتطلبات' : 'Requirements Overview'}
-              </h3>
-              <div className="space-y-4">
-                <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
-                  <span className={colors.textSecondary}>{lang === 'ar' ? 'إجمالي المتطلبات' : 'Total Requirements'}</span>
-                  <span className={`text-2xl font-bold ${colors.textPrimary}`}>
-                    {requirements.length}
-                  </span>
-                </div>
-                <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
-                  <span className={colors.textSecondary}>{lang === 'ar' ? 'متطلبات بأدلة' : 'With Evidence Desc'}</span>
-                  <span className={`text-2xl font-bold text-blue-600 dark:text-blue-400`}>
-                    {requirements.filter(r => {
-                      // Check if requirement has evidence description
-                      return (r.evidence_description_ar && r.evidence_description_ar.trim() !== '') ||
-                             (r.evidence_description_en && r.evidence_description_en.trim() !== '');
-                    }).length}
-                  </span>
-                </div>
-                <div className={`flex justify-between items-center py-2`}>
-                  <span className={colors.textSecondary}>{lang === 'ar' ? 'نسبة الإنجاز' : 'Completion Rate'}</span>
-                  <span className={`text-2xl font-bold text-green-600 dark:text-green-400`}>
-                    {sectionData.length > 0
-                      ? Math.round(sectionData.reduce((sum, s) => sum + s.completion, 0) / sectionData.length)
-                      : 0}%
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className={`${patterns.section} p-6`}>
-              <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
-                {lang === 'ar' ? 'مستوى النضج الإجمالي' : 'Overall Maturity Level'}
-              </h3>
-              <div className="flex justify-center">
-                <MaturityGauge
-                  value={overallScore}
-                  indexType={currentIndex?.index_type || 'NAII'}
-                  lang={lang}
-                />
-              </div>
-            </div>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          {/* Block 1: Requirements Status by Answer State - Split by Evidence Requirement */}
+          {(() => {
+            // Split requirements into two groups: with evidence required and without
+            const reqsWithEvidence = requirements.filter(r => {
+              return (r.evidence_description_ar && r.evidence_description_ar.trim() !== '') ||
+                     (r.evidence_description_en && r.evidence_description_en.trim() !== '');
+            });
+            const reqsWithoutEvidence = requirements.filter(r => {
+              return !((r.evidence_description_ar && r.evidence_description_ar.trim() !== '') ||
+                     (r.evidence_description_en && r.evidence_description_en.trim() !== ''));
+            });
 
-          <div className={`${patterns.section} p-6`}>
-            <h3 className={`text-lg font-semibold mb-4 ${colors.textPrimary}`}>
+            // Calculate confirmed for each group
+            const confirmedWithEvidence = reqsWithEvidence.filter(r => r.answer_status === 'confirmed').length;
+            const confirmedWithoutEvidence = reqsWithoutEvidence.filter(r => r.answer_status === 'confirmed').length;
+
+            const totalReqs = requirements.length;
+
+            return currentIndex?.index_type === 'ETARI' ? (
+              <div className={`${patterns.section} p-4 sm:p-5`}>
+                <h3 className={`text-base sm:text-lg font-semibold mb-3 flex items-center gap-2 ${colors.textPrimary}`}>
+                  <ClipboardList className="text-blue-500" size={20} />
+                  {lang === 'ar' ? 'حالة المتطلبات' : 'Requirements Status'}
+                </h3>
+                <div className="space-y-3">
+                  {/* Big Total Number - Centered */}
+                  <div className={`text-center py-3 rounded-lg ${colors.bgTertiary}`}>
+                    <p className={`text-3xl font-bold ${colors.textPrimary}`}>{totalReqs}</p>
+                    <p className={`text-xs ${colors.textSecondary}`}>
+                      {lang === 'ar' ? 'إجمالي المتطلبات' : 'Total Requirements'}
+                    </p>
+                  </div>
+
+                  {/* Requirements WITH Evidence */}
+                  <div className={`p-2.5 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-xs font-medium text-orange-700 dark:text-orange-400`}>
+                        {lang === 'ar' ? 'تحتاج أدلة' : 'Require Evidence'}
+                      </span>
+                      <span className={`text-sm font-bold text-orange-600 dark:text-orange-400`}>
+                        {reqsWithEvidence.length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={colors.textSecondary}>{lang === 'ar' ? 'مكتملة' : 'Completed'}</span>
+                      <span className="font-medium text-green-600 dark:text-green-400">
+                        {confirmedWithEvidence}/{reqsWithEvidence.length} ({reqsWithEvidence.length > 0 ? Math.round((confirmedWithEvidence / reqsWithEvidence.length) * 100) : 0}%)
+                      </span>
+                    </div>
+                    <div className={`w-full h-2 bg-orange-100 dark:bg-orange-900/30 rounded-full overflow-hidden`}>
+                      <div
+                        className="h-full bg-green-500 transition-all duration-700"
+                        style={{ width: `${reqsWithEvidence.length > 0 ? (confirmedWithEvidence / reqsWithEvidence.length) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Requirements WITHOUT Evidence */}
+                  <div className={`p-2.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-xs font-medium text-blue-700 dark:text-blue-400`}>
+                        {lang === 'ar' ? 'بدون أدلة' : 'No Evidence Required'}
+                      </span>
+                      <span className={`text-sm font-bold text-blue-600 dark:text-blue-400`}>
+                        {reqsWithoutEvidence.length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={colors.textSecondary}>{lang === 'ar' ? 'مكتملة' : 'Completed'}</span>
+                      <span className="font-medium text-green-600 dark:text-green-400">
+                        {confirmedWithoutEvidence}/{reqsWithoutEvidence.length} ({reqsWithoutEvidence.length > 0 ? Math.round((confirmedWithoutEvidence / reqsWithoutEvidence.length) * 100) : 0}%)
+                      </span>
+                    </div>
+                    <div className={`w-full h-2 bg-blue-100 dark:bg-blue-900/30 rounded-full overflow-hidden`}>
+                      <div
+                        className="h-full bg-green-500 transition-all duration-700"
+                        style={{ width: `${reqsWithoutEvidence.length > 0 ? (confirmedWithoutEvidence / reqsWithoutEvidence.length) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Overall Progress */}
+                  <div className={`p-2.5 rounded-lg border ${colors.border} ${colors.bgTertiary}`}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={`font-semibold ${colors.textPrimary}`}>{lang === 'ar' ? 'الإنجاز الكلي' : 'Overall Progress'}</span>
+                      <span className="font-bold text-green-600 dark:text-green-400">
+                        {totalReqs > 0 ? Math.round(((confirmedWithEvidence + confirmedWithoutEvidence) / totalReqs) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className={`w-full h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden`}>
+                      <div
+                        className="h-full bg-green-500 transition-all duration-700"
+                        style={{ width: `${totalReqs > 0 ? ((confirmedWithEvidence + confirmedWithoutEvidence) / totalReqs) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={`${patterns.section} p-4 sm:p-6`}>
+                <h3 className={`text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+                  <TrendingUp className="text-green-500" size={20} />
+                  {lang === 'ar' ? 'مستوى النضج الإجمالي' : 'Overall Maturity Level'}
+                </h3>
+                <div className="flex justify-center">
+                  <MaturityGauge
+                    value={overallScore}
+                    indexType={currentIndex?.index_type || 'NAII'}
+                    lang={lang}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className={`${patterns.section} p-4 sm:p-6`}>
+            <h3 className={`text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+              <FileCheck className="text-purple-500" size={20} />
               {lang === 'ar' ? 'إحصائيات الأدلة' : 'Evidence Statistics'}
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
                 <span className={colors.textSecondary}>{lang === 'ar' ? 'ملفات معتمدة' : 'Approved Files'}</span>
-                <span className="text-2xl font-bold text-green-600 dark:text-green-400">
+                <span className="text-xl font-bold text-green-600 dark:text-green-400">
                   {evidenceStats.approved}
                 </span>
               </div>
               <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
                 <span className={colors.textSecondary}>{lang === 'ar' ? 'قيد المراجعة' : 'Under Revision'}</span>
-                <span className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                <span className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
                   {evidenceStats.underRevision}
                 </span>
               </div>
               <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
+                <span className={colors.textSecondary}>{lang === 'ar' ? 'مسودات' : 'Drafts'}</span>
+                <span className="text-xl font-bold text-gray-600 dark:text-gray-400">
+                  {evidenceStats.draft}
+                </span>
+              </div>
+              <div className={`flex justify-between items-center py-2 border-b ${colors.border}`}>
                 <span className={colors.textSecondary}>{lang === 'ar' ? 'ملفات مرفوضة' : 'Rejected Files'}</span>
-                <span className="text-2xl font-bold text-red-600 dark:text-red-400">
+                <span className="text-xl font-bold text-red-600 dark:text-red-400">
                   {evidenceStats.rejected}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2">
                 <span className={colors.textSecondary}>{lang === 'ar' ? 'إجمالي الملفات' : 'Total Files'}</span>
-                <span className={`text-2xl font-bold ${colors.textPrimary}`}>
+                <span className={`text-xl font-bold ${colors.textPrimary}`}>
                   {evidenceStats.total}
                 </span>
               </div>
             </div>
           </div>
 
-          <div ref={progressChartRef} className={`${patterns.section} p-6`}>
-            <h3 className={`text-lg font-semibold mb-6 ${colors.textPrimary}`}>
-              {lang === 'ar' ? 'تقدم المشروع' : 'Project Progress'}
+          <div ref={progressChartRef} className={`${patterns.section} p-4 sm:p-6`}>
+            <h3 className={`text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+              <Clock className="text-orange-500" size={20} />
+              {lang === 'ar' ? 'الجدول الزمني والتقدم' : 'Timeline & Progress'}
             </h3>
 
-            <div className="space-y-5">
-              {/* Maturity Progress - Only show for NAII (not ETARI) */}
-              {currentIndex?.index_type !== 'ETARI' && (
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className={`text-sm font-medium ${colors.textSecondary}`}>
-                      {lang === 'ar' ? 'النضج الإجمالي' : 'Overall Maturity'}
-                    </span>
-                    <span className={`text-lg font-bold ${colors.textPrimary}`}>
-                      {overallScore.toFixed(1)} / 5.0
-                    </span>
-                  </div>
-                  <div className={`w-full h-3 ${colors.bgTertiary} rounded-full overflow-hidden`}>
-                    <div
-                      className={`h-full ${colors.primary} transition-all duration-1000 ease-out`}
-                      style={{ width: `${(overallScore / 5) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
+            {(() => {
+              // Timeline calculations
+              const startDate = currentIndex?.start_date ? new Date(currentIndex.start_date) : null;
+              const endDate = currentIndex?.end_date ? new Date(currentIndex.end_date) : null;
+              const now = new Date();
 
-              {/* Overall Completion Progress */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-sm font-medium ${colors.textSecondary}`}>
-                    {lang === 'ar' ? 'نسبة الإنجاز الإجمالية' : 'Overall Completion'}
-                  </span>
-                  <span className={`text-lg font-bold ${colors.textPrimary}`}>
-                    {sectionData.length > 0
-                      ? Math.round(sectionData.reduce((sum, s) => sum + s.completion, 0) / sectionData.length)
-                      : 0}%
-                  </span>
-                </div>
-                <div className={`w-full h-3 ${colors.bgTertiary} rounded-full overflow-hidden`}>
-                  <div
-                    className="h-full bg-blue-600 dark:bg-blue-400 transition-all duration-1000 ease-out"
-                    style={{
-                      width: `${sectionData.length > 0
-                        ? sectionData.reduce((sum, s) => sum + s.completion, 0) / sectionData.length
-                        : 0}%`
-                    }}
-                  />
-                </div>
-              </div>
+              let totalDays = 0;
+              let elapsedDays = 0;
+              let remainingDays = 0;
+              let timeProgress = 0;
 
-              {/* Evidence Submission Progress */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-sm font-medium ${colors.textSecondary}`}>
-                    {lang === 'ar' ? 'الأدلة المعتمدة' : 'Approved Evidence'}
-                  </span>
-                  <span className={`text-lg font-bold ${colors.textPrimary}`}>
-                    {evidenceStats.total > 0 ? Math.round((evidenceStats.approved / evidenceStats.total) * 100) : 0}%
-                  </span>
+              if (startDate && endDate) {
+                totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+                elapsedDays = Math.max(0, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+                remainingDays = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+                timeProgress = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
+              }
+
+              // Work completion
+              const totalCompleted = requirements.filter(r => r.answer_status === 'confirmed').length;
+              const workProgress = requirements.length > 0 ? Math.round((totalCompleted / requirements.length) * 100) : 0;
+
+              // Performance indicator: Are we on track?
+              const performanceGap = workProgress - timeProgress;
+              const isOnTrack = performanceGap >= 0;
+              const isAhead = performanceGap > 10;
+              const isBehind = performanceGap < -10;
+
+              return (
+                <div className="space-y-4">
+                  {/* Maturity Progress - Only show for NAII (not ETARI) */}
+                  {currentIndex?.index_type !== 'ETARI' && (
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className={`text-sm font-medium ${colors.textSecondary}`}>
+                          {lang === 'ar' ? 'النضج الإجمالي' : 'Overall Maturity'}
+                        </span>
+                        <span className={`text-lg font-bold ${colors.textPrimary}`}>
+                          {overallScore.toFixed(1)} / 5.0
+                        </span>
+                      </div>
+                      <div className={`w-full h-3 ${colors.bgTertiary} rounded-full overflow-hidden`}>
+                        <div
+                          className={`h-full ${colors.primary} transition-all duration-1000 ease-out`}
+                          style={{ width: `${(overallScore / 5) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Time vs Work Progress Comparison */}
+                  {startDate && endDate && (
+                    <div className={`p-3 rounded-lg border ${colors.border}`}>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className={`text-xs font-medium ${colors.textSecondary}`}>
+                          {lang === 'ar' ? 'الوقت مقابل الإنجاز' : 'Time vs Work'}
+                        </span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                          isAhead ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
+                          isBehind ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' :
+                          'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
+                        }`}>
+                          {isAhead ? (lang === 'ar' ? 'متقدم' : 'Ahead') :
+                           isBehind ? (lang === 'ar' ? 'متأخر' : 'Behind') :
+                           (lang === 'ar' ? 'في الموعد' : 'On Track')}
+                        </span>
+                      </div>
+
+                      {/* Time elapsed bar */}
+                      <div className="mb-2">
+                        <div className="flex justify-between text-[10px] mb-1">
+                          <span className={colors.textTertiary}>{lang === 'ar' ? 'الوقت المنقضي' : 'Time Elapsed'}</span>
+                          <span className="text-orange-600 dark:text-orange-400">{timeProgress}%</span>
+                        </div>
+                        <div className={`w-full h-2 ${colors.bgTertiary} rounded-full overflow-hidden`}>
+                          <div className="h-full bg-orange-400 transition-all" style={{ width: `${timeProgress}%` }} />
+                        </div>
+                      </div>
+
+                      {/* Work completed bar */}
+                      <div>
+                        <div className="flex justify-between text-[10px] mb-1">
+                          <span className={colors.textTertiary}>{lang === 'ar' ? 'العمل المنجز' : 'Work Done'}</span>
+                          <span className="text-green-600 dark:text-green-400">{workProgress}%</span>
+                        </div>
+                        <div className={`w-full h-2 ${colors.bgTertiary} rounded-full overflow-hidden`}>
+                          <div className="h-full bg-green-500 transition-all" style={{ width: `${workProgress}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Days remaining / Total days */}
+                  {startDate && endDate && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className={`text-center p-2.5 rounded-lg ${colors.bgTertiary}`}>
+                        <p className={`text-2xl font-bold ${remainingDays <= 7 ? 'text-red-500' : remainingDays <= 30 ? 'text-amber-500' : colors.textPrimary}`}>
+                          {remainingDays}
+                        </p>
+                        <p className={`text-[10px] ${colors.textSecondary}`}>{lang === 'ar' ? 'يوم متبقي' : 'Days Left'}</p>
+                      </div>
+                      <div className={`text-center p-2.5 rounded-lg ${colors.bgTertiary}`}>
+                        <p className={`text-2xl font-bold ${colors.textPrimary}`}>{totalDays}</p>
+                        <p className={`text-[10px] ${colors.textSecondary}`}>{lang === 'ar' ? 'إجمالي الأيام' : 'Total Days'}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Requirements to complete per day */}
+                  {startDate && endDate && remainingDays > 0 && (
+                    <div className={`flex items-center justify-between p-2 rounded border ${colors.border} text-xs`}>
+                      <span className={colors.textSecondary}>{lang === 'ar' ? 'المطلوب يومياً' : 'Daily Target'}</span>
+                      <span className={`font-bold ${isBehind ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                        {Math.ceil((requirements.length - totalCompleted) / remainingDays)} {lang === 'ar' ? 'متطلب' : 'reqs'}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className={`w-full h-3 ${colors.bgTertiary} rounded-full overflow-hidden`}>
-                  <div
-                    className="h-full bg-green-600 dark:bg-green-400 transition-all duration-1000 ease-out"
-                    style={{ width: `${evidenceStats.total > 0 ? ((evidenceStats.approved / evidenceStats.total) * 100) : 0}%` }}
-                  />
-                </div>
-                <div className={`text-xs ${colors.textTertiary} mt-1`}>
-                  {evidenceStats.approved} / {evidenceStats.total} {lang === 'ar' ? 'معتمدة' : 'approved'}
-                  {evidenceStats.rejected > 0 && ` • ${evidenceStats.rejected} ${lang === 'ar' ? 'مرفوضة' : 'rejected'}`}
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <div ref={radarChartRef} className={`${patterns.section} p-6`}>
-            <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-8 mb-3 sm:mb-8">
+          <div ref={radarChartRef} className={`${patterns.section} p-1.5 sm:p-6`}>
+            <h2 className={`text-xs sm:text-xl font-bold mb-1 sm:mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+              <Layers className="text-cyan-500 hidden sm:block" size={20} />
               {lang === 'ar' ? 'تحليل الأقسام' : 'Section Analysis'}
             </h2>
-            <ResponsiveContainer width="100%" height={600}>
-              <RadarChart data={sectionData} margin={{ top: 40, right: 40, bottom: 40, left: 40 }} outerRadius="65%">
+            <div className="h-[150px] sm:h-[450px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={sectionData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }} outerRadius="45%">
                 <PolarGrid
                   stroke="#9CA3AF"
                   strokeWidth={1}
@@ -700,7 +870,7 @@ const Reports = () => {
                     const { x, y, payload, cx, cy } = props;
                     // Calculate distance from center and push label further out
                     const angle = Math.atan2(y - cy, x - cx);
-                    const offset = 35; // Additional offset to push labels outside
+                    const offset = window.innerWidth < 640 ? 8 : 35; // Much smaller offset on mobile
                     const newX = x + Math.cos(angle) * offset;
                     const newY = y + Math.sin(angle) * offset;
 
@@ -711,7 +881,7 @@ const Reports = () => {
                         textAnchor="middle"
                         fill="currentColor"
                         className={colors.textPrimary}
-                        fontSize={12}
+                        fontSize={window.innerWidth < 640 ? 6 : 12}
                       >
                         {payload.value}
                       </text>
@@ -784,21 +954,24 @@ const Reports = () => {
                   )}
                 />
               </RadarChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           </div>
 
-          <div ref={pieChartRef} className={`${patterns.section} p-6`}>
-            <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
-              {lang === 'ar' ? 'توزيع حالة الأدلة' : 'Evidence Status Distribution'}
+          <div ref={pieChartRef} className={`${patterns.section} p-1.5 sm:p-6`}>
+            <h2 className={`text-xs sm:text-xl font-bold mb-1 sm:mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+              <PieChartIcon className="text-pink-500 hidden sm:block" size={20} />
+              {lang === 'ar' ? 'توزيع حالة الأدلة' : 'Evidence Status'}
             </h2>
             {statusDistributionData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={600}>
-                <PieChart margin={{ top: 20, right: 20, bottom: 60, left: 20 }}>
+              <div className="h-[150px] sm:h-[450px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart margin={{ top: 0, right: 0, bottom: 15, left: 0 }}>
                   <Pie
                     data={statusDistributionData}
                     cx="50%"
-                    cy="50%"
-                    outerRadius={130}
+                    cy="45%"
+                    outerRadius="50%"
                     dataKey="value"
                   >
                     {statusDistributionData.map((entry, index) => (
@@ -840,10 +1013,11 @@ const Reports = () => {
                       );
                     }}
                   />
-                </PieChart>
-              </ResponsiveContainer>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
-              <div className="flex items-center justify-center h-96">
+              <div className="flex items-center justify-center h-[150px] sm:h-[450px]">
                 <div className="text-center">
                   <FileText className={`w-12 h-12 ${colors.textSecondary} mx-auto mb-3`} />
                   <p className={`${colors.textSecondary} font-medium`}>
@@ -858,35 +1032,34 @@ const Reports = () => {
           </div>
         </div>
 
-        <div className={`${patterns.section} p-6 mb-8`}>
-          <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary} flex items-center gap-2`}>
-            {lang === 'ar' ? 'مقارنة الأقسام التفصيلية (حسب المعيار)' : 'Detailed Section Comparison (By Domain)'}
-            <span className={`text-sm font-normal ${colors.textSecondary}`}>
-              {lang === 'ar' ? '(مرر على الأعمدة لرؤية التفاصيل)' : '(Hover to see details)'}
-            </span>
+        <div className={`${patterns.section} p-1.5 sm:p-6 mb-3 sm:mb-8 overflow-x-auto`}>
+          <h2 className={`text-xs sm:text-xl font-bold mb-1 sm:mb-4 ${colors.textPrimary} flex items-center gap-2`}>
+            <BarChart3 className="text-teal-500 hidden sm:block" size={20} />
+            {lang === 'ar' ? 'مقارنة الأقسام' : 'Section Comparison'}
           </h2>
           {coloredDomainData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={Math.max(800, coloredDomainData.length * 60 + sections.length * 30)}>
+            <div className="min-w-[400px]">
+            <ResponsiveContainer width="100%" height={Math.max(300, coloredDomainData.length * 25 + sections.length * 15)}>
               <BarChart
                 data={coloredDomainData}
-                margin={{ top: 30, right: 20, left: 5, bottom: 20 }}
+                margin={{ top: 10, right: 10, left: 2, bottom: 10 }}
                 layout="vertical"
               >
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                 <XAxis
                   type="number"
                   domain={[0, 100]}
-                  tick={{ fill: 'currentColor', fontSize: 12 }}
+                  tick={{ fill: 'currentColor', fontSize: 10 }}
                   className={colors.textSecondary}
                 />
                 <YAxis
                   type="category"
                   dataKey="domain"
-                  width={320}
+                  width={120}
                   tick={(props: any) => {
                     const { x, y, payload, index } = props;
                     const text = payload.value || '';
-                    const maxLength = 40;
+                    const maxLength = 15;
                     const displayText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 
                     // Get section for grouping visual
@@ -1008,11 +1181,11 @@ const Reports = () => {
                   strokeWidth={2}
                   radius={[0, 8, 8, 0]}
                   minPointSize={3}
-                  barSize={35}
+                  barSize={14}
                   label={{
                     position: 'right',
                     fill: 'currentColor',
-                    fontSize: 12,
+                    fontSize: 8,
                     formatter: (value: number) => value > 0 ? `${value}%` : ''
                   }}
                 >
@@ -1022,6 +1195,7 @@ const Reports = () => {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
           ) : (
             <div className="flex items-center justify-center h-96">
               <div className="text-center">
@@ -1034,133 +1208,198 @@ const Reports = () => {
           )}
         </div>
 
-        {/* User Engagement Section */}
-        <div ref={userEngagementTableRef} className={`${patterns.section} p-6 mb-8`}>
-          <h2 className={`text-xl font-bold mb-6 flex items-center gap-2 ${colors.textPrimary}`}>
-            <Layers className={colors.primary} size={24} />
+        {/* User Engagement Section - Categorized by Role */}
+        <div ref={userEngagementTableRef} className={`${patterns.section} p-4 sm:p-6 mb-8`}>
+          <h2 className={`text-lg sm:text-xl font-bold mb-6 flex items-center gap-2 ${colors.textPrimary}`}>
+            <Users className="text-indigo-500" size={24} />
             {lang === 'ar' ? 'مساهمة المستخدمين' : 'User Engagement'}
           </h2>
-          {userEngagement.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className={`border-b-2 ${colors.border}`}>
-                    <th className={`text-${lang === 'ar' ? 'right' : 'left'} py-3 px-4 font-semibold ${colors.textPrimary}`}>
-                      {lang === 'ar' ? 'المستخدم' : 'User'}
-                    </th>
-                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
-                      {lang === 'ar' ? 'المتطلبات المسندة' : 'Assigned Reqs'}
-                    </th>
-                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
-                      {lang === 'ar' ? 'الرفوعات' : 'Uploads'}
-                    </th>
-                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
-                      {lang === 'ar' ? 'التعليقات' : 'Comments'}
-                    </th>
-                    <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
-                      {lang === 'ar' ? 'وثائق راجعها' : 'Docs Reviewed'}
-                    </th>
-                    <th className={`text-${lang === 'ar' ? 'left' : 'right'} py-3 px-4 font-semibold ${colors.textPrimary}`}>
-                      {lang === 'ar' ? 'معدل التأكيد' : 'Confirm Rate'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {userEngagement.map((user, index) => {
-                    const successRate = user.total_uploads > 0
-                      ? ((user.approved_documents / user.total_uploads) * 100)
-                      : 0;
-                    const completionRate = user.assigned_requirements > 0
-                      ? ((user.approved_documents / user.assigned_requirements) * 100)
-                      : 0;
+          {(() => {
+            // Filter out ADMIN users and categorize by index role
+            const filteredUsers = userEngagement.filter(u => u.user_role !== 'ADMIN');
+            const owners = filteredUsers.filter(u => u.index_role?.toUpperCase() === 'OWNER');
+            const supervisors = filteredUsers.filter(u => u.index_role?.toUpperCase() === 'SUPERVISOR');
+            const contributors = filteredUsers.filter(u => u.index_role?.toUpperCase() === 'CONTRIBUTOR');
 
-                    return (
-                      <tr
-                        key={user.username}
-                        className={`border-b ${colors.border} ${colors.hover} transition-colors`}
-                      >
-                        <td className={`py-4 px-4`}>
-                          <div>
-                            <div className={`font-medium ${colors.textPrimary}`}>
-                              {lang === 'ar' ? user.full_name_ar || user.username : user.full_name_en || user.username}
-                            </div>
-                            <div className={`text-sm ${colors.textSecondary}`}>
-                              @{user.username}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className={`inline-flex items-center justify-center w-10 h-10 rounded-lg ${colors.bgSecondary} ${colors.textPrimary} font-semibold`}>
-                            {user.assigned_requirements}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-semibold">
-                            {user.total_uploads}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-semibold">
-                            {user.total_comments}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold">
-                            {user.documents_reviewed || 0}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`flex-1 h-2 ${colors.bgSecondary} rounded-full overflow-hidden`}>
-                                <div
-                                  className={`h-full transition-all ${
-                                    successRate >= 75
-                                      ? 'bg-green-500'
-                                      : successRate >= 50
-                                      ? 'bg-yellow-500'
-                                      : 'bg-red-500'
-                                  }`}
-                                  style={{ width: `${Math.min(successRate, 100)}%` }}
-                                />
+            const roleLabels = {
+              owner: { ar: 'المعتمدين', en: 'Owners' },
+              supervisor: { ar: 'المدققين', en: 'Reviewers' },
+              contributor: { ar: 'المساهمين', en: 'Contributors' }
+            };
+
+            const renderUserTable = (users: typeof userEngagement, role: 'owner' | 'supervisor' | 'contributor') => {
+              if (users.length === 0) return null;
+
+              const isContributor = role === 'contributor';
+
+              return (
+                <div className="mb-6 sm:mb-8">
+                  <h3 className={`text-base sm:text-lg font-semibold mb-3 sm:mb-4 ${colors.textPrimary} flex items-center gap-2`}>
+                    <span className={`w-3 h-3 rounded-full ${
+                      role === 'owner' ? 'bg-purple-500' :
+                      role === 'supervisor' ? 'bg-blue-500' : 'bg-green-500'
+                    }`}></span>
+                    {lang === 'ar' ? roleLabels[role].ar : roleLabels[role].en}
+                    <span className={`text-sm font-normal ${colors.textSecondary}`}>({users.length})</span>
+                  </h3>
+                  <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                    <table className="w-full min-w-[800px] sm:min-w-0">
+                      <thead>
+                        <tr className={`border-b-2 ${colors.border}`}>
+                          <th className={`text-${lang === 'ar' ? 'right' : 'left'} py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                            {lang === 'ar' ? 'المستخدم' : 'User'}
+                          </th>
+                          <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                            {lang === 'ar' ? 'المتطلبات المسندة' : 'Assigned'}
+                          </th>
+                          <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                            {lang === 'ar' ? 'المرفقات' : 'Attachments'}
+                          </th>
+                          <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                            {lang === 'ar' ? 'المسودات' : 'Drafts'}
+                          </th>
+                          <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                            {lang === 'ar' ? 'قيد المراجعة' : 'Pending'}
+                          </th>
+                          {!isContributor && (
+                            <>
+                              <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                                {lang === 'ar' ? 'راجعها' : 'Reviewed'}
+                              </th>
+                              <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                                {lang === 'ar' ? 'قبول' : 'Approved'}
+                              </th>
+                              <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                                {lang === 'ar' ? 'رفض' : 'Rejected'}
+                              </th>
+                            </>
+                          )}
+                          <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                            {lang === 'ar' ? 'المهام المنجزة' : 'Tasks Done'}
+                          </th>
+                          <th className={`text-center py-3 px-4 font-semibold ${colors.textPrimary}`}>
+                            {lang === 'ar' ? 'التعليقات' : 'Comments'}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((user) => (
+                          <tr
+                            key={user.username}
+                            className={`border-b ${colors.border} ${colors.hover} transition-colors`}
+                          >
+                            <td className={`py-4 px-4`}>
+                              <div>
+                                <div className={`font-medium ${colors.textPrimary}`}>
+                                  {lang === 'ar' ? user.full_name_ar || user.username : user.full_name_en || user.username}
+                                </div>
+                                <div className={`text-sm ${colors.textSecondary}`}>
+                                  @{user.username}
+                                </div>
                               </div>
-                              <span className={`text-sm font-semibold ${colors.textPrimary} w-12 text-right`}>
-                                {successRate.toFixed(0)}%
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <span className={`inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg ${colors.bgSecondary} ${colors.textPrimary} font-semibold`}>
+                                {user.assigned_requirements}
                               </span>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-semibold">
+                                {user.total_uploads}
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold">
+                                {user.draft_documents || 0}
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-semibold">
+                                {user.submitted_documents || 0}
+                              </span>
+                            </td>
+                            {!isContributor && (
+                              <>
+                                <td className="py-4 px-4 text-center">
+                                  <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold">
+                                    {user.documents_reviewed || 0}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 text-center">
+                                  <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-semibold">
+                                    {user.approved_documents || 0}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 text-center">
+                                  <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-semibold">
+                                    {user.rejected_documents || 0}
+                                  </span>
+                                </td>
+                              </>
+                            )}
+                            <td className="py-4 px-4 text-center">
+                              <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 font-semibold">
+                                {user.checklist_items_completed || 0}
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <span className="inline-flex items-center justify-center min-w-[40px] h-10 px-2 rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-semibold">
+                                {user.total_comments}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            };
 
-              {/* Explanatory Caption */}
-              <div className={`mt-4 p-4 rounded-lg ${colors.bgPrimary} border ${colors.border}`}>
-                <p className={`text-sm ${colors.textSecondary} leading-relaxed`}>
-                  {lang === 'ar' ? (
-                    <>
-                      <strong className={colors.textPrimary}>معدل التأكيد:</strong> يُحسب بقسمة عدد الوثائق المعتمدة على إجمالي عدد الرفوعات ثم الضرب في 100%.
-                    </>
-                  ) : (
-                    <>
-                      <strong className={colors.textPrimary}>Confirm Rate:</strong> Calculated as (Approved Documents ÷ Total Uploads) × 100%.
-                    </>
-                  )}
-                </p>
+            return filteredUsers.length > 0 ? (
+              <div>
+                {renderUserTable(owners, 'owner')}
+                {renderUserTable(supervisors, 'supervisor')}
+                {renderUserTable(contributors, 'contributor')}
+
+                {/* Legend/Explanation */}
+                <div className={`mt-4 p-4 rounded-lg ${colors.bgPrimary} border ${colors.border}`}>
+                  <p className={`text-sm ${colors.textSecondary} leading-relaxed`}>
+                    {lang === 'ar' ? (
+                      <>
+                        <strong className={colors.textPrimary}>ملاحظة:</strong> المعتمدين والمدققين يمكنهم مراجعة وقبول أو رفض المرفقات. المساهمين يمكنهم رفع المرفقات وإضافة التعليقات فقط.
+                      </>
+                    ) : (
+                      <>
+                        <strong className={colors.textPrimary}>Note:</strong> Owners and Reviewers can review and approve/reject attachments. Contributors can only upload attachments and add comments.
+                      </>
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className={`text-center py-12 ${colors.textSecondary}`}>
-              <Layers className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="font-medium">{lang === 'ar' ? 'لا توجد بيانات مساهمة المستخدمين' : 'No user engagement data available'}</p>
-            </div>
-          )}
+            ) : (
+              <div className={`text-center py-12 ${colors.textSecondary}`}>
+                <Layers className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium">{lang === 'ar' ? 'لا توجد بيانات مساهمة المستخدمين' : 'No user engagement data available'}</p>
+              </div>
+            );
+          })()}
         </div>
 
-        <div className={`${patterns.section} p-6 mb-8`}>
-          <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
+        {/* Team Contribution Bubble Cloud - Placed after User Engagement table */}
+        {userEngagement.length > 0 && (
+          <div className={`${patterns.section} p-4 sm:p-6 mb-8`}>
+            <h2 className={`text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+              <TrendingUp className="text-blue-500" size={24} />
+              {lang === 'ar' ? 'مساهمة الفريق' : 'Team Contribution'}
+            </h2>
+            <ContributionBubbleCloud userEngagement={userEngagement} />
+          </div>
+        )}
+
+        <div className={`${patterns.section} p-4 sm:p-6 mb-8`}>
+          <h2 className={`text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+            <FolderOpen className="text-amber-500" size={24} />
             {lang === 'ar' ? 'تفاصيل الأقسام والمعايير' : 'Section and Domain Details'}
           </h2>
           <div className="space-y-4">
@@ -1307,11 +1546,12 @@ const Reports = () => {
           </div>
         </div>
 
-        <div className={`${patterns.section} p-6`}>
-          <h2 className={`text-xl font-bold mb-4 ${colors.textPrimary}`}>
+        <div className={`${patterns.section} p-4 sm:p-6`}>
+          <h2 className={`text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
+            <Download className="text-gray-500" size={24} />
             {lang === 'ar' ? 'تصدير التقارير' : 'Export Reports'}
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <button
               onClick={() => handleExport('pdf')}
               className="flex items-center justify-center gap-3 px-6 py-4 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg transition border-2 border-red-200 dark:border-red-800"

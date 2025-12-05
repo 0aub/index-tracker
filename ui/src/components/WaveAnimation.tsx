@@ -10,7 +10,7 @@ export const WaveAnimation = () => {
       <div className="absolute inset-0 flex items-center justify-center z-0">
         <img
           src="/logo.png"
-          alt="Raqib Logo"
+          alt="Sahem Logo"
           style={{
             width: '400px',
             height: '400px',

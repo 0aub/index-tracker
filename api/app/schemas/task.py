@@ -12,6 +12,7 @@ class TaskBase(BaseModel):
     description: Optional[str] = None
     priority: str = "medium"  # low, medium, high
     index_id: Optional[str] = None
+    requirement_id: Optional[str] = None
     due_date: Optional[datetime] = None
 
 
@@ -27,6 +28,7 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None  # todo, in_progress, completed
     priority: Optional[str] = None  # low, medium, high
     index_id: Optional[str] = None
+    requirement_id: Optional[str] = None
     due_date: Optional[datetime] = None
 
 
@@ -88,6 +90,12 @@ class TaskResponse(TaskBase):
     creator_name_en: Optional[str] = None
     index_name: Optional[str] = None
     index_name_en: Optional[str] = None
+    # Requirement details
+    requirement_code: Optional[str] = None
+    requirement_question_ar: Optional[str] = None
+    requirement_question_en: Optional[str] = None
+    requirement_main_area_ar: Optional[str] = None
+    requirement_main_area_en: Optional[str] = None
     assignments: List[TaskAssignmentResponse] = []
     comments: List[TaskCommentResponse] = []
     comment_count: int = 0

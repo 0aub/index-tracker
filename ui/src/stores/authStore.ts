@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { User, AuthState } from '../types';
 
 // Mock credentials from environment variables (Vite exposes VITE_* variables)
@@ -20,6 +20,31 @@ const MOCK_ADMIN: User = {
   is_first_login: false  // Admin already completed setup
 };
 
+// Safe storage that falls back gracefully on iOS
+const safeStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch {
+      // Silently fail on iOS private browsing or quota errors
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // Silently fail
+    }
+  },
+};
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -30,7 +55,8 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         try {
           // Call the real backend login endpoint
-          const response = await fetch('http://localhost:8000/api/v1/auth/login', {
+          const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+          const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -84,7 +110,11 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           isAuthenticated: false
         });
-        localStorage.removeItem('auth-storage');
+        try {
+          localStorage.removeItem('auth-storage');
+        } catch {
+          // Silently fail
+        }
       },
 
       checkAuth: () => {
@@ -108,6 +138,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      storage: createJSONStorage(() => safeStorage),
       partialize: (state) => ({
         user: state.user,
         token: state.token,

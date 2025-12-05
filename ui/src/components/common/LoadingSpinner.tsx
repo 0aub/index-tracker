@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { colors } from '../../utils/darkMode';
 
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
@@ -8,21 +8,30 @@ interface LoadingSpinnerProps {
 
 const LoadingSpinner = ({ size = 'md', text, fullScreen = false }: LoadingSpinnerProps) => {
   const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12'
+    sm: 'w-8 h-8',
+    md: 'w-16 h-16',
+    lg: 'w-24 h-24'
   };
 
   const spinner = (
-    <div className="flex flex-col items-center justify-center gap-3">
-      <Loader2 className={`${sizeClasses[size]} text-blue-600 animate-spin`} />
-      {text && <p className="text-sm text-gray-600">{text}</p>}
+    <div className="flex flex-col items-center justify-center gap-4">
+      {/* Logo with spin animation */}
+      <div className="relative">
+        <img
+          src="/logo.png"
+          alt="Loading..."
+          className={`${sizeClasses[size]} animate-pulse`}
+        />
+        {/* Rotating ring around the logo */}
+        <div className={`absolute inset-0 ${sizeClasses[size]} border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin`} />
+      </div>
+      {text && <p className={`text-sm ${colors.textSecondary}`}>{text}</p>}
     </div>
   );
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+      <div className={`fixed inset-0 ${colors.bgPrimary} bg-opacity-95 flex items-center justify-center z-50`}>
         {spinner}
       </div>
     );

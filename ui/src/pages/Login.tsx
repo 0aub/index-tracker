@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, AlertCircle, Sun, Moon } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Sun, Moon, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { colors, patterns } from '../utils/darkMode';
@@ -16,6 +16,7 @@ const Login = () => {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -29,7 +30,8 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const result = await login(email, password);
+      // Normalize email to lowercase for case-insensitive login
+      const result = await login(email.toLowerCase().trim(), password);
       toast.success(lang === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Login successful');
 
       // Check if user needs to complete first-time setup
@@ -74,10 +76,10 @@ const Login = () => {
           {/* Mobile Header - Show logo and title on mobile */}
           <div className="lg:hidden text-center mb-8">
             <div className="inline-flex items-center justify-center mb-4">
-              <img src="/logo.png" alt="Raqib Logo" className="w-24 h-24 object-contain" />
+              <img src="/logo.png" alt="Sahem Logo" className="w-24 h-24 object-contain" />
             </div>
             <h1 className={`text-4xl font-bold mb-2 ${colors.textPrimary}`}>
-              {lang === 'ar' ? 'راقب' : 'Raqib'}
+              {lang === 'ar' ? 'ساهم' : 'Sahem'}
             </h1>
             <p className={colors.textSecondary}>
               {lang === 'ar' ? 'المنصة الذكية لإدارة المؤشرات' : 'Index Management System'}
@@ -118,14 +120,22 @@ const Login = () => {
                 <div className="relative">
                   <Lock className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${colors.textTertiary}`} size={20} />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className={`w-full pl-4 pr-12 py-3 ${patterns.input}`}
+                    className={`w-full pl-12 pr-12 py-3 ${patterns.input}`}
                     placeholder={lang === 'ar' ? 'أدخل كلمة المرور' : 'Enter your password'}
                     required
                     dir="ltr"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${colors.textTertiary} hover:${colors.textSecondary} transition-colors`}
+                    title={showPassword ? (lang === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (lang === 'ar' ? 'إظهار كلمة المرور' : 'Show password')}
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
                 </div>
               </div>
 

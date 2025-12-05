@@ -66,6 +66,24 @@ export interface UpdateUserStatusResponse {
   is_active: boolean;
 }
 
+export interface UpdateUserRequest {
+  user_id: string;
+  first_name_ar?: string;
+  last_name_ar?: string;
+  first_name_en?: string;
+  last_name_en?: string;
+  agency_id?: string;
+  general_management_id?: string;
+  department_id?: string;
+}
+
+export interface UpdateUserResponse {
+  message: string;
+  user_id: string;
+  full_name_ar: string;
+  full_name_en?: string;
+}
+
 // Helper function to get auth token from localStorage
 function getAuthToken(): string | null {
   try {
@@ -167,20 +185,67 @@ export const userManagementApi = {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+
+  // Update user details (admin only)
+  updateUser: async (data: UpdateUserRequest): Promise<UpdateUserResponse> => {
+    return fetchJson<UpdateUserResponse>(`${API_URL}/user-management/users/update`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 };
 
 // Convenience function for fetching users (used by TaskForm)
+// This fetches users accessible to current user through their indices
 export const fetchUsers = async (): Promise<any[]> => {
-  const users = await userManagementApi.getAllUsers();
+  // Try to fetch users from index-users endpoint which is accessible to all users
+  // This avoids the admin-only restriction on /user-management/users
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 
-  // Transform to match the User type expected by TaskForm
-  return users.map(user => ({
-    id: user.id,
-    email: user.email,
-    name: user.full_name_ar,
-    name_en: user.full_name_en,
-    role: user.role,
-    active: user.is_active
-  }));
+  try {
+    // First try to get all users from index_users API (accessible to all)
+    const response = await fetch(`${API_URL}/index-users/all-users`, {
+      headers,
+    });
+
+    if (response.ok) {
+      const indexUsers = await response.json();
+      // Transform and deduplicate by user ID
+      const userMap = new Map<string, any>();
+      indexUsers.forEach((iu: any) => {
+        if (!userMap.has(iu.user_id)) {
+          userMap.set(iu.user_id, {
+            id: iu.user_id,
+            email: iu.user_email || '',
+            name: iu.user_full_name_ar || '',
+            name_en: iu.user_full_name_en || '',
+            role: iu.role,
+            active: true
+          });
+        }
+      });
+      return Array.from(userMap.values());
+    }
+
+    // Fallback to admin endpoint if available
+    const users = await userManagementApi.getAllUsers();
+    return users.map(user => ({
+      id: user.id,
+      email: user.email,
+      name: user.full_name_ar,
+      name_en: user.full_name_en,
+      role: user.role,
+      active: user.is_active
+    }));
+  } catch (error) {
+    console.error('Failed to fetch users:', error);
+    return [];
+  }
 };
