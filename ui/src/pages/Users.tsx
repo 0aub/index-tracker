@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, UserCheck, UserX, Loader2, AlertCircle, Users as UsersIcon, Key, Eye, CheckCircle, Copy, Mail, Shield } from 'lucide-react';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -419,15 +420,7 @@ const Users = () => {
     if (loading) {
       return (
         <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <div className="relative w-16 h-16 mx-auto mb-4">
-              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
-              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
-            </div>
-            <p className={colors.textSecondary}>
-              {lang === 'ar' ? 'جاري تحميل المستخدمين...' : 'Loading users...'}
-            </p>
-          </div>
+          <LoadingSpinner size="md" text={lang === 'ar' ? 'جاري تحميل المستخدمين...' : 'Loading users...'} />
         </div>
       );
     }

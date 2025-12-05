@@ -18,6 +18,7 @@ import {
   Archive
 } from 'lucide-react';
 import JSZip from 'jszip';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 import { api, Requirement, Evidence } from '../services/api';
 import { useUIStore } from '../stores/uiStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -57,6 +58,11 @@ const EvidenceManagement = () => {
   const { currentIndex } = useIndexStore();
   const { user } = useAuthStore();
   const lang = language;
+
+  // Check if user is admin or owner
+  const isAdmin = user?.role === 'ADMIN';
+  const isOwner = currentIndex?.user_role?.toLowerCase() === 'owner';
+  const canAccess = isAdmin || isOwner;
 
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [evidenceMap, setEvidenceMap] = useState<{ [reqId: string]: Evidence[] }>({});
@@ -602,20 +608,39 @@ const EvidenceManagement = () => {
     );
   }
 
+  // Not admin or owner - restricted access
+  if (!canAccess) {
+    return (
+      <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h3 className={`text-xl font-bold ${colors.textPrimary} mb-2`}>
+              {lang === 'ar' ? 'غير مصرح لك' : 'Access Denied'}
+            </h3>
+            <p className={`${colors.textSecondary} mb-6`}>
+              {lang === 'ar'
+                ? 'هذه الصفحة متاحة فقط لمالك المؤشر'
+                : 'This page is only available to the index owner'}
+            </p>
+            <button
+              onClick={() => navigate('/requirements')}
+              className={`px-6 py-3 ${patterns.button}`}
+            >
+              {lang === 'ar' ? 'العودة للمتطلبات' : 'Go to Requirements'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Loading
   if (loading) {
     return (
       <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <div className="relative w-16 h-16 mx-auto mb-4">
-              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
-              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
-            </div>
-            <p className={colors.textSecondary}>
-              {lang === 'ar' ? 'جاري التحميل...' : 'Loading...'}
-            </p>
-          </div>
+          <LoadingSpinner size="md" text={lang === 'ar' ? 'جاري التحميل...' : 'Loading...'} />
         </div>
       </div>
     );
@@ -664,7 +689,7 @@ const EvidenceManagement = () => {
           <button
             onClick={handleDownloadZip}
             disabled={downloadingZip || requirements.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className={`flex items-center gap-2 px-4 py-2.5 ${patterns.button} disabled:opacity-50 disabled:cursor-not-allowed font-medium`}
           >
             {downloadingZip ? (
               <Loader2 size={18} className="animate-spin" />

@@ -17,6 +17,7 @@ import {
   Layers,
   User
 } from 'lucide-react';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 import { api, SupportThread, SupportReply, SupportAttachment } from '../services/api';
 import { useUIStore } from '../stores/uiStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -244,15 +245,7 @@ const Support = () => {
     return (
       <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <div className="relative w-16 h-16 mx-auto mb-4">
-              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
-              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
-            </div>
-            <p className={colors.textSecondary}>
-              {lang === 'ar' ? 'جاري التحميل...' : 'Loading...'}
-            </p>
-          </div>
+          <LoadingSpinner size="md" text={lang === 'ar' ? 'جاري التحميل...' : 'Loading...'} />
         </div>
       </div>
     );

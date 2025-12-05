@@ -4,6 +4,7 @@ import {
   ArrowLeft, Users, Calendar, CheckCircle2, CheckCircle, Circle, Upload, FileText, File,
   Clock, MessageSquare, ChevronDown, ChevronUp, CheckSquare, Trash2, X, History, Loader2, AlertCircle, Lightbulb, Info, Download, Edit, Plus, ExternalLink, Copy, Eye, ZoomIn, ZoomOut, RotateCw
 } from 'lucide-react';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 import { useUIStore } from '../stores/uiStore';
 import { useAuthStore} from '../stores/authStore';
 import { useIndexStore } from '../stores/indexStore';
@@ -1646,15 +1647,7 @@ const RequirementDetail = () => {
       <div className={`min-h-screen ${colors.bgPrimary} p-6`}>
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-center py-20">
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-4">
-                <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
-                <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
-              </div>
-              <p className={colors.textSecondary}>
-                {lang === 'ar' ? 'جاري تحميل المتطلب...' : 'Loading requirement...'}
-              </p>
-            </div>
+            <LoadingSpinner size="md" text={lang === 'ar' ? 'جاري تحميل المتطلب...' : 'Loading requirement...'} />
           </div>
         </div>
       </div>

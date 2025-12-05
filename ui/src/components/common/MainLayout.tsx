@@ -241,30 +241,28 @@ const MainLayout = () => {
         { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
         ...(isETARIIndex ? [{ id: 'knowledge', path: '/knowledge', icon: BookOpen, label: { ar: 'مركز المعرفة', en: 'Knowledge' } }] : []),
         ...(isETARIIndex ? [{ id: 'support', path: '/support', icon: MessageCircle, label: { ar: 'الدعم', en: 'Support' }, badge: supportUnreadCount }] : []),
-        ...(isETARIIndex ? [{ id: 'evidence-management', path: '/evidence-management', icon: FolderTree, label: { ar: 'إدارة المرفقات', en: 'Evidence' } }] : []),
+        ...(isETARIIndex && (isAdmin || isIndexOwner) ? [{ id: 'evidence-management', path: '/evidence-management', icon: FolderTree, label: { ar: 'إدارة المرفقات', en: 'Evidence' } }] : []),
         { id: 'users', path: '/users', icon: Users, label: { ar: 'المستخدمين', en: 'Users' } },
         ...(isAdmin ? [{ id: 'organization-hierarchy', path: '/organization-hierarchy', icon: Building2, label: { ar: 'الهيكل', en: 'Org' } }] : []),
         { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
       ]
     : isIndexSupervisor
     ? [
-        // Supervisor: No access to Indices, Reports, Users, and Org pages
+        // Supervisor: No access to Indices, Reports, Users, Org, and Evidence Management pages
         { id: 'home', path: '/home', icon: Home, label: { ar: 'الرئيسية', en: 'Home' } },
         { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
         { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
         ...(isETARIIndex ? [{ id: 'knowledge', path: '/knowledge', icon: BookOpen, label: { ar: 'مركز المعرفة', en: 'Knowledge' } }] : []),
         ...(isETARIIndex ? [{ id: 'support', path: '/support', icon: MessageCircle, label: { ar: 'الدعم', en: 'Support' }, badge: supportUnreadCount }] : []),
-        ...(isETARIIndex ? [{ id: 'evidence-management', path: '/evidence-management', icon: FolderTree, label: { ar: 'إدارة المرفقات', en: 'Evidence' } }] : []),
         { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
       ]
     : [
-        // Contributor: Minimal access
+        // Contributor: Minimal access (no Evidence Management)
         { id: 'home', path: '/home', icon: Home, label: { ar: 'الرئيسية', en: 'Home' } },
         { id: 'requirements', path: '/requirements', icon: CheckSquare, label: { ar: 'المتطلبات', en: 'Requirements' } },
         { id: 'tasks', path: '/tasks', icon: ListTodo, label: { ar: 'المهام', en: 'Tasks' } },
         ...(isETARIIndex ? [{ id: 'knowledge', path: '/knowledge', icon: BookOpen, label: { ar: 'مركز المعرفة', en: 'Knowledge' } }] : []),
         ...(isETARIIndex ? [{ id: 'support', path: '/support', icon: MessageCircle, label: { ar: 'الدعم', en: 'Support' }, badge: supportUnreadCount }] : []),
-        ...(isETARIIndex ? [{ id: 'evidence-management', path: '/evidence-management', icon: FolderTree, label: { ar: 'إدارة المرفقات', en: 'Evidence' } }] : []),
         { id: 'settings', path: '/settings', icon: Settings, label: { ar: 'الإعدادات', en: 'Settings' } }
       ];
 

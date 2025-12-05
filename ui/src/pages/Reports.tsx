@@ -17,8 +17,9 @@ import {
   CartesianGrid,
   Tooltip
 } from 'recharts';
-import { FileText, FileSpreadsheet, Presentation, ChevronDown, ChevronUp, Loader2, AlertCircle, Layers, Users, ClipboardList, FileCheck, Clock, TrendingUp, PieChart as PieChartIcon, BarChart3, FolderOpen, Download } from 'lucide-react';
+import { FileText, FileSpreadsheet, Presentation, ChevronDown, ChevronUp, AlertCircle, Layers, Users, ClipboardList, FileCheck, Clock, TrendingUp, PieChart as PieChartIcon, BarChart3, FolderOpen, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 import MaturityGauge from '../components/MaturityGauge';
 import LevelIndicator from '../components/LevelIndicator';
 import ContributionBubbleCloud from '../components/ContributionBubbleCloud';
@@ -308,15 +309,7 @@ const Reports = () => {
     return (
       <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <div className="relative w-16 h-16 mx-auto mb-4">
-              <img src="/logo.png" alt="Loading..." className="w-16 h-16 animate-pulse" />
-              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin" />
-            </div>
-            <p className={colors.textSecondary}>
-              {lang === 'ar' ? 'جاري تحميل التقارير...' : 'Loading reports...'}
-            </p>
-          </div>
+          <LoadingSpinner size="md" text={lang === 'ar' ? 'جاري تحميل التقارير...' : 'Loading reports...'} />
         </div>
       </div>
     );
@@ -517,11 +510,27 @@ const Reports = () => {
 
   const sectionColors = generateSectionColors(sections);
 
-  // Assign colors to domain data
-  const coloredDomainData = domainData.map(item => ({
-    ...item,
-    barColor: sectionColors[item.section] || '#10B981'
-  }));
+  // Assign colors to domain data and add spacers before new sections
+  const coloredDomainData: any[] = [];
+  let lastSection = '';
+  domainData.forEach((item, index) => {
+    // Add spacer before new section (except first)
+    if (item.section !== lastSection && lastSection !== '') {
+      coloredDomainData.push({
+        domain: '',
+        section: item.section,
+        completion: 0,
+        isSpacer: true,
+        barColor: 'transparent'
+      });
+    }
+    coloredDomainData.push({
+      ...item,
+      barColor: sectionColors[item.section] || '#10B981',
+      isSpacer: false
+    });
+    lastSection = item.section;
+  });
 
   return (
     <div className={`min-h-screen ${colors.bgPrimary} ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -1039,7 +1048,7 @@ const Reports = () => {
           </h2>
           {coloredDomainData.length > 0 ? (
             <div className="min-w-[400px]">
-            <ResponsiveContainer width="100%" height={Math.max(400, coloredDomainData.length * 35 + sections.length * 20)}>
+            <ResponsiveContainer width="100%" height={Math.max(400, coloredDomainData.length * 40 + sections.length * 50)}>
               <BarChart
                 data={coloredDomainData}
                 margin={{ top: 10, right: 10, left: 2, bottom: 10 }}
@@ -1055,26 +1064,53 @@ const Reports = () => {
                 <YAxis
                   type="category"
                   dataKey="domain"
-                  width={120}
+                  width={220}
                   tick={(props: any) => {
                     const { x, y, payload, index } = props;
+                    const item = coloredDomainData[index];
+
+                    // If this is a spacer row, show section header
+                    if (item?.isSpacer) {
+                      return (
+                        <g>
+                          <line
+                            x1={x}
+                            y1={y}
+                            x2={x + 420}
+                            y2={y}
+                            stroke={sectionColors[item.section] || '#10B981'}
+                            strokeWidth={2}
+                            opacity={0.6}
+                          />
+                          <text
+                            x={x + 2}
+                            y={y + 18}
+                            textAnchor="start"
+                            fill={sectionColors[item.section] || '#10B981'}
+                            fontSize={14}
+                            fontWeight="bold"
+                          >
+                            {item.section}
+                          </text>
+                        </g>
+                      );
+                    }
+
                     const text = payload.value || '';
-                    const maxLength = 15;
+                    const maxLength = 30;
                     const displayText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 
-                    // Get section for grouping visual
-                    const item = coloredDomainData[index];
-                    const prevItem = index > 0 ? coloredDomainData[index - 1] : null;
-                    const isFirstInSection = !prevItem || prevItem.section !== item?.section;
+                    // Check if this is the first item (show section header above it)
+                    const isFirstItem = index === 0 || (index === 1 && coloredDomainData[0]?.isSpacer);
 
                     return (
                       <g>
-                        {isFirstInSection && item && (
+                        {isFirstItem && item && (
                           <>
                             <line
                               x1={x}
                               y1={y - 35}
-                              x2={x + 320}
+                              x2={x + 420}
                               y2={y - 35}
                               stroke={item.barColor}
                               strokeWidth={2}
@@ -1098,7 +1134,7 @@ const Reports = () => {
                           dy={4}
                           textAnchor="start"
                           fill="currentColor"
-                          fontSize={11}
+                          fontSize={12}
                           className={colors.textSecondary}
                         >
                           {displayText}
@@ -1181,11 +1217,11 @@ const Reports = () => {
                   strokeWidth={2}
                   radius={[0, 8, 8, 0]}
                   minPointSize={3}
-                  barSize={14}
+                  barSize={24}
                   label={{
                     position: 'right',
                     fill: 'currentColor',
-                    fontSize: 8,
+                    fontSize: 11,
                     formatter: (value: number) => value > 0 ? `${value}%` : ''
                   }}
                 >

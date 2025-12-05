@@ -7,25 +7,80 @@ interface LoadingSpinnerProps {
 }
 
 const LoadingSpinner = ({ size = 'md', text, fullScreen = false }: LoadingSpinnerProps) => {
-  const sizeClasses = {
-    sm: 'w-8 h-8',
-    md: 'w-16 h-16',
-    lg: 'w-24 h-24'
+  const sizeConfig = {
+    sm: { container: 64, logo: 24, dot: 6, radius: 26 },
+    md: { container: 88, logo: 36, dot: 8, radius: 36 },
+    lg: { container: 120, logo: 48, dot: 10, radius: 48 }
   };
+
+  const config = sizeConfig[size];
 
   const spinner = (
     <div className="flex flex-col items-center justify-center gap-4">
-      {/* Logo with spin animation */}
-      <div className="relative">
+      <div
+        style={{
+          position: 'relative',
+          width: config.container,
+          height: config.container,
+        }}
+      >
+        {/* Orbiting dots */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            animation: 'spin 1.8s linear infinite',
+          }}
+        >
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                width: config.dot,
+                height: config.dot,
+                borderRadius: '50%',
+                background: `rgb(var(--color-primary))`,
+                opacity: 1 - (i * 0.12),
+                left: '50%',
+                top: '50%',
+                marginLeft: -config.dot / 2,
+                marginTop: -config.dot / 2,
+                transform: `rotate(${i * 45}deg) translateY(-${config.radius}px)`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Center logo */}
         <img
           src="/logo.png"
           alt="Loading..."
-          className={`${sizeClasses[size]} animate-pulse`}
+          style={{
+            position: 'absolute',
+            width: config.logo,
+            height: config.logo,
+            left: '50%',
+            top: '50%',
+            marginLeft: -config.logo / 2,
+            marginTop: -config.logo / 2,
+            animation: 'gentlePulse 1.5s ease-in-out infinite',
+          }}
         />
-        {/* Rotating ring around the logo */}
-        <div className={`absolute inset-0 ${sizeClasses[size]} border-4 border-transparent border-t-[rgb(var(--color-primary))] rounded-full animate-spin`} />
       </div>
-      {text && <p className={`text-sm ${colors.textSecondary}`}>{text}</p>}
+      {text && <p className={`text-sm ${colors.textSecondary} animate-pulse`}>{text}</p>}
+
+      {/* Inline keyframes */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes gentlePulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.08); opacity: 0.85; }
+        }
+      `}</style>
     </div>
   );
 
