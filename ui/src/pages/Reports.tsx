@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   RadarChart,
   PolarGrid,
@@ -17,7 +17,7 @@ import {
   CartesianGrid,
   Tooltip
 } from 'recharts';
-import { FileText, FileSpreadsheet, Presentation, ChevronDown, ChevronUp, AlertCircle, Layers, Users, ClipboardList, FileCheck, Clock, TrendingUp, PieChart as PieChartIcon, BarChart3, FolderOpen, Download } from 'lucide-react';
+import { FileText, ChevronDown, ChevronUp, AlertCircle, Layers, Users, ClipboardList, FileCheck, Clock, TrendingUp, PieChart as PieChartIcon, BarChart3, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import MaturityGauge from '../components/MaturityGauge';
@@ -38,8 +38,6 @@ import { useIndexStore } from '../stores/indexStore';
 import { useAuthStore } from '../stores/authStore';
 import { api, Assignment } from '../services/api';
 import toast from 'react-hot-toast';
-import html2canvas from 'html2canvas';
-import { exportToPDF, exportToExcel, exportToPowerPoint, PDFExportData } from '../utils/exportReports';
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -66,12 +64,6 @@ const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
-
-  // Refs for chart capture
-  const radarChartRef = useRef<HTMLDivElement>(null);
-  const pieChartRef = useRef<HTMLDivElement>(null);
-  const progressChartRef = useRef<HTMLDivElement>(null);
-  const userEngagementTableRef = useRef<HTMLDivElement>(null);
 
   // Load data when index changes
   useEffect(() => {
@@ -166,88 +158,6 @@ const Reports = () => {
     setExpandedSections(prev =>
       prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
     );
-  };
-
-  const handleExport = async (type: 'pdf' | 'excel' | 'ppt') => {
-    if (!currentIndex) {
-      toast.error(lang === 'ar' ? 'الرجاء اختيار مؤشر أولاً' : 'Please select an index first');
-      return;
-    }
-
-    try {
-      toast.loading(lang === 'ar' ? 'جاري تصدير التقرير...' : 'Exporting report...');
-
-      // Prepare section data
-      const sections = Array.from(new Set(requirements.map(r => r.section))).sort();
-      const sectionData = sections.map(section => ({
-        name: section,
-        maturity: calculateSectionMaturity(requirements, section),
-        completion: calculateSectionCompletion(requirements, evidence, section),
-        requirementCount: requirements.filter(r => r.section === section).length
-      }));
-
-      // Prepare export data
-      const exportData: PDFExportData = {
-        indexName: lang === 'ar' ? currentIndex.name_ar : currentIndex.name_en || currentIndex.name_ar,
-        indexCode: currentIndex.code,
-        overallMaturity: calculateOverallMaturity(requirements),
-        sections: sectionData,
-        userEngagement: userEngagement.map(u => ({
-          username: u.username,
-          fullName: lang === 'ar' ? u.full_name_ar || u.username : u.full_name_en || u.username,
-          assignedRequirements: u.assigned_requirements,
-          approvedDocuments: u.approved_documents,
-          totalUploads: u.total_uploads,
-          rejectedDocuments: u.rejected_documents,
-          totalComments: u.total_comments
-        })),
-        requirements,
-        lang
-      };
-
-      // Call appropriate export function
-      if (type === 'pdf') {
-        // Capture charts as images for PDF
-        const chartImages: PDFExportData['chartImages'] = {};
-
-        if (radarChartRef.current) {
-          const canvas = await html2canvas(radarChartRef.current, { backgroundColor: '#ffffff', scale: 2 });
-          chartImages.radarChart = canvas.toDataURL('image/png');
-        }
-
-        if (pieChartRef.current) {
-          const canvas = await html2canvas(pieChartRef.current, { backgroundColor: '#ffffff', scale: 2 });
-          chartImages.pieChart = canvas.toDataURL('image/png');
-        }
-
-        if (progressChartRef.current) {
-          const canvas = await html2canvas(progressChartRef.current, { backgroundColor: '#ffffff', scale: 2 });
-          chartImages.progressChart = canvas.toDataURL('image/png');
-        }
-
-        if (userEngagementTableRef.current) {
-          const canvas = await html2canvas(userEngagementTableRef.current, { backgroundColor: '#ffffff', scale: 2 });
-          chartImages.userEngagementTable = canvas.toDataURL('image/png');
-        }
-
-        exportData.chartImages = chartImages;
-        await exportToPDF(exportData);
-        toast.dismiss();
-        toast.success(lang === 'ar' ? 'تم تصدير تقرير PDF بنجاح' : 'PDF report exported successfully');
-      } else if (type === 'excel') {
-        await exportToExcel(exportData);
-        toast.dismiss();
-        toast.success(lang === 'ar' ? 'تم تصدير ملف Excel بنجاح' : 'Excel file exported successfully');
-      } else if (type === 'ppt') {
-        await exportToPowerPoint(exportData);
-        toast.dismiss();
-        toast.success(lang === 'ar' ? 'تم تصدير العرض التقديمي بنجاح' : 'PowerPoint presentation exported successfully');
-      }
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.dismiss();
-      toast.error(lang === 'ar' ? 'فشل تصدير التقرير' : 'Failed to export report');
-    }
   };
 
   // No index selected
@@ -730,7 +640,7 @@ const Reports = () => {
             </div>
           </div>
 
-          <div ref={progressChartRef} className={`${patterns.section} p-4 sm:p-6`}>
+          <div className={`${patterns.section} p-4 sm:p-6`}>
             <h3 className={`text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
               <Clock className="text-orange-500" size={20} />
               {lang === 'ar' ? 'الجدول الزمني والتقدم' : 'Timeline & Progress'}
@@ -860,7 +770,7 @@ const Reports = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-8 mb-3 sm:mb-8">
-          <div ref={radarChartRef} className={`${patterns.section} p-1.5 sm:p-6`}>
+          <div className={`${patterns.section} p-1.5 sm:p-6`}>
             <h2 className={`text-xs sm:text-xl font-bold mb-1 sm:mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
               <Layers className="text-cyan-500 hidden sm:block" size={20} />
               {lang === 'ar' ? 'تحليل الأقسام' : 'Section Analysis'}
@@ -967,7 +877,7 @@ const Reports = () => {
             </div>
           </div>
 
-          <div ref={pieChartRef} className={`${patterns.section} p-1.5 sm:p-6`}>
+          <div className={`${patterns.section} p-1.5 sm:p-6`}>
             <h2 className={`text-xs sm:text-xl font-bold mb-1 sm:mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
               <PieChartIcon className="text-pink-500 hidden sm:block" size={20} />
               {lang === 'ar' ? 'توزيع حالة الأدلة' : 'Evidence Status'}
@@ -1245,7 +1155,7 @@ const Reports = () => {
         </div>
 
         {/* User Engagement Section - Categorized by Role */}
-        <div ref={userEngagementTableRef} className={`${patterns.section} p-4 sm:p-6 mb-8`}>
+        <div className={`${patterns.section} p-4 sm:p-6 mb-8`}>
           <h2 className={`text-lg sm:text-xl font-bold mb-6 flex items-center gap-2 ${colors.textPrimary}`}>
             <Users className="text-indigo-500" size={24} />
             {lang === 'ar' ? 'مساهمة المستخدمين' : 'User Engagement'}
@@ -1582,44 +1492,6 @@ const Reports = () => {
           </div>
         </div>
 
-        <div className={`${patterns.section} p-4 sm:p-6`}>
-          <h2 className={`text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 ${colors.textPrimary}`}>
-            <Download className="text-gray-500" size={24} />
-            {lang === 'ar' ? 'تصدير التقارير' : 'Export Reports'}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            <button
-              onClick={() => handleExport('pdf')}
-              className="flex items-center justify-center gap-3 px-6 py-4 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg transition border-2 border-red-200 dark:border-red-800"
-            >
-              <FileText size={24} />
-              <div className="text-left">
-                <div className="font-semibold">{lang === 'ar' ? 'تقرير PDF' : 'PDF Report'}</div>
-                <div className="text-sm">{lang === 'ar' ? 'تقرير شامل تنفيذي' : 'Comprehensive Executive Report'}</div>
-              </div>
-            </button>
-            <button
-              onClick={() => handleExport('excel')}
-              className="flex items-center justify-center gap-3 px-6 py-4 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg transition border-2 border-green-200 dark:border-green-800"
-            >
-              <FileSpreadsheet size={24} />
-              <div className="text-left">
-                <div className="font-semibold">{lang === 'ar' ? 'ملف Excel' : 'Excel File'}</div>
-                <div className="text-sm">{lang === 'ar' ? 'بيانات تفصيلية' : 'Detailed Data'}</div>
-              </div>
-            </button>
-            <button
-              onClick={() => handleExport('ppt')}
-              className="flex items-center justify-center gap-3 px-6 py-4 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg transition border-2 border-orange-200 dark:border-orange-800"
-            >
-              <Presentation size={24} />
-              <div className="text-left">
-                <div className="font-semibold">{lang === 'ar' ? 'عرض تقديمي' : 'PowerPoint'}</div>
-                <div className="text-sm">{lang === 'ar' ? 'عرض للإدارة التنفيذية' : 'Executive Presentation'}</div>
-              </div>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
